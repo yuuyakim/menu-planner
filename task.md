@@ -49,16 +49,16 @@
 
 ### 1-1. ドメイン型
 
-- [ ] 🔴 `Genre` の妥当性検証テスト（`japanese`/`western`/`chinese`/`other` と不正値）
-- [ ] 🟢 `domain.Genre` を実装（`ParseGenre`、`Valid()`、`String()`）
-- [ ] 🔴 `Difficulty` の妥当性検証テスト（`easy`/`normal`/`elaborate` と不正値）
-- [ ] 🟢 `domain.Difficulty` を実装
-- [ ] 🔴 `MenuID` のテスト（UUIDのパース、空文字の拒否）
-- [ ] 🟢 `domain.MenuID` を実装
-- [ ] 🔴 `Menu` エンティティのテスト（必須項目の検証）
-- [ ] 🟢 `domain.Menu` を実装
-- [ ] 🔴 `MenuFilter` のテスト（genre/difficulty が nil = 絞り込みなし）
-- [ ] 🟢 `domain.MenuFilter` を実装
+- [x] 🔴 `Genre` の妥当性検証テスト（`japanese`/`western`/`chinese`/`other` と不正値）
+- [x] 🟢 `domain.Genre` を実装（`ParseGenre`、`Valid()`、`String()`）
+- [x] 🔴 `Difficulty` の妥当性検証テスト（`easy`/`normal`/`elaborate` と不正値）
+- [x] 🟢 `domain.Difficulty` を実装
+- [x] 🔴 `MenuID` のテスト（UUIDのパース、空文字の拒否）
+- [x] 🟢 `domain.MenuID` を実装
+- [x] 🔴 `Menu` エンティティのテスト（必須項目の検証）
+- [x] 🟢 `domain.Menu` を実装
+- [x] 🔴 `MenuFilter` のテスト（genre/difficulty が nil = 絞り込みなし）
+- [x] 🟢 `domain.MenuFilter` を実装
 
 ### 1-2. DB基盤
 

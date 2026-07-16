@@ -3,6 +3,7 @@ module github.com/yuuyakim/menu-planner/backend
 go 1.26.5
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/stretchr/testify v1.11.1
 )
