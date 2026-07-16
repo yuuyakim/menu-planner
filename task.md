@@ -62,13 +62,13 @@
 
 ### 1-2. DB基盤
 
-- [ ] 🔧 `golang-migrate` を導入し `make migrate` / `make migrate-down` を追加
-- [ ] 🔧 マイグレーション `000001_create_menus`（up/down）
-- [ ] 🔧 `menus` に INDEX (genre, difficulty) を張る
+- [x] 🔧 `golang-migrate` を導入し `make migrate` / `make migrate-down` を追加
+- [x] 🔧 マイグレーション `000001_create_menus`（up/down）
+- [x] 🔧 `menus` に INDEX (genre, difficulty) を張る
 - [ ] 🔧 `sqlc` を導入し `sqlc.yaml` を作成
-- [ ] 🔧 pgx の接続プール初期化（Neonのコールドスタート対策でリトライ可能にする）
-- [ ] 🔴 接続プールのテスト（DSN不正時にエラーを返す）
-- [ ] 🟢 `db.NewPool` を実装
+- [x] 🔧 pgx の接続プール初期化（Neonのコールドスタート対策でリトライ可能にする）
+- [x] 🔴 接続プールのテスト（DSN不正時にエラーを返す）
+- [x] 🟢 `db.NewPool` を実装
 
 ### 1-3. 献立マスタのシード
 

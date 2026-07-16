@@ -2,7 +2,7 @@
 # そのためレシピ内は ASCII のみ・1コマンド単位に保つこと（日本語はコメントに書く）。
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs dev test test-backend test-frontend lint build health clean
+.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed
 
 help: ## このヘルプを表示する
 	@echo "Usage: make <target>"
@@ -12,6 +12,10 @@ help: ## このヘルプを表示する
 	@echo "  logs           follow logs"
 	@echo "  dev            start containers and follow logs"
 	@echo "  health         check /health endpoint"
+	@echo "  migrate        apply DB migrations"
+	@echo "  migrate-down   roll back one migration"
+	@echo "  migrate-version show current migration version"
+	@echo "  seed           load menu master data"
 	@echo "  test           run all tests"
 	@echo "  test-backend   run Go tests"
 	@echo "  test-frontend  run frontend checks"
@@ -32,6 +36,20 @@ dev: up logs ## 起動してログを追跡する
 
 health: ## /health の疎通を確認する
 	curl -fsS http://localhost:8080/health
+
+# マイグレーションは backend コンテナ内から実行する。ホストに golang-migrate を
+# 入れる必要がなく、DBのホスト名(db)とDATABASE_URLをそのまま使える。
+migrate: ## マイグレーションを適用する
+	docker compose run --rm backend go run ./cmd/migrate up
+
+migrate-down: ## マイグレーションを1つ戻す
+	docker compose run --rm backend go run ./cmd/migrate down
+
+migrate-version: ## 現在のマイグレーションバージョンを表示する
+	docker compose run --rm backend go run ./cmd/migrate version
+
+seed: ## 献立マスタを投入する
+	docker compose run --rm backend go run ./cmd/seed
 
 # ローカルでは -race を使わない（cgo=gcc が必要なため）。CI の Linux 上では有効化している。
 test-backend: ## Goのテストを実行する
