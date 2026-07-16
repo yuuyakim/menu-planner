@@ -33,6 +33,9 @@ func run() error {
 	e.HideBanner = true
 	e.HidePort = true
 
+	// 全てのエラーレスポンスを RFC 7807 形式に統一する
+	e.HTTPErrorHandler = handler.ErrorHandler()
+
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{

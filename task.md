@@ -46,16 +46,16 @@ repository の統合テストが緑。
 
 > 完了条件: 絞り込み・候補枯渇の単体テストが緑
 
-### PR 2-A: RFC 7807 エラーレスポンス `feat/problem-json`
+### PR 2-A: RFC 7807 エラーレスポンス `feat/problem-json` ✅
 
 他のPRが全てこの形式でエラーを返すため最初に入れる。
 
-- [ ] 🔴 `Problem` 型のテスト: 各フィールドがJSONに出る
-- [ ] 🔴 テスト: Content-Type が `application/problem+json`
-- [ ] 🔴 テスト: ドメインのエラーが対応するHTTPステータスに変換される
-- [ ] 🔴 テスト: 未知のエラーは500になり、詳細を外部に漏らさない
-- [ ] 🟢 `Problem` 型と echo のカスタムエラーハンドラを実装
-- [ ] 🔧 `main.go` に結線
+- [x] 🔴 `Problem` 型のテスト: 各フィールドがJSONに出る
+- [x] 🔴 テスト: Content-Type が `application/problem+json`
+- [x] 🔴 テスト: ドメインのエラーが対応するHTTPステータスに変換される
+- [x] 🔴 テスト: 未知のエラーは500になり、詳細を外部に漏らさない
+- [x] 🟢 `Problem` 型と echo のカスタムエラーハンドラを実装
+- [x] 🔧 `main.go` に結線
 
 ### PR 2-B: 乱数源の抽象化 `feat/random-source`
 
