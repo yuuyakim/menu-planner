@@ -1,3 +1,5 @@
+// Package main は献立提案APIサーバのエントリポイント。
+// 依存の組み立て（DI）とサーバのライフサイクル管理のみを行う。
 package main
 
 import (

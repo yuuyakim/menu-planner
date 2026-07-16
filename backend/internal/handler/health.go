@@ -1,3 +1,5 @@
+// Package handler はHTTPリクエストの受け口を提供する。
+// リクエストの検証とDTO変換のみを担い、ドメインロジックは service に委ねる。
 package handler
 
 import (
@@ -9,6 +11,7 @@ import (
 // HealthHandler は死活監視用のエンドポイントを提供する。
 type HealthHandler struct{}
 
+// NewHealthHandler は HealthHandler を生成する。
 func NewHealthHandler() *HealthHandler {
 	return &HealthHandler{}
 }

@@ -32,8 +32,10 @@ jobs:
         working-directory: backend
         run: go vet ./...
 
+      # v6 は golangci-lint v1系(Go 1.24ビルド)を入れるため、go.mod の Go 1.26 を解釈できない。
+      # .golangci.yml も v2 形式で書いているため v8 を使う。
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
           version: latest
           working-directory: backend

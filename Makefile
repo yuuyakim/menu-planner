@@ -43,8 +43,11 @@ test-frontend: ## フロントエンドの型チェックとLintを実行する
 
 test: test-backend test-frontend ## 全テストを実行する
 
+# golangci-lint v2 が必要:
+#   go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 lint: ## Lintを実行する
 	cd backend && go vet ./...
+	cd backend && golangci-lint run
 	cd frontend && npm run lint
 
 # :latest は compose がビルドする開発用イメージのタグと衝突するため :prod を使う
