@@ -57,15 +57,15 @@ repository の統合テストが緑。
 - [x] 🟢 `Problem` 型と echo のカスタムエラーハンドラを実装
 - [x] 🔧 `main.go` に結線
 
-### PR 2-B: 乱数源の抽象化 `feat/random-source`
+### PR 2-B: 乱数源の抽象化 `feat/random-source` ✅
 
 `SuggestMenu` のテストを決定的にするため、実装より先に入れる。
 
-- [ ] 🔴 テスト: 決定的な乱数源が指定した値を返す
-- [ ] 🔴 テスト: 候補が空のとき `Pick` がエラーになる
-- [ ] 🔴 テスト: 候補1件なら必ずそれを返す
-- [ ] 🟢 `Randomizer` インターフェースと実装（crypto/rand ベース）
-- [ ] 🟢 テスト用の決定的な実装
+- [x] 🔴 テスト: 決定的な乱数源が指定した値を返す
+- [x] 🔴 テスト: 候補が空のとき `Pick` がエラーになる
+- [x] 🔴 テスト: 候補1件なら必ずそれを返す
+- [x] 🟢 `Randomizer` インターフェースと実装（crypto/rand ベース）
+- [x] 🟢 テスト用の決定的な実装
 
 ### PR 2-C: SuggestMenu の絞り込み `feat/suggest-menu-filter`
 

@@ -18,3 +18,11 @@ type MenuRepository interface {
 	// FindByFilter は条件に合う献立を返す。該当が無い場合は空スライスを返す。
 	FindByFilter(ctx context.Context, f domain.MenuFilter) ([]domain.Menu, error)
 }
+
+// Randomizer は乱数源を抽象化する。
+// service 自身が乱数を生成すると提案結果が毎回変わりテストが書けないため、
+// 乱数源を外から注入できるようにする。実装は internal/random にある。
+type Randomizer interface {
+	// Intn は [0, n) の整数を返す。n が 1 未満の場合はエラーを返す。
+	Intn(n int) (int, error)
+}
