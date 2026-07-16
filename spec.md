@@ -386,7 +386,7 @@ WHERE user_id = $1
 | スタイル | Tailwind CSS |
 | テスト | Vitest + Testing Library |
 | E2E | Playwright |
-| Lint / Format | ESLint + Prettier |
+| Lint / Format | oxlint（Viteスキャフォールドの既定。Rust製で高速） |
 
 ### 6.3 型の共有
 
@@ -530,10 +530,13 @@ PLAN.mdの「テストがパスしたら次に進む」方針に従い、以下�
 GitHub Actions で以下を実行する。すべて緑でなければマージしない。
 
 ```
-go test ./... -race -cover   /   golangci-lint run
-npm run test  /  npm run lint  /  tsc --noEmit
-docker compose build
+go test ./... -race -cover   /   golangci-lint run   /   go vet ./...
+npm run test  /  npm run lint  /  tsc --noEmit  /  npm run build
+docker build --target prod   /   docker compose up + /health の疎通確認
 ```
+
+`-race` は cgo（gcc）を必要とするため、Windowsのローカル環境では実行できない。
+ローカルの `make test` は race 無し、CI（ubuntu-latest）では race 有りで実行する。
 
 ---
 

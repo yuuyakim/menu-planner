@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一PRへの連続pushでは古い実行をキャンセルする
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - name: go.mod が整理済みか確認
+        working-directory: backend
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: go vet
+        working-directory: backend
+        run: go vet ./...
+
+      # v6 は golangci-lint v1系(Go 1.24ビルド)を入れるため、go.mod の Go 1.26 を解釈できない。
+      # .golangci.yml も v2 形式で書いているため v8 を使う。
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          working-directory: backend
+
+      - name: テスト
+        working-directory: backend
+        run: go test ./... -race -cover
+
+  frontend:
+    name: Frontend (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 依存のインストール
+        working-directory: frontend
+        run: npm ci
+
+      - name: 型チェック
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: ビルド
+        working-directory: frontend
+        run: npm run build
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 本番イメージのビルド
+        run: |
+          docker build --target prod -t menu-planner-backend:ci ./backend
+          docker build --target prod -t menu-planner-frontend:ci ./frontend
+
+      - name: compose 起動と /health の疎通確認
+        run: |
+          docker compose up -d --wait --wait-timeout 180 backend
+          curl -fsS --retry 5 --retry-delay 3 http://localhost:8080/health
+
+      - name: 失敗時のログ出力
+        if: failure()
+        run: docker compose logs
+
+      - name: 後片付け
+        if: always()
+        run: docker compose down -v
