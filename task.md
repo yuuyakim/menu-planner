@@ -67,15 +67,15 @@ repository の統合テストが緑。
 - [x] 🟢 `Randomizer` インターフェースと実装（crypto/rand ベース）
 - [x] 🟢 テスト用の決定的な実装
 
-### PR 2-C: SuggestMenu の絞り込み `feat/suggest-menu-filter`
+### PR 2-C: SuggestMenu の絞り込み `feat/suggest-menu-filter` ✅
 
-- [ ] 🔧 fake の `MenuRepository` を作る
-- [ ] 🔴 テスト: genre 指定で該当ジャンルのみ候補になる
-- [ ] 🔴 テスト: difficulty 指定で該当難易度のみ候補になる
-- [ ] 🔴 テスト: 両方指定で両方に合うもののみ
-- [ ] 🔴 テスト: 両方 nil で全件が候補
-- [ ] 🔴 テスト: 不正な genre は `ErrInvalidGenre`
-- [ ] 🟢 `service.SuggestMenu` を実装
+- [x] 🔧 fake の `MenuRepository` を作る
+- [x] 🔴 テスト: genre 指定で該当ジャンルのみ候補になる
+- [x] 🔴 テスト: difficulty 指定で該当難易度のみ候補になる
+- [x] 🔴 テスト: 両方指定で両方に合うもののみ
+- [x] 🔴 テスト: 両方 nil で全件が候補
+- [x] 🔴 テスト: 不正な genre は `ErrInvalidGenre`
+- [x] 🟢 `service.SuggestMenu` を実装
 
 ### PR 2-D: SuggestMenu の候補枯渇 `feat/suggest-menu-exhausted`
 
