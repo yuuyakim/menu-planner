@@ -85,11 +85,14 @@ repository の統合テストが緑。
 - [x] 🔴 テスト: `ErrNoMenuFound` と repository のエラーが区別できる
 - [x] 🟢 エラーハンドリングを実装
 
-### PR 2-E: SuggestMenu の除外指定 `feat/suggest-menu-exclude`
+### PR 2-E: SuggestMenu の除外指定 `feat/suggest-menu-exclude` ✅
 
-- [ ] 🔴 テスト: `ExcludeIDs` の献立が候補から外れる
-- [ ] 🔴 テスト: 全件除外すると `ErrNoMenuFound`
-- [ ] 🟢 除外を実装（フェーズ6の履歴除外で使う）
+- [x] 🔴 テスト: `ExcludeIDs` の献立が候補から外れる
+- [x] 🔴 テスト: 全件除外すると `ErrNoMenuFound`
+- [x] 🟢 除外を実装（フェーズ6の履歴除外で使う）
+      → **実装は不要だった**。除外は PR #2 で repository が実装済み
+      （`AND NOT (id = ANY($3::uuid[]))`、統合テスト3件）で、SuggestMenu は
+      filter をそのまま渡すため既に動いていた。テストのみ追加して契約を固定した。
 
 ### PR 2-F: `GET /menus/suggest` `feat/api-suggest-menu`
 
