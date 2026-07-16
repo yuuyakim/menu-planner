@@ -1,0 +1,31 @@
+# 環境変数（シークレットを含む）
+.env
+.env.local
+*.local
+
+# Go
+/backend/bin/
+/backend/tmp/
+*.exe
+*.test
+*.out
+vendor/
+
+# Node
+node_modules/
+/frontend/dist/
+/frontend/.vite/
+npm-debug.log*
+yarn-error.log*
+
+# テスト・カバレッジ
+coverage/
+coverage.*
+/frontend/playwright-report/
+/frontend/test-results/
+
+# エディタ・OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

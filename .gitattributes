@@ -1,0 +1,14 @@
+# 改行コードはリポジトリ内では常にLFに正規化する
+* text=auto eol=lf
+
+# Linuxコンテナ内で実行されるファイルはCRLFになると壊れるため必ずLF
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+Makefile    text eol=lf
+*.go        text eol=lf
+*.sql       text eol=lf
+
+# バイナリ
+*.png binary
+*.jpg binary
+*.ico binary
