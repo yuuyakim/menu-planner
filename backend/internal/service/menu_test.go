@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -122,6 +123,102 @@ func TestSuggestMenu_不正なdifficultyはErrInvalidDifficulty(t *testing.T) {
 
 	assert.ErrorIs(t, err, domain.ErrInvalidDifficulty)
 	assert.Equal(t, 0, repo.filterCalls, "条件が不正ならDBに問い合わせないこと")
+}
+
+func TestSuggestMenu_候補0件でErrNoMenuFound(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		menus  []domain.Menu
+		filter domain.MenuFilter
+	}{
+		"マスタが空":         {menus: nil, filter: domain.MenuFilter{}},
+		"条件に合うものが1件も無い": {menus: testMenus(), filter: domain.MenuFilter{Genre: genrePtr(domain.GenreOther)}},
+		"組み合わせに合うものが無い": {
+			menus:  testMenus(),
+			filter: domain.MenuFilter{Genre: genrePtr(domain.GenreChinese), Difficulty: difficultyPtr(domain.DifficultyElaborate)},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := newFakeMenuRepository(tt.menus...)
+			svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+			_, err := svc.SuggestMenu(context.Background(), tt.filter)
+
+			assert.ErrorIs(t, err, service.ErrNoMenuFound)
+			assert.NotErrorIs(t, err, service.ErrNoCandidates, "Pick の内部事情は外に漏らさないこと")
+		})
+	}
+}
+
+func TestSuggestMenu_候補1件ならそれが返る(t *testing.T) {
+	t.Parallel()
+
+	// 境界値。0件と1件の境目で ErrNoMenuFound にならないことを確かめる。
+	repo := newFakeMenuRepository(testMenus()...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+	// 洋食は「ハンバーグ」の1件だけ。
+	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
+		Genre: genrePtr(domain.GenreWestern),
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "ハンバーグ", got.Name)
+}
+
+func TestSuggestMenu_repositoryのエラーがラップされて返る(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("DBへの接続に失敗しました")
+	repo := newFakeMenuRepository(testMenus()...)
+	repo.err = sentinel
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+	_, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel, "原因を errors.Is で辿れること")
+	assert.NotEqual(t, sentinel.Error(), err.Error(), "文脈が付与されていること")
+}
+
+func TestSuggestMenu_ErrNoMenuFoundとrepositoryのエラーが区別できる(t *testing.T) {
+	t.Parallel()
+
+	// 呼び出し側は「該当なし(422)」と「DB障害(500)」を出し分ける必要がある。
+	// どちらも errors.Is で取り違えないことを固定する。
+	dbErr := errors.New("DBへの接続に失敗しました")
+
+	failing := newFakeMenuRepository(testMenus()...)
+	failing.err = dbErr
+	_, gotDBErr := service.NewMenuService(failing, randomtest.NewFixed(0)).
+		SuggestMenu(context.Background(), domain.MenuFilter{})
+
+	_, gotEmptyErr := service.NewMenuService(newFakeMenuRepository(), randomtest.NewFixed(0)).
+		SuggestMenu(context.Background(), domain.MenuFilter{})
+
+	assert.ErrorIs(t, gotDBErr, dbErr)
+	assert.NotErrorIs(t, gotDBErr, service.ErrNoMenuFound, "DB障害を該当なしと誤認しないこと")
+
+	assert.ErrorIs(t, gotEmptyErr, service.ErrNoMenuFound)
+	assert.NotErrorIs(t, gotEmptyErr, dbErr)
+}
+
+func TestSuggestMenu_乱数源のエラーは該当なしと区別できる(t *testing.T) {
+	t.Parallel()
+
+	// 乱数源の故障は候補が無いことを意味しない。500 に倒すべきなので混同させない。
+	sentinel := errors.New("乱数源の故障")
+	svc := service.NewMenuService(newFakeMenuRepository(testMenus()...), failingRandomizer{err: sentinel})
+
+	_, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+	assert.NotErrorIs(t, err, service.ErrNoMenuFound)
 }
 
 func TestSuggestMenu_返る献立はマスタの内容をそのまま持つ(t *testing.T) {
