@@ -77,13 +77,13 @@ repository の統合テストが緑。
 - [x] 🔴 テスト: 不正な genre は `ErrInvalidGenre`
 - [x] 🟢 `service.SuggestMenu` を実装
 
-### PR 2-D: SuggestMenu の候補枯渇 `feat/suggest-menu-exhausted`
+### PR 2-D: SuggestMenu の候補枯渇 `feat/suggest-menu-exhausted` ✅
 
-- [ ] 🔴 テスト: 候補0件で `ErrNoMenuFound`
-- [ ] 🔴 テスト: 候補1件ならそれが返る（境界値）
-- [ ] 🔴 テスト: repository のエラーがラップされて返る
-- [ ] 🔴 テスト: `ErrNoMenuFound` と repository のエラーが区別できる
-- [ ] 🟢 エラーハンドリングを実装
+- [x] 🔴 テスト: 候補0件で `ErrNoMenuFound`
+- [x] 🔴 テスト: 候補1件ならそれが返る（境界値）
+- [x] 🔴 テスト: repository のエラーがラップされて返る
+- [x] 🔴 テスト: `ErrNoMenuFound` と repository のエラーが区別できる
+- [x] 🟢 エラーハンドリングを実装
 
 ### PR 2-E: SuggestMenu の除外指定 `feat/suggest-menu-exclude`
 

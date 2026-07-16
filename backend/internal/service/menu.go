@@ -2,10 +2,15 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
+
+// ErrNoMenuFound は条件に合う献立が1件も無いことを表す。
+// リクエスト自体は正しいので、呼び出し側はこれを 4xx として扱う。
+var ErrNoMenuFound = errors.New("条件に合う献立が見つかりません")
 
 // MenuService は献立の選定を担う。
 type MenuService struct {
@@ -32,8 +37,13 @@ func (s *MenuService) SuggestMenu(ctx context.Context, f domain.MenuFilter) (*do
 	}
 
 	menu, err := Pick(s.rand, candidates)
-	if err != nil {
-		return nil, err
+	switch {
+	// 候補が無いのは障害ではなく「条件に合う献立が無い」という結果。
+	// Pick の内部事情(ErrNoCandidates)は外に出さず、ドメインのエラーに変換する。
+	case errors.Is(err, ErrNoCandidates):
+		return nil, ErrNoMenuFound
+	case err != nil:
+		return nil, fmt.Errorf("献立の選択に失敗しました: %w", err)
 	}
 
 	return &menu, nil
