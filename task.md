@@ -42,7 +42,7 @@
 
 ---
 
-## フェーズ1: ドメイン層 + 献立マスタ
+## フェーズ1: ドメイン層 + 献立マスタ ✅
 
 > 完了条件: repository の統合テストが緑
 > ブランチ: `phase-1/domain-and-menu-master`
@@ -65,38 +65,38 @@
 - [x] 🔧 `golang-migrate` を導入し `make migrate` / `make migrate-down` を追加
 - [x] 🔧 マイグレーション `000001_create_menus`（up/down）
 - [x] 🔧 `menus` に INDEX (genre, difficulty) を張る
-- [ ] 🔧 `sqlc` を導入し `sqlc.yaml` を作成
+- [x] 🔧 ~~`sqlc` を導入~~ → 見送り。クエリが単純で pgx 直書きで足りるため（spec.md 更新済み）
 - [x] 🔧 pgx の接続プール初期化（Neonのコールドスタート対策でリトライ可能にする）
 - [x] 🔴 接続プールのテスト（DSN不正時にエラーを返す）
 - [x] 🟢 `db.NewPool` を実装
 
 ### 1-3. 献立マスタのシード
 
-- [ ] 🔧 シードデータの形式を決める（SQL or JSON）
-- [ ] 🔧 和食 × easy/normal/elaborate を各10件（計30件）
-- [ ] 🔧 洋食 × easy/normal/elaborate を各10件（計30件）
-- [ ] 🔧 中華 × easy/normal/elaborate を各10件（計30件）
-- [ ] 🔧 その他 × easy/normal/elaborate を各10件（計30件）
-- [ ] 🔧 `make seed` を追加（冪等にする。再実行で重複しないこと）
-- [ ] 🔴 シード投入後に120件、各(genre,difficulty)が10件ずつあることの検証テスト
-- [ ] 🟢 シード投入コマンドを実装
+- [x] 🔧 シードデータの形式を決める（SQL or JSON）
+- [x] 🔧 和食 × easy/normal/elaborate を各10件（計30件）
+- [x] 🔧 洋食 × easy/normal/elaborate を各10件（計30件）
+- [x] 🔧 中華 × easy/normal/elaborate を各10件（計30件）
+- [x] 🔧 その他 × easy/normal/elaborate を各10件（計30件）
+- [x] 🔧 `make seed` を追加（冪等にする。再実行で重複しないこと）
+- [x] 🔴 シード投入後に120件、各(genre,difficulty)が10件ずつあることの検証テスト
+- [x] 🟢 シード投入コマンドを実装
 
 ### 1-4. MenuRepository
 
-- [ ] 🔧 testcontainers-go を導入し、テスト用Postgresの起動ヘルパを作る
-- [ ] 🔧 テストヘルパ: 各テストでスキーマをクリーンにする仕組み
-- [ ] 🔴 `FindByID` のテスト（存在する / 存在しない）
-- [ ] 🟢 `FindByID` を実装
-- [ ] 🔴 `FindByFilter` のテスト: genre のみ指定
-- [ ] 🔴 `FindByFilter` のテスト: difficulty のみ指定
-- [ ] 🔴 `FindByFilter` のテスト: 両方指定
-- [ ] 🔴 `FindByFilter` のテスト: 両方 nil（全件返る）
-- [ ] 🔴 `FindByFilter` のテスト: 該当0件（空スライスを返す。nilではない）
-- [ ] 🟢 `FindByFilter` を実装
-- [ ] 🔴 `FindByFilter` の除外指定テスト（`ExcludeIDs` で指定したIDが返らない）
-- [ ] 🟢 `ExcludeIDs` に対応
-- [ ] 🔧 service 側に `ports.go` を作り `MenuRepository` インターフェースを定義
-- [ ] 🔧 CI に testcontainers が動く設定を追加（サービスコンテナ or Docker in Docker）
+- [x] 🔧 testcontainers-go を導入し、テスト用Postgresの起動ヘルパを作る
+- [x] 🔧 テストヘルパ: 各テストでスキーマをクリーンにする仕組み
+- [x] 🔴 `FindByID` のテスト（存在する / 存在しない）
+- [x] 🟢 `FindByID` を実装
+- [x] 🔴 `FindByFilter` のテスト: genre のみ指定
+- [x] 🔴 `FindByFilter` のテスト: difficulty のみ指定
+- [x] 🔴 `FindByFilter` のテスト: 両方指定
+- [x] 🔴 `FindByFilter` のテスト: 両方 nil（全件返る）
+- [x] 🔴 `FindByFilter` のテスト: 該当0件（空スライスを返す。nilではない）
+- [x] 🟢 `FindByFilter` を実装
+- [x] 🔴 `FindByFilter` の除外指定テスト（`ExcludeIDs` で指定したIDが返らない）
+- [x] 🟢 `ExcludeIDs` に対応
+- [x] 🔧 service 側に `ports.go` を作り `MenuRepository` インターフェースを定義
+- [x] 🔧 CI に testcontainers が動く設定を追加（サービスコンテナ or Docker in Docker）
 
 ---
 

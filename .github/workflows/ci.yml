@@ -40,9 +40,11 @@ jobs:
           version: latest
           working-directory: backend
 
+      # testcontainers が実Postgresを起動する。ubuntu-latest には Docker が
+      # 入っているため追加のサービス定義は不要。
       - name: テスト
         working-directory: backend
-        run: go test ./... -race -cover
+        run: go test ./... -race -cover -timeout 10m
 
   frontend:
     name: Frontend (TypeScript)

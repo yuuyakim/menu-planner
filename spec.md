@@ -365,7 +365,7 @@ WHERE user_id = $1
 | Go | 1.23+ |
 | Webフレームワーク | echo v4 |
 | DBドライバ | pgx v5 |
-| クエリ生成 | sqlc（SQLからGoの型安全なコードを生成） |
+| クエリ | pgx に直接SQLを記述（sqlc は見送り。クエリが単純で生成の恩恵より依存の重さが上回るため） |
 | マイグレーション | golang-migrate |
 | JWT | golang-jwt/jwt v5 |
 | OAuth | golang.org/x/oauth2 |
@@ -426,9 +426,8 @@ test_prj/
     │   │   ├── domain/                  # エンティティ・値オブジェクト
     │   │   └── middleware/              # 認証・CORS・ロギング・レート制限
     │   ├── db/
-    │   │   ├── migrations/
-    │   │   ├── queries/                 # sqlcの入力SQL
-    │   │   └── seeds/                   # 献立マスタ 120件
+    │   │   ├── migrations/               # embed.FS でバイナリに埋め込む
+    │   │   └── seeds/                    # 献立マスタ 120件（同上）
     │   ├── Dockerfile
     │   └── go.mod                       # module github.com/yuuya/menu-planner/backend
     └── frontend/
