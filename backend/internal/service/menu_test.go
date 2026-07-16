@@ -221,6 +221,81 @@ func TestSuggestMenu_乱数源のエラーは該当なしと区別できる(t *t
 	assert.NotErrorIs(t, err, service.ErrNoMenuFound)
 }
 
+func TestSuggestMenu_ExcludeIDsの献立が候補から外れる(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	repo := newFakeMenuRepository(menus...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+	// 和食は「肉じゃが」「茶碗蒸し」の2件。先頭の肉じゃがを除外すれば、
+	// 乱数源が 0 を返しても残った茶碗蒸しが選ばれる。
+	nikujaga := menus[0]
+	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
+		Genre:      genrePtr(domain.GenreJapanese),
+		ExcludeIDs: []domain.MenuID{nikujaga.ID},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "茶碗蒸し", got.Name)
+	assert.Equal(t, []domain.MenuID{nikujaga.ID}, repo.lastFilter.ExcludeIDs, "除外IDがそのまま repository に渡ること")
+}
+
+func TestSuggestMenu_全件除外するとErrNoMenuFound(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	repo := newFakeMenuRepository(menus...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+	all := make([]domain.MenuID, 0, len(menus))
+	for _, m := range menus {
+		all = append(all, m.ID)
+	}
+
+	_, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{ExcludeIDs: all})
+
+	assert.ErrorIs(t, err, service.ErrNoMenuFound)
+}
+
+func TestSuggestMenu_ExcludeIDsが空なら除外しない(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string][]domain.MenuID{
+		"nil": nil,
+		"空":   {},
+	}
+	for name, ids := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := newFakeMenuRepository(testMenus()...)
+			svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+			got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{ExcludeIDs: ids})
+
+			require.NoError(t, err)
+			assert.Equal(t, "肉じゃが", got.Name, "全件が候補のままであること")
+		})
+	}
+}
+
+func TestSuggestMenu_知らないIDを除外しても影響しない(t *testing.T) {
+	t.Parallel()
+
+	// 履歴に残っていた献立がマスタから消えている場合を想定する。
+	repo := newFakeMenuRepository(testMenus()...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
+		Genre:      genrePtr(domain.GenreJapanese),
+		ExcludeIDs: []domain.MenuID{domain.NewMenuID()},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "肉じゃが", got.Name)
+}
+
 func TestSuggestMenu_返る献立はマスタの内容をそのまま持つ(t *testing.T) {
 	t.Parallel()
 
