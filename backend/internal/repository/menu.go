@@ -43,6 +43,33 @@ func (r *MenuRepository) FindByID(ctx context.Context, id domain.MenuID) (*domai
 	return &m, nil
 }
 
+// FindByIDs は複数のIDで献立をまとめて取得する。
+// 見つからないIDは黙って除くため、返る件数は ids の件数以下になる。
+// 結果は name 順で安定させる。
+func (r *MenuRepository) FindByIDs(ctx context.Context, ids []domain.MenuID) ([]domain.Menu, error) {
+	if len(ids) == 0 {
+		// 空配列を投げても0件が返るだけだが、無駄な往復を省く。
+		return []domain.Menu{}, nil
+	}
+
+	raw := make([]string, 0, len(ids))
+	for _, id := range ids {
+		raw = append(raw, id.String())
+	}
+
+	rows, err := r.pool.Query(ctx,
+		`SELECT `+menuColumns+`
+		   FROM menus
+		  WHERE id = ANY($1::uuid[])
+		  ORDER BY name`, raw)
+	if err != nil {
+		return nil, fmt.Errorf("献立の取得に失敗しました: %w", err)
+	}
+	defer rows.Close()
+
+	return scanMenus(rows)
+}
+
 // FindByFilter は条件に合う献立を返す。該当が無い場合は空スライスを返す（nilではない）。
 // 結果は name 順で安定させる。順序が不定だと上位のランダム選択で再現性が取れないため。
 func (r *MenuRepository) FindByFilter(ctx context.Context, f domain.MenuFilter) ([]domain.Menu, error) {
@@ -78,6 +105,12 @@ func (r *MenuRepository) FindByFilter(ctx context.Context, f domain.MenuFilter) 
 	}
 	defer rows.Close()
 
+	return scanMenus(rows)
+}
+
+// scanMenus は行を読み切って献立の並びを返す。該当が無い場合は
+// 空スライスを返す（nilではない）。
+func scanMenus(rows pgx.Rows) ([]domain.Menu, error) {
 	menus := make([]domain.Menu, 0)
 	for rows.Next() {
 		m, err := scanMenu(rows)
@@ -87,7 +120,7 @@ func (r *MenuRepository) FindByFilter(ctx context.Context, f domain.MenuFilter) 
 		menus = append(menus, m)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("献立の検索に失敗しました: %w", err)
+		return nil, fmt.Errorf("献立の読み取りに失敗しました: %w", err)
 	}
 	return menus, nil
 }

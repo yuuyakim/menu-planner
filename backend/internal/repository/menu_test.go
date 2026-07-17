@@ -214,3 +214,58 @@ func TestMenuRepository_FindByFilter_名前順で安定して返る(t *testing.T
 	assert.Equal(t, first[0].ID, second[0].ID)
 	assert.Equal(t, first[1].ID, second[1].ID)
 }
+
+func TestMenuRepository_FindByIDs_まとめて取得できる(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+	ctx := context.Background()
+
+	a := insertMenu(t, pool, "肉じゃが", domain.GenreJapanese, domain.DifficultyEasy)
+	b := insertMenu(t, pool, "ハンバーグ", domain.GenreWestern, domain.DifficultyNormal)
+	insertMenu(t, pool, "麻婆豆腐", domain.GenreChinese, domain.DifficultyEasy)
+
+	got, err := repo.FindByIDs(ctx, []domain.MenuID{a.ID, b.ID})
+
+	require.NoError(t, err)
+	require.Len(t, got, 2, "指定した2件だけが返ること")
+	names := []string{got[0].Name, got[1].Name}
+	assert.ElementsMatch(t, []string{"肉じゃが", "ハンバーグ"}, names)
+}
+
+func TestMenuRepository_FindByIDs_存在しないIDは黙って除く(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+	ctx := context.Background()
+
+	// 献立がマスタから消えても、履歴や週の指定には残りうる。
+	// そこでエラーにすると、1件消えただけで機能全体が止まる。
+	a := insertMenu(t, pool, "肉じゃが", domain.GenreJapanese, domain.DifficultyEasy)
+
+	got, err := repo.FindByIDs(ctx, []domain.MenuID{a.ID, domain.NewMenuID()})
+
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "肉じゃが", got[0].Name)
+}
+
+func TestMenuRepository_FindByIDs_空なら空スライス(t *testing.T) {
+	repo := repository.NewMenuRepository(newTestPool(t))
+
+	got, err := repo.FindByIDs(context.Background(), nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	assert.NotNil(t, got, "nilではなく空スライスを返すこと")
+}
+
+func TestMenuRepository_FindByIDs_重複したIDは1件にまとまる(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+
+	a := insertMenu(t, pool, "肉じゃが", domain.GenreJapanese, domain.DifficultyEasy)
+
+	got, err := repo.FindByIDs(context.Background(), []domain.MenuID{a.ID, a.ID, a.ID})
+
+	require.NoError(t, err)
+	assert.Len(t, got, 1, "同じ献立が何度指定されても1件")
+}

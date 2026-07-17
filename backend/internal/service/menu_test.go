@@ -1422,3 +1422,268 @@ func TestSuggestWeekly_連続を緩めても履歴は避ける(t *testing.T) {
 	}
 	assert.Equal(t, []int{3, 4, 5, 6, 7}, relaxedDays(got), "緩めるのはジャンル連続だけ")
 }
+
+// rerollWeek は引き直しのテスト用に「現在の週」を組み立てる。
+func rerollWeek(menus []domain.Menu, indexes ...int) []domain.MenuID {
+	ids := make([]domain.MenuID, 0, len(indexes))
+	for _, i := range indexes {
+		ids = append(ids, menus[i].ID)
+	}
+	return ids
+}
+
+func TestRerollDay_指定日だけ変わり他の日は保持される(t *testing.T) {
+	t.Parallel()
+
+	// 週は候補8件のうち先頭7件。3日目を引き直すと、使われていない8件目が入る。
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, got.Day, "指定した日が返ること")
+	assert.Equal(t, menus[7].Name, got.Menu.Name, "週で使われていない献立が選ばれること")
+	assert.False(t, got.Relaxed())
+}
+
+func TestRerollDay_引き直し後も重複回避が効く(t *testing.T) {
+	t.Parallel()
+
+	// 他の6日で使われている献立は選ばれない。
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	require.NoError(t, err)
+	for i, id := range week {
+		if i == 2 {
+			continue // 引き直した日
+		}
+		assert.NotEqual(t, id, got.Menu.ID, "%d日目と重複している", i+1)
+	}
+}
+
+func TestRerollDay_前後どちらの連続も避ける(t *testing.T) {
+	t.Parallel()
+
+	// 3日目を引き直す。1-2日目が和食、4-5日目も和食なので、
+	// 和食を選ぶと [1,2,3] と [3,4,5] の両方で3連続になる。
+	//
+	// 前方だけを見る実装（SuggestWeekly の作り）だと 4-5日目の和食を見落とす。
+	menus := []domain.Menu{
+		newMenu("和1", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("和2", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("洋1", domain.GenreWestern, domain.DifficultyEasy), // 3日目（引き直す）
+		newMenu("和3", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("和4", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("中1", domain.GenreChinese, domain.DifficultyEasy),
+		newMenu("他1", domain.GenreOther, domain.DifficultyEasy),
+		// 引き直しの候補。和食を選ぶと両側で3連続になる。
+		newMenu("和5", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("洋2", domain.GenreWestern, domain.DifficultyEasy),
+	}
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "洋2", got.Menu.Name, "和食を選ぶと前後どちらでも3連続になる")
+	assert.False(t, got.RelaxedGenreStreak)
+}
+
+func TestRerollDay_挟まれた形の連続も避ける(t *testing.T) {
+	t.Parallel()
+
+	// 2日目を引き直す。1日目と3日目が和食なので、和食を選ぶと [1,2,3] で3連続。
+	// 前方（1日目）だけでは2連続にならないため、後方を見ないと見落とす。
+	menus := []domain.Menu{
+		newMenu("和1", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("洋1", domain.GenreWestern, domain.DifficultyEasy), // 2日目（引き直す）
+		newMenu("和2", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("中1", domain.GenreChinese, domain.DifficultyEasy),
+		newMenu("他1", domain.GenreOther, domain.DifficultyEasy),
+		newMenu("中2", domain.GenreChinese, domain.DifficultyEasy),
+		newMenu("他2", domain.GenreOther, domain.DifficultyEasy),
+		newMenu("和3", domain.GenreJapanese, domain.DifficultyEasy), // 候補（和食）
+		newMenu("洋2", domain.GenreWestern, domain.DifficultyEasy),  // 候補（洋食）
+	}
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 2, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "洋2", got.Menu.Name, "和食を選ぶと1日目と3日目に挟まれて3連続になる")
+}
+
+func TestRerollDay_範囲外のdayはエラー(t *testing.T) {
+	t.Parallel()
+
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	for _, day := range []int{0, -1, 8, 100} {
+		t.Run(fmt.Sprintf("day=%d", day), func(t *testing.T) {
+			t.Parallel()
+
+			_, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, day, nil)
+
+			assert.ErrorIs(t, err, service.ErrInvalidDay)
+		})
+	}
+}
+
+func TestRerollDay_週の件数が7でなければエラー(t *testing.T) {
+	t.Parallel()
+
+	// 他の日を保持する仕組みなので、週が揃っていないと重複回避を再適用できない。
+	menus := weeklyMenus()
+	svc := newWeeklyService(menus, 0)
+
+	tests := map[string][]domain.MenuID{
+		"空":   {},
+		"6件":  rerollWeek(menus, 0, 1, 2, 3, 4, 5),
+		"8件":  rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6, 7),
+		"nil": nil,
+	}
+	for name, week := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+			assert.ErrorIs(t, err, service.ErrInvalidWeek)
+		})
+	}
+}
+
+func TestRerollDay_候補が週と同数なら同じ献立が返る(t *testing.T) {
+	t.Parallel()
+
+	// 候補が週の7件しか無い場合、引き直しの選択肢は
+	//   (a) 同じ献立を返す（規則は全て守る）
+	//   (b) 別の献立を返す（他の日と重複する）
+	// の二択になる。重複回避は spec.md 2.2 のルール1で最も重要なので、
+	// 規則を破らず据え置く。画面上は「変わらなかった」と見える。
+	menus := weeklyMenus()[:7]
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, menus[2].ID, got.Menu.ID, "元の献立のまま")
+	assert.False(t, got.Relaxed(), "規則は何も破っていない")
+}
+
+func TestRerollDay_候補に余裕があれば重複させずに引き直せる(t *testing.T) {
+	t.Parallel()
+
+	// 8件あれば未使用が1件残るので、重複も据え置きも起きない。
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, menus[7].ID, got.Menu.ID, "未使用の献立が入ること")
+	assert.False(t, got.RelaxedDuplicate)
+}
+
+func TestRerollDay_履歴を避ける(t *testing.T) {
+	t.Parallel()
+
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	// 8件目（唯一の未使用）が履歴にある。他に選べないので緩和して出す。
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, idsOf(menus[7]))
+
+	require.NoError(t, err)
+	assert.Equal(t, menus[7].Name, got.Menu.Name)
+	assert.True(t, got.RelaxedHistory, "履歴を緩めたと分かること")
+}
+
+func TestRerollDay_不正な条件はエラー(t *testing.T) {
+	t.Parallel()
+
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	_, err := svc.RerollDay(context.Background(), domain.MenuFilter{
+		Genre: genrePtr(domain.Genre("フレンチ")),
+	}, week, 3, nil)
+
+	assert.ErrorIs(t, err, domain.ErrInvalidGenre)
+}
+
+func TestRerollDay_候補0件でErrNoMenuFound(t *testing.T) {
+	t.Parallel()
+
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(nil, 0)
+
+	_, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	assert.ErrorIs(t, err, service.ErrNoMenuFound)
+}
+
+func TestRerollDay_他の日はまとめて引く(t *testing.T) {
+	t.Parallel()
+
+	// 6日分を1件ずつ引くと問い合わせが6回になる。
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	repo := newFakeMenuRepository(menus...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
+
+	_, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, repo.idsCalls, "FindByIDs は1回")
+	assert.Equal(t, 0, repo.idCalls, "FindByID を繰り返さないこと")
+}
+
+func TestRerollDay_同じ献立を返さない(t *testing.T) {
+	t.Parallel()
+
+	// 引き直して同じものが返るのでは引き直しにならない。
+	// 引き直す日の献立自身も候補から外す。
+	menus := weeklyMenus()
+	week := rerollWeek(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	require.NoError(t, err)
+	assert.NotEqual(t, menus[2].ID, got.Menu.ID, "3日目の元の献立(%s)が返っている", menus[2].Name)
+}
+
+func TestRerollDay_候補が1件しか無ければ同じ献立が返る(t *testing.T) {
+	t.Parallel()
+
+	// 極端値。他に選びようが無いなら諦めて同じものを返す。エラーにはしない。
+	// 週の他の日にも同じ献立が並ぶ状況なので、重複の印が付く。
+	menus := []domain.Menu{newMenu("肉じゃが", domain.GenreJapanese, domain.DifficultyEasy)}
+	week := make([]domain.MenuID, 7)
+	for i := range week {
+		week[i] = menus[0].ID
+	}
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.RerollDay(context.Background(), domain.MenuFilter{}, week, 3, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "肉じゃが", got.Menu.Name)
+	assert.True(t, got.RelaxedDuplicate, "他の日にも同じ献立があるため重複の印が付く")
+}

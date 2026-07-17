@@ -54,6 +54,26 @@ type fakeMenuService struct {
 	lastWeeklyFilter domain.MenuFilter
 	lastWeeklyRecent []domain.MenuID
 	weeklyCalls      int
+
+	// rerolled / rerollErr は RerollDay の返り値。
+	rerolled  domain.DayMenu
+	rerollErr error
+	// lastReroll* は最後に RerollDay に渡された値。
+	lastRerollFilter domain.MenuFilter
+	lastRerollWeek   []domain.MenuID
+	lastRerollDay    int
+	rerollCalls      int
+}
+
+func (s *fakeMenuService) RerollDay(_ context.Context, f domain.MenuFilter, week []domain.MenuID, day int, _ []domain.MenuID) (domain.DayMenu, error) {
+	s.rerollCalls++
+	s.lastRerollFilter = f
+	s.lastRerollWeek = week
+	s.lastRerollDay = day
+	if s.rerollErr != nil {
+		return domain.DayMenu{}, s.rerollErr
+	}
+	return s.rerolled, nil
 }
 
 func (s *fakeMenuService) SuggestWeekly(_ context.Context, f domain.MenuFilter, recentIDs []domain.MenuID) ([]domain.DayMenu, error) {
@@ -742,4 +762,169 @@ func TestSuggestWeekly_POST以外は受け付けない(t *testing.T) {
 			assert.Equal(t, 0, s.weeklyCalls, "週間献立の提案が動かないこと")
 		})
 	}
+}
+
+// doRerollDay は POST /api/v1/menus/reroll-day をルーティング経由で叩く。
+func doRerollDay(t *testing.T, s *fakeMenuService, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewMenuHandler(s).RegisterRoutes(e)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/reroll-day", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+// weekIDsJSON は7件のIDをJSON配列にする。
+func weekIDsJSON(ids []domain.MenuID) string {
+	quoted := make([]string, 0, len(ids))
+	for _, id := range ids {
+		quoted = append(quoted, `"`+id.String()+`"`)
+	}
+	return "[" + strings.Join(quoted, ",") + "]"
+}
+
+func testWeekIDs() []domain.MenuID {
+	ids := make([]domain.MenuID, 0, 7)
+	for range 7 {
+		ids = append(ids, domain.NewMenuID())
+	}
+	return ids
+}
+
+func TestRerollDay_200と引き直した献立(t *testing.T) {
+	t.Parallel()
+
+	menu := testMenu()
+	s := &fakeMenuService{rerolled: domain.DayMenu{Day: 3, Menu: *menu}}
+	ids := testWeekIDs()
+	rec := doRerollDay(t, s, `{"day":3,"week":`+weekIDsJSON(ids)+`}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var body struct {
+		Menu map[string]any `json:"menu"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, "親子丼", body.Menu["name"])
+	assert.ElementsMatch(t,
+		[]string{"id", "name", "genre", "difficulty", "description"},
+		keysOf(body.Menu))
+
+	assert.Equal(t, 3, s.lastRerollDay, "day が service に渡ること")
+	assert.Equal(t, ids, s.lastRerollWeek, "週が service に渡ること")
+}
+
+func TestRerollDay_条件がserviceに渡る(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{rerolled: domain.DayMenu{Day: 1, Menu: *testMenu()}}
+	rec := doRerollDay(t, s, `{"day":1,"genre":"japanese","difficulty":"easy","week":`+weekIDsJSON(testWeekIDs())+`}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, s.lastRerollFilter.Genre)
+	assert.Equal(t, domain.GenreJapanese, *s.lastRerollFilter.Genre)
+	require.NotNil(t, s.lastRerollFilter.Difficulty)
+	assert.Equal(t, domain.DifficultyEasy, *s.lastRerollFilter.Difficulty)
+}
+
+func TestRerollDay_範囲外のdayで400(t *testing.T) {
+	t.Parallel()
+
+	for _, day := range []string{"0", "-1", "8", "100"} {
+		t.Run("day="+day, func(t *testing.T) {
+			t.Parallel()
+
+			s := &fakeMenuService{rerollErr: service.ErrInvalidDay}
+			rec := doRerollDay(t, s, `{"day":`+day+`,"week":`+weekIDsJSON(testWeekIDs())+`}`)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Header().Get(echo.HeaderContentType), handler.ProblemContentType)
+		})
+	}
+}
+
+func TestRerollDay_ハンドラが弾く不正なリクエストで400(t *testing.T) {
+	t.Parallel()
+
+	// 形が壊れているものは service を呼ぶ前に弾く。
+	ids := weekIDsJSON(testWeekIDs())
+	tests := map[string]string{
+		"JSONとして壊れている": `{"day":`,
+		"weekに不正なUUID": `{"day":3,"week":["not-a-uuid","a","b","c","d","e","f"]}`,
+		"dayが数値でない":    `{"day":"three","week":` + ids + `}`,
+		"未知のジャンル":      `{"day":3,"genre":"french","week":` + ids + `}`,
+		"未知の難易度":       `{"day":3,"difficulty":"very-hard","week":` + ids + `}`,
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			s := &fakeMenuService{rerolled: domain.DayMenu{Day: 3, Menu: *testMenu()}}
+			rec := doRerollDay(t, s, body)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Header().Get(echo.HeaderContentType), handler.ProblemContentType)
+			assert.Equal(t, 0, s.rerollCalls, "service を呼ばないこと")
+		})
+	}
+}
+
+func TestRerollDay_serviceが弾く不正なリクエストで400(t *testing.T) {
+	t.Parallel()
+
+	// 週の件数と日の範囲は service が判断する。ハンドラはその結果を
+	// HTTPステータスに移すだけ。
+	tests := map[string]error{
+		"週が7件でない": service.ErrInvalidWeek,
+		"日が範囲外":   service.ErrInvalidDay,
+	}
+	for name, sentinel := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			s := &fakeMenuService{rerollErr: sentinel}
+			rec := doRerollDay(t, s, `{"day":3,"week":`+weekIDsJSON(testWeekIDs())+`}`)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Header().Get(echo.HeaderContentType), handler.ProblemContentType)
+		})
+	}
+}
+
+func TestRerollDay_weekはそのままserviceに渡す(t *testing.T) {
+	t.Parallel()
+
+	// 件数の判断は service に任せる。ハンドラが独自に7件を強制すると、
+	// 判断が2箇所に散らばる。
+	s := &fakeMenuService{rerollErr: service.ErrInvalidWeek}
+	rec := doRerollDay(t, s, `{"day":3,"week":["`+domain.NewMenuID().String()+`"]}`)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Len(t, s.lastRerollWeek, 1, "受け取ったまま渡すこと")
+}
+
+func TestRerollDay_候補0件で422(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{rerollErr: service.ErrNoMenuFound}
+	rec := doRerollDay(t, s, `{"day":3,"week":`+weekIDsJSON(testWeekIDs())+`}`)
+
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}
+
+func TestRerollDay_未知のエラーは500で詳細を漏らさない(t *testing.T) {
+	t.Parallel()
+
+	secret := errors.New("pq: password authentication failed for user \"app\"")
+	s := &fakeMenuService{rerollErr: secret}
+	rec := doRerollDay(t, s, `{"day":3,"week":`+weekIDsJSON(testWeekIDs())+`}`)
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "password")
 }
