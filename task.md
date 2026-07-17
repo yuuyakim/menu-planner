@@ -115,12 +115,12 @@ repository の統合テストが緑。
 - [x] 🟢 `MenuHandler.Get` を実装
 - [x] 🟢 `service.GetMenu` を実装（repository の `FindByID` は PR #2 で実装済み）
 
-### PR 2-H: 実機結線 `feat/wire-menu-api`
+### PR 2-H: 実機結線 `feat/wire-menu-api` ✅
 
-- [ ] 🔧 `main.go` で pool / repository / service / handler を組み立て
-- [ ] 🔧 DBに繋がらない場合の起動時エラー
-- [ ] 🔧 実機確認: `curl "localhost:8080/api/v1/menus/suggest?genre=japanese&difficulty=easy"`
-- [ ] 🔧 実機確認: 120件のマスタから実際に献立が返ること
+- [x] 🔧 `main.go` で pool / repository / service / handler を組み立て
+- [x] 🔧 DBに繋がらない場合の起動時エラー（`DATABASE_URL` 未設定・接続不可とも exit 1）
+- [x] 🔧 実機確認: `curl "localhost:8080/api/v1/menus/suggest?genre=japanese&difficulty=easy"`
+- [x] 🔧 実機確認: 120件のマスタから実際に献立が返ること
 
 ---
 
