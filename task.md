@@ -128,13 +128,14 @@ repository の統合テストが緑。
 
 > 完了条件: 障害時フォールバックのテストが緑
 
-### PR 3-A: RecipeLink 型 `feat/recipe-link`
+### PR 3-A: RecipeLink 型 `feat/recipe-link` ✅
 
 - [ ] 🔧 検索APIを最終選定（Brave / Google CSE）※spec.md 13章 未決事項1
-- [ ] 🔴 テスト: URLの検証（http/https のみ、不正なURLを拒否）
-- [ ] 🔴 テスト: ドメイン抽出（`https://a.example.com/x` → `a.example.com`）
-- [ ] 🔴 テスト: タイトルが空なら拒否
-- [ ] 🟢 `domain.RecipeLink` を実装
+      → **3-C の直前に先送り**。3-B の stub まではキー無しで進められるため。
+- [x] 🔴 テスト: URLの検証（http/https のみ、不正なURLを拒否）
+- [x] 🔴 テスト: ドメイン抽出（`https://a.example.com/x` → `a.example.com`）
+- [x] 🔴 テスト: タイトルが空なら拒否
+- [x] 🟢 `domain.RecipeLink` を実装
 
 ### PR 3-B: stub gateway `feat/recipe-stub-gateway`
 
