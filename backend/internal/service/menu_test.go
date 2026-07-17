@@ -721,7 +721,7 @@ func TestSuggestWeekly_7件返る(t *testing.T) {
 
 	svc := newWeeklyService(weeklyMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	assert.Len(t, got, 7, "spec.md 2.2 の7日分")
@@ -732,7 +732,7 @@ func TestSuggestWeekly_dayが1から7の連番(t *testing.T) {
 
 	svc := newWeeklyService(weeklyMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -747,7 +747,7 @@ func TestSuggestWeekly_dayは起点当日から始まる(t *testing.T) {
 	// 当日起点（spec.md 13.3）。day=1 が今日で、曜日はサーバが持たない。
 	svc := newWeeklyService(weeklyMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.NotEmpty(t, got)
@@ -763,7 +763,7 @@ func TestSuggestWeekly_乱数列に従って献立が選ばれる(t *testing.T) 
 	menus := weeklyMenus()
 	svc := newWeeklyService(menus, 7, 6, 5, 4, 3, 2, 1)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -795,7 +795,7 @@ func TestSuggestWeekly_条件がrepositoryに渡る(t *testing.T) {
 
 	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
 		Difficulty: difficultyPtr(domain.DifficultyEasy),
-	})
+	}, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, repo.lastFilter.Difficulty)
@@ -809,7 +809,7 @@ func TestSuggestWeekly_候補を1度だけ問い合わせる(t *testing.T) {
 	repo := newFakeMenuRepository(weeklyMenus()...)
 	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
 
-	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, repo.filterCalls)
@@ -831,7 +831,7 @@ func TestSuggestWeekly_候補0件でErrNoMenuFound(t *testing.T) {
 
 			svc := newWeeklyService(tt.menus, 0)
 
-			_, err := svc.SuggestWeekly(context.Background(), tt.filter)
+			_, err := svc.SuggestWeekly(context.Background(), tt.filter, nil)
 
 			assert.ErrorIs(t, err, service.ErrNoMenuFound)
 			assert.NotErrorIs(t, err, service.ErrNoCandidates, "Pick の内部事情は漏らさないこと")
@@ -847,7 +847,7 @@ func TestSuggestWeekly_不正な条件はErrInvalidGenre(t *testing.T) {
 
 	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
 		Genre: genrePtr(domain.Genre("フレンチ")),
-	})
+	}, nil)
 
 	assert.ErrorIs(t, err, domain.ErrInvalidGenre)
 	assert.Equal(t, 0, repo.filterCalls, "条件が不正ならDBに問い合わせないこと")
@@ -861,7 +861,7 @@ func TestSuggestWeekly_repositoryのエラーがラップされて返る(t *test
 	repo.err = sentinel
 	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
 
-	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
@@ -875,7 +875,7 @@ func TestSuggestWeekly_乱数源のエラーは該当なしと区別できる(t 
 	svc := service.NewMenuService(newFakeMenuRepository(weeklyMenus()...), failingRandomizer{err: sentinel},
 		newFakeRecipeGateway(), newFakeRecipeCache())
 
-	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
@@ -888,7 +888,7 @@ func TestSuggestWeekly_同一献立が週内に2度出現しない(t *testing.T)
 	// 乱数源は常に先頭を返す。重複回避が無ければ7日とも同じ献立になる。
 	svc := newWeeklyService(weeklyMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -909,7 +909,7 @@ func TestSuggestWeekly_候補がちょうど7件なら7件とも異なる(t *tes
 	menus := weeklyMenus()[:7]
 	svc := newWeeklyService(menus, 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -932,7 +932,7 @@ func TestSuggestWeekly_選ばれた献立は以降の候補から外れる(t *te
 	menus := weeklyMenus()[:7]
 	svc := newWeeklyService(menus, 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -983,7 +983,7 @@ func TestSuggestWeekly_同一ジャンルが3日以上連続しない(t *testing
 
 	svc := newWeeklyService(streakMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1002,7 +1002,7 @@ func TestSuggestWeekly_2連続は許容される(t *testing.T) {
 	// 過剰に散らして候補を無駄に狭めないことを確かめる。
 	svc := newWeeklyService(streakMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	genres := genresOf(got)
@@ -1024,7 +1024,7 @@ func TestSuggestWeekly_連続の判定は直前2日だけを見る(t *testing.T)
 	// 「週内で和食は2回まで」ではない。
 	svc := newWeeklyService(streakMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	genres := genresOf(got)
@@ -1044,7 +1044,7 @@ func TestSuggestWeekly_重複回避と連続回避が同時に効く(t *testing.
 
 	svc := newWeeklyService(streakMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1083,7 +1083,7 @@ func TestSuggestWeekly_候補が足りていれば緩和しない(t *testing.T) 
 	// 緩和は最後の手段。8件あるなら規則を全て守れる。
 	svc := newWeeklyService(weeklyMenus(), 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1096,7 +1096,7 @@ func TestSuggestWeekly_候補がちょうど7件でも緩和しない(t *testing
 	// 境界値。ぴったり足りているのに緩めるようでは緩和が早すぎる。
 	svc := newWeeklyService(weeklyMenus()[:7], 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1110,7 +1110,7 @@ func TestSuggestWeekly_候補6件なら緩和して重複を許す(t *testing.T)
 	menus := easyMenus()[:6]
 	svc := newWeeklyService(menus, 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1133,7 +1133,7 @@ func TestSuggestWeekly_候補1件なら7日とも同じ献立(t *testing.T) {
 	menus := []domain.Menu{newMenu("肉じゃが", domain.GenreJapanese, domain.DifficultyEasy)}
 	svc := newWeeklyService(menus, 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1160,7 +1160,7 @@ func TestSuggestWeekly_候補が全て同一ジャンルなら3連続禁止を�
 	}
 	svc := newWeeklyService(menus, 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1187,7 +1187,7 @@ func TestSuggestWeekly_ジャンルで絞っても7日分が返る(t *testing.T)
 
 	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
 		Genre: genrePtr(domain.GenreJapanese),
-	})
+	}, nil)
 
 	require.NoError(t, err)
 	assert.Len(t, got, 7)
@@ -1210,7 +1210,7 @@ func TestSuggestWeekly_絞り込み条件は緩めない(t *testing.T) {
 
 	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
 		Genre: genrePtr(domain.GenreJapanese),
-	})
+	}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1237,7 +1237,7 @@ func TestSuggestWeekly_緩和はジャンル連続を先に緩める(t *testing.
 	}
 	svc := newWeeklyService(menus, 0)
 
-	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
@@ -1256,7 +1256,169 @@ func TestSuggestWeekly_緩和しても候補0件ならErrNoMenuFound(t *testing.
 	// 緩和は候補を増やす操作ではない。0件は0件のまま。
 	svc := newWeeklyService(nil, 0)
 
-	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
 
 	assert.ErrorIs(t, err, service.ErrNoMenuFound)
+}
+
+// idsOf は献立のIDを返す。
+func idsOf(menus ...domain.Menu) []domain.MenuID {
+	ids := make([]domain.MenuID, 0, len(menus))
+	for _, m := range menus {
+		ids = append(ids, m.ID)
+	}
+	return ids
+}
+
+// namesOf は週間献立の献立名を返す。
+func namesOf(week []domain.DayMenu) []string {
+	names := make([]string, 0, len(week))
+	for _, d := range week {
+		names = append(names, d.Menu.Name)
+	}
+	return names
+}
+
+func TestSuggestWeekly_直近履歴の献立を避ける(t *testing.T) {
+	t.Parallel()
+
+	// 候補8件のうち先頭1件が履歴にある。残り7件で7日を埋められるので避けられる。
+	menus := weeklyMenus()
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, idsOf(menus[0]))
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	assert.NotContains(t, namesOf(got), menus[0].Name, "履歴の献立が出ないこと")
+	assertNoRelaxation(t, got)
+}
+
+func TestSuggestWeekly_履歴が空なら何も避けない(t *testing.T) {
+	t.Parallel()
+
+	menus := weeklyMenus()
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, nil)
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	assert.Equal(t, menus[0].Name, got[0].Menu.Name, "先頭から選ばれること")
+	assertNoRelaxation(t, got)
+}
+
+func TestSuggestWeekly_履歴を除くと7件に満たないなら履歴除外を緩和する(t *testing.T) {
+	t.Parallel()
+
+	// 候補8件のうち2件が履歴にある。残り6件では7日を埋められないため、
+	// 履歴除外を緩めて7日目を埋める。
+	menus := weeklyMenus()
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, idsOf(menus[0], menus[1]))
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+
+	// 履歴の献立が1件だけ現れ、その日は緩和済みと分かる。
+	relaxed := relaxedDays(got)
+	require.Len(t, relaxed, 1, "緩和は1日だけ（献立: %v）", namesOf(got))
+	assert.True(t, got[relaxed[0]-1].RelaxedHistory, "履歴除外を緩めたと分かること")
+	assert.False(t, got[relaxed[0]-1].RelaxedDuplicate, "重複は緩めずに済むこと")
+}
+
+func TestSuggestWeekly_履歴除外は重複回避より先に緩む(t *testing.T) {
+	t.Parallel()
+
+	// spec.md 2.2 はルール3(履歴)に「候補が枯渇する場合はこの条件を緩和する」と
+	// 明記している。最も緩めてよい条件なので、重複より先に緩める。
+	//
+	// 候補7件中5件が履歴にある。履歴を避けると2件しか無いが、履歴を緩めれば
+	// 7件で足りるため重複は起きない。
+	menus := weeklyMenus()[:7]
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{},
+		idsOf(menus[0], menus[1], menus[2], menus[3], menus[4]))
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	for _, d := range got {
+		assert.False(t, d.RelaxedDuplicate, "%d日目: 履歴を緩めれば足りるので重複させないこと", d.Day)
+	}
+	assert.ElementsMatch(t, namesOf(got), namesOf(got), "7件が全て使われること")
+}
+
+func TestSuggestWeekly_全候補が履歴にあっても7日分を返す(t *testing.T) {
+	t.Parallel()
+
+	// 極端値。履歴を避けられないなら諦めて出す。7日分が返らないほうが困る。
+	menus := weeklyMenus()
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, idsOf(menus...))
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	for _, d := range got {
+		assert.True(t, d.RelaxedHistory, "%d日目: 履歴除外を緩めたと分かること", d.Day)
+		assert.False(t, d.RelaxedDuplicate, "8件あるので重複はしないこと")
+	}
+}
+
+func TestSuggestWeekly_履歴に無いIDを渡しても影響しない(t *testing.T) {
+	t.Parallel()
+
+	// マスタから消えた献立が履歴に残っている場合を想定する。
+	menus := weeklyMenus()
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{},
+		[]domain.MenuID{domain.NewMenuID()})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	assertNoRelaxation(t, got)
+}
+
+func TestSuggestWeekly_履歴は絞り込みに使わない(t *testing.T) {
+	t.Parallel()
+
+	// 履歴は「可能な限り避ける」弱い条件。repository の ExcludeIDs に渡すと
+	// SQLで消えてしまい、緩和できなくなる。
+	menus := weeklyMenus()
+	repo := newFakeMenuRepository(menus...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
+
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, idsOf(menus[0]))
+
+	require.NoError(t, err)
+	assert.Empty(t, repo.lastFilter.ExcludeIDs, "履歴を repository に渡さないこと")
+}
+
+func TestSuggestWeekly_連続を緩めても履歴は避ける(t *testing.T) {
+	t.Parallel()
+
+	// 候補が全て同一ジャンルだと3日目から連続を緩めざるを得ない。そのときでも
+	// 履歴の献立まで持ち出す必要は無い。候補8件・履歴1件なら残り7件で埋まる。
+	//
+	// 「連続だけ緩めて履歴は避ける」段階が無いと、連続を緩める場面で履歴の
+	// 献立が選ばれてしまう。
+	menus := make([]domain.Menu, 0, 8)
+	for i := range 8 {
+		menus = append(menus, newMenu(fmt.Sprintf("和%d", i+1), domain.GenreJapanese, domain.DifficultyEasy))
+	}
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{}, idsOf(menus[0]))
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	assert.NotContains(t, namesOf(got), "和1", "履歴の献立を避けられること")
+	for _, d := range got {
+		assert.False(t, d.RelaxedHistory, "%d日目: 履歴は緩めずに済むこと", d.Day)
+		assert.False(t, d.RelaxedDuplicate, "%d日目: 重複も緩めずに済むこと", d.Day)
+	}
+	assert.Equal(t, []int{3, 4, 5, 6, 7}, relaxedDays(got), "緩めるのはジャンル連続だけ")
 }
