@@ -15,6 +15,12 @@ import (
 // リクエスト自体は正しいので、呼び出し側はこれを 4xx として扱う。
 var ErrNoMenuFound = errors.New("条件に合う献立が見つかりません")
 
+// ErrInvalidDay は週間献立の日の指定が範囲外であることを表す（1〜7）。
+var ErrInvalidDay = errors.New("不正な日の指定です")
+
+// ErrInvalidWeek は渡された週間献立が7日分そろっていないことを表す。
+var ErrInvalidWeek = errors.New("不正な週間献立です")
+
 // recipeCount は献立1件につき提示するレシピの件数（spec.md 2.3）。
 const recipeCount = 3
 
@@ -157,6 +163,136 @@ func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter, re
 	return week, nil
 }
 
+// RerollDay は週間献立の指定日だけを引き直す（spec.md 2.2 / 5.1）。
+//
+// week には現在の週の献立IDを day 順（1..7）に並べて渡す。サーバは週の状態を
+// 持たないため、呼び出し側が持っているものを受け取る。返るのは引き直した
+// 1日分だけで、他の日は呼び出し側が保持する。
+//
+// 重複回避は再適用する。引き直した献立は他の6日と重複せず、同一ジャンルが
+// 3日以上連続しない。候補が枯渇する場合は SuggestWeekly と同じ順序で緩和する。
+func (s *MenuService) RerollDay(ctx context.Context, f domain.MenuFilter, week []domain.MenuID, day int, recentIDs []domain.MenuID) (domain.DayMenu, error) {
+	if err := f.Validate(); err != nil {
+		return domain.DayMenu{}, err
+	}
+	if day < 1 || day > domain.WeekLength {
+		return domain.DayMenu{}, fmt.Errorf("%w: %d (1〜%dの範囲で指定してください)", ErrInvalidDay, day, domain.WeekLength)
+	}
+	if len(week) != domain.WeekLength {
+		// 他の日を保持する仕組みなので、週が揃っていないと重複回避を再適用できない。
+		return domain.DayMenu{}, fmt.Errorf("%w: %d件 (%d件必要です)", ErrInvalidWeek, len(week), domain.WeekLength)
+	}
+
+	// 引き直す日を除いた他の日の献立。ジャンルの連続判定に必要なので実体を引く。
+	otherIDs := make([]domain.MenuID, 0, domain.WeekLength-1)
+	for i, id := range week {
+		if i != day-1 {
+			otherIDs = append(otherIDs, id)
+		}
+	}
+	others, err := s.repo.FindByIDs(ctx, otherIDs)
+	if err != nil {
+		return domain.DayMenu{}, fmt.Errorf("週の献立の取得に失敗しました: %w", err)
+	}
+
+	candidates, err := s.repo.FindByFilter(ctx, f)
+	if err != nil {
+		return domain.DayMenu{}, fmt.Errorf("献立の検索に失敗しました: %w", err)
+	}
+
+	// 週で使われている献立を除いたもの。ここから選べば重複しない。
+	//
+	// 引き直す日の献立自身も外す。同じものが返ってくるのでは引き直しにならない。
+	// ただし候補がそれしか無ければ最後の段階で選ばれる（candidates には残る）。
+	remaining := slices.DeleteFunc(slices.Clone(candidates), func(m domain.Menu) bool {
+		return slices.Contains(week, m.ID)
+	})
+
+	// day 順に並べたジャンル。引き直す日は空のまま置き、候補を当てて判定する。
+	genres := s.weekGenres(week, others)
+
+	picked, err := s.pickForDay(candidates, remaining, others, recentIDs, genres, day-1)
+	if errors.Is(err, ErrNoCandidates) {
+		return domain.DayMenu{}, ErrNoMenuFound
+	}
+	if err != nil {
+		return domain.DayMenu{}, fmt.Errorf("%d日目の献立の選択に失敗しました: %w", day, err)
+	}
+
+	picked.Day = day
+	return picked, nil
+}
+
+// weekGenres は week のIDを day 順のジャンル列に変換する。
+// 見つからないIDの位置は空のままにする（マスタから消えた献立など）。
+func (s *MenuService) weekGenres(week []domain.MenuID, others []domain.Menu) []domain.Genre {
+	genres := make([]domain.Genre, len(week))
+	for i, id := range week {
+		for _, m := range others {
+			if m.ID == id {
+				genres[i] = m.Genre
+				break
+			}
+		}
+	}
+	return genres
+}
+
+// pickForDay は指定位置に置く献立を1件選ぶ。
+// 段階的な緩和は pickDay と同じ順序で、連続の判定だけが前後両側になる。
+//
+// others には引き直す日以外の献立を渡す。重複したかの判定に使う。
+func (s *MenuService) pickForDay(candidates, remaining, others []domain.Menu, recentIDs []domain.MenuID, genres []domain.Genre, index int) (domain.DayMenu, error) {
+	withoutStreak := func(pool []domain.Menu) []domain.Menu {
+		return slices.DeleteFunc(slices.Clone(pool), func(m domain.Menu) bool {
+			return createsStreak(genres, index, m.Genre)
+		})
+	}
+	withoutHistory := func(pool []domain.Menu) []domain.Menu {
+		if len(recentIDs) == 0 {
+			return pool
+		}
+		return slices.DeleteFunc(slices.Clone(pool), func(m domain.Menu) bool {
+			return slices.Contains(recentIDs, m.ID)
+		})
+	}
+
+	pools := [][]domain.Menu{
+		withoutHistory(withoutStreak(remaining)),
+		withoutStreak(remaining),
+		withoutHistory(remaining),
+		remaining,
+		withoutHistory(withoutStreak(candidates)),
+		withoutStreak(candidates),
+		withoutHistory(candidates),
+		candidates,
+	}
+
+	for _, pool := range pools {
+		menu, err := Pick(s.rand, pool)
+		if errors.Is(err, ErrNoCandidates) {
+			continue
+		}
+		if err != nil {
+			return domain.DayMenu{}, err
+		}
+
+		// 何を緩めたかは選ばれた献立から判定する。
+		//
+		// 重複は「他の日と同じ献立になったか」。引き直す日の献立自身が
+		// 選び直された場合は、週の中で1度しか出ないので重複ではない。
+		duplicate := slices.ContainsFunc(others, func(m domain.Menu) bool { return m.ID == menu.ID })
+		return domain.DayMenu{
+			Menu:               menu,
+			RelaxedDuplicate:   duplicate,
+			RelaxedGenreStreak: createsStreak(genres, index, menu.Genre),
+			RelaxedHistory:     slices.Contains(recentIDs, menu.ID),
+		}, nil
+	}
+
+	return domain.DayMenu{}, ErrNoCandidates
+}
+
 // pickDay はその日の献立を1件選ぶ。
 //
 // 規則を全て守れる候補が無い場合、段階的に緩めて必ず7日を埋める（spec.md 2.2）。
@@ -274,6 +410,42 @@ func streakingGenre(week []domain.DayMenu) (domain.Genre, bool) {
 		}
 	}
 	return last, true
+}
+
+// createsStreak は week の index 番目を genre に置き換えたとき、
+// 同一ジャンルが上限を超えて連続するかを返す。
+//
+// SuggestWeekly は前から順に埋めるため直前だけを見ればよいが、引き直しは
+// 週の途中を差し替えるため前後の両側を見る必要がある。3日目を引き直すなら
+// [1,2,3] [2,3,4] [3,4,5] のどの窓でも3連続にしてはならない。
+//
+// week の要素は day 順に並んでいる前提。空の要素（引き直し中の日）は
+// index で示し、その位置の genre を仮に当てて判定する。
+func createsStreak(genres []domain.Genre, index int, genre domain.Genre) bool {
+	window := genreStreakLimit + 1
+
+	// index を含む長さ window の窓を全て見る。
+	for start := index - genreStreakLimit; start <= index; start++ {
+		if start < 0 || start+window > len(genres) {
+			continue
+		}
+
+		same := true
+		for i := start; i < start+window; i++ {
+			g := genres[i]
+			if i == index {
+				g = genre
+			}
+			if g != genre {
+				same = false
+				break
+			}
+		}
+		if same {
+			return true
+		}
+	}
+	return false
 }
 
 // RecipeLinks は献立のレシピ掲載ページを最大3件返す。

@@ -34,6 +34,8 @@ type fakeMenuRepository struct {
 	lastID domain.MenuID
 	// idCalls は FindByID が呼ばれた回数。
 	idCalls int
+	// idsCalls は FindByIDs が呼ばれた回数。
+	idsCalls int
 }
 
 func newFakeMenuRepository(menus ...domain.Menu) *fakeMenuRepository {
@@ -53,6 +55,20 @@ func (r *fakeMenuRepository) FindByID(_ context.Context, id domain.MenuID) (*dom
 	}
 	// 本物の repository と同じく、存在しないことを示す番兵を包んで返す。
 	return nil, fmt.Errorf("%w: %s", errFakeMenuNotFound, id)
+}
+
+func (r *fakeMenuRepository) FindByIDs(_ context.Context, ids []domain.MenuID) ([]domain.Menu, error) {
+	r.idsCalls++
+	if r.err != nil {
+		return nil, r.err
+	}
+	found := []domain.Menu{}
+	for _, m := range r.menus {
+		if slices.Contains(ids, m.ID) {
+			found = append(found, m)
+		}
+	}
+	return found, nil
 }
 
 func (r *fakeMenuRepository) FindByFilter(_ context.Context, f domain.MenuFilter) ([]domain.Menu, error) {

@@ -34,12 +34,18 @@ type MenuWeeklySuggester interface {
 	SuggestWeekly(ctx context.Context, f domain.MenuFilter, recentIDs []domain.MenuID) ([]domain.DayMenu, error)
 }
 
+// MenuDayReroller は週間献立の1日の引き直しを抽象化する。実装は service.MenuService。
+type MenuDayReroller interface {
+	RerollDay(ctx context.Context, f domain.MenuFilter, week []domain.MenuID, day int, recentIDs []domain.MenuID) (domain.DayMenu, error)
+}
+
 // MenuUseCase は献立APIが必要とする操作をまとめたもの。
 type MenuUseCase interface {
 	MenuSuggester
 	MenuGetter
 	MenuRecipeLister
 	MenuWeeklySuggester
+	MenuDayReroller
 }
 
 // MenuHandler は献立APIの受け口。
@@ -61,6 +67,7 @@ func (h *MenuHandler) RegisterRoutes(e *echo.Echo) {
 	g.GET("/menus/suggest", h.Suggest)
 	// 状態は変えないが、条件をボディで受けるため POST（spec.md 5.1）。
 	g.POST("/menus/suggest-weekly", h.SuggestWeekly)
+	g.POST("/menus/reroll-day", h.RerollDay)
 	g.GET("/menus/:id", h.Get)
 	g.GET("/menus/:id/recipes", h.Recipes)
 }
@@ -200,23 +207,79 @@ func parseWeeklyRequest(c echo.Context) (domain.MenuFilter, error) {
 		}
 	}
 
-	// 未指定・null・空文字はいずれも「絞り込まない」。GET /menus/suggest と
-	// 揃えておく（フロントが未選択を空文字で送ることがある）。
-	if req.Genre != nil && *req.Genre != "" {
-		g, err := domain.ParseGenre(*req.Genre)
+	return toMenuFilter(req.Genre, req.Difficulty)
+}
+
+// toMenuFilter はボディで受けた条件を絞り込み条件に変換する。
+// 未指定・null・空文字はいずれも「絞り込まない」。GET /menus/suggest と
+// 揃えておく（フロントが未選択を空文字で送ることがある）。
+func toMenuFilter(genre, difficulty *string) (domain.MenuFilter, error) {
+	var f domain.MenuFilter
+
+	if genre != nil && *genre != "" {
+		g, err := domain.ParseGenre(*genre)
 		if err != nil {
-			return f, fmt.Errorf("%w: %q", err, *req.Genre)
+			return f, fmt.Errorf("%w: %q", err, *genre)
 		}
 		f.Genre = &g
 	}
-	if req.Difficulty != nil && *req.Difficulty != "" {
-		d, err := domain.ParseDifficulty(*req.Difficulty)
+	if difficulty != nil && *difficulty != "" {
+		d, err := domain.ParseDifficulty(*difficulty)
 		if err != nil {
-			return f, fmt.Errorf("%w: %q", err, *req.Difficulty)
+			return f, fmt.Errorf("%w: %q", err, *difficulty)
 		}
 		f.Difficulty = &d
 	}
 	return f, nil
+}
+
+// rerollRequest は POST /menus/reroll-day のリクエスト（spec.md 5.1）。
+type rerollRequest struct {
+	// Day は引き直す日（1..7）。
+	Day int `json:"day"`
+	// Week は現在の週の献立IDを day 順に並べたもの。サーバは週の状態を
+	// 持たないため、呼び出し側が持っているものを受け取る。
+	Week       []string `json:"week"`
+	Genre      *string  `json:"genre"`
+	Difficulty *string  `json:"difficulty"`
+}
+
+// rerollResponse は POST /menus/reroll-day のレスポンス。
+// 引き直した1日分だけを返し、他の日は呼び出し側が保持する。
+type rerollResponse struct {
+	Menu menuDTO `json:"menu"`
+}
+
+// RerollDay は週間献立の指定日だけを引き直す。
+//
+//	POST /api/v1/menus/reroll-day
+func (h *MenuHandler) RerollDay(c echo.Context) error {
+	var req rerollRequest
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	f, err := toMenuFilter(req.Genre, req.Difficulty)
+	if err != nil {
+		return err
+	}
+
+	week := make([]domain.MenuID, 0, len(req.Week))
+	for _, raw := range req.Week {
+		id, err := domain.ParseMenuID(raw)
+		if err != nil {
+			return err
+		}
+		week = append(week, id)
+	}
+
+	// 履歴による除外はフェーズ6で結線する。
+	picked, err := h.svc.RerollDay(c.Request().Context(), f, week, req.Day, nil)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, rerollResponse{Menu: toMenuDTO(picked.Menu)})
 }
 
 // recipeDTO はレシピリンクのAPI表現（spec.md 5.1）。

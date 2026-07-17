@@ -44,6 +44,8 @@ var problemMapping = []struct {
 	{domain.ErrInvalidMenuID, http.StatusBadRequest, "invalid-menu-id", "不正な献立IDです"},
 	{domain.ErrInvalidMenu, http.StatusBadRequest, "invalid-menu", "不正な献立です"},
 	{repository.ErrMenuNotFound, http.StatusNotFound, "menu-not-found", "献立が見つかりません"},
+	{service.ErrInvalidDay, http.StatusBadRequest, "invalid-day", "不正な日の指定です"},
+	{service.ErrInvalidWeek, http.StatusBadRequest, "invalid-week", "不正な週間献立です"},
 	// リクエストは正しいが条件に合う献立が無い状態。構文は正しいので400ではなく422。
 	{service.ErrNoMenuFound, http.StatusUnprocessableEntity, "no-menu-found", "条件に合う献立が見つかりません"},
 	// 外部の検索APIの不調。自分の障害ではないので500ではなく502で上流起因だと示す。

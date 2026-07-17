@@ -25,6 +25,11 @@ type MenuRepository interface {
 	// FindByID はIDで献立を1件取得する。存在しない場合はエラーを返す。
 	FindByID(ctx context.Context, id domain.MenuID) (*domain.Menu, error)
 
+	// FindByIDs は複数のIDで献立をまとめて取得する。
+	// 見つからないIDは黙って除く（呼び出し側が件数で判断できる）。
+	// 1件ずつ FindByID を呼ぶとID数だけ問い合わせが飛ぶため、まとめて引く。
+	FindByIDs(ctx context.Context, ids []domain.MenuID) ([]domain.Menu, error)
+
 	// FindByFilter は条件に合う献立を返す。該当が無い場合は空スライスを返す。
 	FindByFilter(ctx context.Context, f domain.MenuFilter) ([]domain.Menu, error)
 }
