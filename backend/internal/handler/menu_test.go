@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -45,6 +46,24 @@ type fakeMenuService struct {
 	// lastRecipeID は最後に RecipeLinks に渡されたID。
 	lastRecipeID domain.MenuID
 	recipeCalls  int
+
+	// week / weekErr は SuggestWeekly の返り値。
+	week    []domain.DayMenu
+	weekErr error
+	// lastWeeklyFilter / lastWeeklyRecent は最後に SuggestWeekly に渡された値。
+	lastWeeklyFilter domain.MenuFilter
+	lastWeeklyRecent []domain.MenuID
+	weeklyCalls      int
+}
+
+func (s *fakeMenuService) SuggestWeekly(_ context.Context, f domain.MenuFilter, recentIDs []domain.MenuID) ([]domain.DayMenu, error) {
+	s.weeklyCalls++
+	s.lastWeeklyFilter = f
+	s.lastWeeklyRecent = recentIDs
+	if s.weekErr != nil {
+		return nil, s.weekErr
+	}
+	return s.week, nil
 }
 
 func (s *fakeMenuService) RecipeLinks(_ context.Context, id domain.MenuID) ([]domain.RecipeLink, error) {
@@ -520,4 +539,207 @@ func TestRecipes_未知のエラーは500で詳細を漏らさない(t *testing.
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.NotContains(t, rec.Body.String(), "password")
+}
+
+// doSuggestWeekly は POST /api/v1/menus/suggest-weekly をルーティング経由で叩く。
+func doSuggestWeekly(t *testing.T, s *fakeMenuService, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewMenuHandler(s).RegisterRoutes(e)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/suggest-weekly", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+// testWeek は7日分のテストデータを組み立てる。
+func testWeek() []domain.DayMenu {
+	week := make([]domain.DayMenu, 0, 7)
+	for i := range 7 {
+		week = append(week, domain.DayMenu{
+			Day:  i + 1,
+			Menu: *testMenu(),
+		})
+	}
+	return week
+}
+
+func TestSuggestWeekly_200とweek7件(t *testing.T) {
+	t.Parallel()
+
+	rec := doSuggestWeekly(t, &fakeMenuService{week: testWeek()}, `{}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), echo.MIMEApplicationJSON)
+
+	var body struct {
+		Week []struct {
+			Day  int            `json:"day"`
+			Menu map[string]any `json:"menu"`
+		} `json:"week"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Week, 7)
+
+	for i, d := range body.Week {
+		assert.Equal(t, i+1, d.Day, "day が 1..7 の連番であること")
+		assert.Equal(t, "親子丼", d.Menu["name"])
+	}
+}
+
+func TestSuggestWeekly_献立の項目はsuggestと同じ(t *testing.T) {
+	t.Parallel()
+
+	// 同じ献立を別経路で返すため、片方だけ項目が増減するとフロントが壊れる。
+	rec := doSuggestWeekly(t, &fakeMenuService{week: testWeek()}, `{}`)
+
+	var body struct {
+		Week []struct {
+			Menu map[string]any `json:"menu"`
+		} `json:"week"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.NotEmpty(t, body.Week)
+
+	assert.ElementsMatch(t,
+		[]string{"id", "name", "genre", "difficulty", "description"},
+		keysOf(body.Week[0].Menu))
+}
+
+func TestSuggestWeekly_条件がserviceに渡る(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{week: testWeek()}
+	rec := doSuggestWeekly(t, s, `{"genre":"japanese","difficulty":"easy"}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, s.lastWeeklyFilter.Genre)
+	require.NotNil(t, s.lastWeeklyFilter.Difficulty)
+	assert.Equal(t, domain.GenreJapanese, *s.lastWeeklyFilter.Genre)
+	assert.Equal(t, domain.DifficultyEasy, *s.lastWeeklyFilter.Difficulty)
+}
+
+func TestSuggestWeekly_未指定は絞り込まない(t *testing.T) {
+	t.Parallel()
+
+	// spec.md 5.1 のリクエスト例は difficulty に null を渡している。
+	tests := map[string]string{
+		"空のオブジェクト": `{}`,
+		"null":     `{"genre":null,"difficulty":null}`,
+		"空文字":      `{"genre":"","difficulty":""}`,
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			s := &fakeMenuService{week: testWeek()}
+			rec := doSuggestWeekly(t, s, body)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			assert.Nil(t, s.lastWeeklyFilter.Genre)
+			assert.Nil(t, s.lastWeeklyFilter.Difficulty)
+		})
+	}
+}
+
+func TestSuggestWeekly_不正なリクエストボディで400(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"JSONとして壊れている": `{"genre":`,
+		"配列":           `[]`,
+		"genreが数値":     `{"genre":123}`,
+		"未知のジャンル":      `{"genre":"french"}`,
+		"未知の難易度":       `{"difficulty":"very-hard"}`,
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			s := &fakeMenuService{week: testWeek()}
+			rec := doSuggestWeekly(t, s, body)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Header().Get(echo.HeaderContentType), handler.ProblemContentType)
+			assert.Equal(t, 0, s.weeklyCalls, "不正なら service を呼ばないこと")
+		})
+	}
+}
+
+func TestSuggestWeekly_ボディが空でも200(t *testing.T) {
+	t.Parallel()
+
+	// 条件なしの提案として扱う。空ボディを不正にすると、素直な使い方が弾かれる。
+	s := &fakeMenuService{week: testWeek()}
+
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewMenuHandler(s).RegisterRoutes(e)
+
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/menus/suggest-weekly", nil))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Nil(t, s.lastWeeklyFilter.Genre)
+}
+
+func TestSuggestWeekly_候補0件で422(t *testing.T) {
+	t.Parallel()
+
+	rec := doSuggestWeekly(t, &fakeMenuService{weekErr: service.ErrNoMenuFound}, `{"genre":"other"}`)
+
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), handler.ProblemContentType)
+
+	body := decodeProblem(t, rec)
+	assert.InDelta(t, float64(http.StatusUnprocessableEntity), body["status"], 0)
+}
+
+func TestSuggestWeekly_未知のエラーは500で詳細を漏らさない(t *testing.T) {
+	t.Parallel()
+
+	secret := errors.New("pq: password authentication failed for user \"app\"")
+	rec := doSuggestWeekly(t, &fakeMenuService{weekErr: secret}, `{}`)
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "password")
+}
+
+func TestSuggestWeekly_POST以外は受け付けない(t *testing.T) {
+	t.Parallel()
+
+	// 提案は状態を変えないが、条件をボディで受けるため POST にしている（spec.md 5.1）。
+	//
+	// GET だけは 405 ではなく 400 になる。GET /menus/:id が
+	// suggest-weekly を献立IDとして拾い、UUIDではないので弾かれるため。
+	// 経路として素通りするわけではないので実害は無い。
+	tests := map[string]struct {
+		method string
+		want   int
+	}{
+		"GET":    {http.MethodGet, http.StatusBadRequest},
+		"DELETE": {http.MethodDelete, http.StatusMethodNotAllowed},
+		"PUT":    {http.MethodPut, http.StatusMethodNotAllowed},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			s := &fakeMenuService{week: testWeek()}
+			e := echo.New()
+			e.HTTPErrorHandler = handler.ErrorHandler()
+			handler.NewMenuHandler(s).RegisterRoutes(e)
+
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, httptest.NewRequest(tt.method, "/api/v1/menus/suggest-weekly", nil))
+
+			assert.Equal(t, tt.want, rec.Code)
+			assert.Equal(t, 0, s.weeklyCalls, "週間献立の提案が動かないこと")
+		})
+	}
 }

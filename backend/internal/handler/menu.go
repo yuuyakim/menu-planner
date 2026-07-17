@@ -29,11 +29,17 @@ type MenuRecipeLister interface {
 	RecipeLinks(ctx context.Context, id domain.MenuID) ([]domain.RecipeLink, error)
 }
 
+// MenuWeeklySuggester は週間献立の提案を抽象化する。実装は service.MenuService。
+type MenuWeeklySuggester interface {
+	SuggestWeekly(ctx context.Context, f domain.MenuFilter, recentIDs []domain.MenuID) ([]domain.DayMenu, error)
+}
+
 // MenuUseCase は献立APIが必要とする操作をまとめたもの。
 type MenuUseCase interface {
 	MenuSuggester
 	MenuGetter
 	MenuRecipeLister
+	MenuWeeklySuggester
 }
 
 // MenuHandler は献立APIの受け口。
@@ -53,6 +59,8 @@ func (h *MenuHandler) RegisterRoutes(e *echo.Echo) {
 	// /menus/suggest は /menus/:id と同じ階層にあるが、echo は静的なパスを
 	// パラメータより優先して照合するため、:id に飲み込まれることはない。
 	g.GET("/menus/suggest", h.Suggest)
+	// 状態は変えないが、条件をボディで受けるため POST（spec.md 5.1）。
+	g.POST("/menus/suggest-weekly", h.SuggestWeekly)
 	g.GET("/menus/:id", h.Get)
 	g.GET("/menus/:id/recipes", h.Recipes)
 }
@@ -133,6 +141,81 @@ func parseMenuFilter(c echo.Context) (domain.MenuFilter, error) {
 		f.Difficulty = &d
 	}
 
+	return f, nil
+}
+
+// weeklyRequest は POST /menus/suggest-weekly のリクエスト（spec.md 5.1）。
+// 未指定と null を区別しないため、どちらもポインタの nil として受ける。
+type weeklyRequest struct {
+	Genre      *string `json:"genre"`
+	Difficulty *string `json:"difficulty"`
+}
+
+// dayMenuDTO は週間献立の1日分のAPI表現。
+type dayMenuDTO struct {
+	Day  int     `json:"day"`
+	Menu menuDTO `json:"menu"`
+}
+
+// weeklyResponse は POST /menus/suggest-weekly のレスポンス。
+type weeklyResponse struct {
+	Week []dayMenuDTO `json:"week"`
+}
+
+// SuggestWeekly は7日分の献立を提案する。
+//
+//	POST /api/v1/menus/suggest-weekly
+//
+// 緩和が起きたか（domain.DayMenu.Relaxed*）は返さない。spec.md 5.1 の
+// レスポンスに無いため。画面に出す必要が生じたら仕様から決める。
+func (h *MenuHandler) SuggestWeekly(c echo.Context) error {
+	f, err := parseWeeklyRequest(c)
+	if err != nil {
+		return err
+	}
+
+	// 履歴による除外はフェーズ6で結線する。現時点では何も避けない。
+	week, err := h.svc.SuggestWeekly(c.Request().Context(), f, nil)
+	if err != nil {
+		return err
+	}
+
+	days := make([]dayMenuDTO, 0, len(week))
+	for _, d := range week {
+		days = append(days, dayMenuDTO{Day: d.Day, Menu: toMenuDTO(d.Menu)})
+	}
+	return c.JSON(http.StatusOK, weeklyResponse{Week: days})
+}
+
+// parseWeeklyRequest はリクエストボディを絞り込み条件に変換する。
+func parseWeeklyRequest(c echo.Context) (domain.MenuFilter, error) {
+	var f domain.MenuFilter
+
+	// ボディが空でも条件なしの提案として扱う。空を不正にすると素直な使い方が
+	// 弾かれるため、Bind の失敗だけを 400 にする。
+	var req weeklyRequest
+	if c.Request().ContentLength > 0 {
+		if err := c.Bind(&req); err != nil {
+			return f, err
+		}
+	}
+
+	// 未指定・null・空文字はいずれも「絞り込まない」。GET /menus/suggest と
+	// 揃えておく（フロントが未選択を空文字で送ることがある）。
+	if req.Genre != nil && *req.Genre != "" {
+		g, err := domain.ParseGenre(*req.Genre)
+		if err != nil {
+			return f, fmt.Errorf("%w: %q", err, *req.Genre)
+		}
+		f.Genre = &g
+	}
+	if req.Difficulty != nil && *req.Difficulty != "" {
+		d, err := domain.ParseDifficulty(*req.Difficulty)
+		if err != nil {
+			return f, fmt.Errorf("%w: %q", err, *req.Difficulty)
+		}
+		f.Difficulty = &d
+	}
 	return f, nil
 }
 
