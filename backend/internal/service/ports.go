@@ -19,6 +19,15 @@ type MenuRepository interface {
 	FindByFilter(ctx context.Context, f domain.MenuFilter) ([]domain.Menu, error)
 }
 
+// RecipeSearchGateway はレシピ掲載ページの検索を抽象化する。
+// 実装は internal/gateway にあり、検索API(Brave / Google CSE)と
+// APIキー不要のスタブを差し替えられる。
+type RecipeSearchGateway interface {
+	// Search は献立名で検索し、上位 limit 件のリンクを返す。
+	// 該当が無い場合は空スライスを返し、エラーにはしない（結果0件は障害ではない）。
+	Search(ctx context.Context, menuName string, limit int) ([]domain.RecipeLink, error)
+}
+
 // Randomizer は乱数源を抽象化する。
 // service 自身が乱数を生成すると提案結果が毎回変わりテストが書けないため、
 // 乱数源を外から注入できるようにする。実装は internal/random にある。

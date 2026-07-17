@@ -137,14 +137,16 @@ repository の統合テストが緑。
 - [x] 🔴 テスト: タイトルが空なら拒否
 - [x] 🟢 `domain.RecipeLink` を実装
 
-### PR 3-B: stub gateway `feat/recipe-stub-gateway`
+### PR 3-B: stub gateway `feat/recipe-stub-gateway` ✅
 
 APIキー無しで全機能が動く状態を保つため、実装より先に入れる。
 
-- [ ] 🔧 `RecipeSearchGateway` インターフェースを定義
-- [ ] 🔴 テスト: 決定的に3件返る
-- [ ] 🔴 テスト: 献立名がタイトルに含まれる
-- [ ] 🟢 stub gateway を実装
+- [x] 🔧 `RecipeSearchGateway` インターフェースを定義（`service/ports.go`）
+- [x] 🔴 テスト: 決定的に3件返る（別インスタンス間でも同一）
+- [x] 🔴 テスト: 献立名がタイトルに含まれる
+- [x] 🔴 テスト: `limit` で件数が絞られる（0・負数・3超の境界）
+- [x] 🔴 テスト: 献立名が空なら `ErrEmptyMenuName`
+- [x] 🟢 stub gateway を実装（`internal/gateway`）
 
 ### PR 3-C: 実 gateway の正常系 `feat/recipe-search-gateway`
 
