@@ -134,7 +134,7 @@ type MenuRepository interface {
     FindByID(ctx context.Context, id MenuID) (*Menu, error)
 }
 
-// レシピサイト検索（Brave / Google CSE / スタブを差し替え可能）
+// レシピサイト検索（Brave / スタブを差し替え可能。13.1 参照）
 type RecipeSearchGateway interface {
     Search(ctx context.Context, menuName string, limit int) ([]RecipeLink, error)
 }
@@ -225,8 +225,8 @@ menus >── menu_genres ──────┘   (将来: 1献立に複数ジ�
 
 - UNIQUE (user_id, menu_id)
 
-#### recipe_link_caches（任意・第2段階）
-外部検索APIの消費削減用。TTL 7日。MVPでは省略可。
+#### recipe_link_caches
+外部検索APIの消費削減用。TTL 7日。**MVPに含める**（13.2 で決定）。
 
 | カラム | 型 | 制約 |
 | --- | --- | --- |
@@ -470,7 +470,7 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URL=http://localhost:8080/api/v1/auth/google/callback
 SEARCH_API_KEY=
-SEARCH_API_PROVIDER=brave        # brave | google_cse | stub
+SEARCH_API_PROVIDER=brave        # brave | stub（13.1 で google_cse を廃止）
 FRONTEND_ORIGIN=http://localhost:5173
 ```
 
@@ -593,7 +593,39 @@ Neon は自動スリープするため、コールドスタート時の初回接
 
 | # | 項目 | 判断時期 |
 | --- | --- | --- |
-| 1 | 検索APIの最終選定（Brave Search か Google Custom Search か） | フェーズ3着手時。Gateway抽象化済みのため後から差し替え可能 |
+| ~~1~~ | ~~検索APIの最終選定（Brave Search か Google Custom Search か）~~ | **決定済み（2026-07-17）→ 13.1** |
 | 2 | 献立マスタ120件の具体的な内容 | フェーズ1。ジャンル×難易度が均等になるよう配分する |
-| 3 | recipe_link_caches の導入要否 | フェーズ3完了後、実際のAPI消費量を見て判断する |
+| ~~3~~ | ~~recipe_link_caches の導入要否~~ | **決定済み（2026-07-17）→ 13.2** |
 | 4 | 週間献立の開始曜日（月曜固定か当日起点か） | フェーズ4着手時 |
+
+### 13.1 検索APIは Brave Search API を使う（決定）
+
+**Google Custom Search は選択肢から外れた。** 公式ドキュメントに
+"The Custom Search JSON API is closed to new customers" と明記され、新規申込ができない
+（既存顧客も2027-01-01までに移行が必要）。本プロジェクトは新規のため利用不可。
+
+**Brave Search API を採用する。** 自前の検索インデックスを持ち、Google のスクレイピング
+代行ではないため規約面が安定している。$5.00 / 1,000リクエストの従量課金で、毎月$5の
+クレジット（≒1,000クエリ）が付く。2026-02に無期限の無料枠は廃止され、登録には
+クレジットカードが必要。
+
+コスト面の懸念は小さい。検索語は「{献立名} レシピ」で、献立マスタは120件固定のため
+**検索の種類は最大120通り**。13.2 のキャッシュと併せてAPI消費は生涯約120クエリに収まる。
+
+Exa / Tavily は月1,000件の無料枠がありカード登録も不要だが、レシピサイト探しでの
+好相性が未検証であり、Tavily は2026-02にNebiusによる買収が発表され先行きが不透明。
+Bing Search API は2025-08に終了済み。
+
+環境変数 `SEARCH_API_PROVIDER` は `brave` | `stub` を取る（`google_cse` は廃止）。
+Gateway は抽象化済み（`service.RecipeSearchGateway`）のため、将来の差し替えは可能。
+
+### 13.2 recipe_link_caches を導入する（決定）
+
+4.2 の「任意・第2段階」を**MVPに含める**。当初は「フェーズ3完了後に実際のAPI消費量を
+見て判断」としていたが、13.1 で従量課金が前提になったため前倒しする。
+
+- 献立は120件固定であり、キャッシュすればAPI消費は生涯約120クエリ（≒$0.60）で頭打ちになる
+- 無い場合、検索のたびに外部APIを叩くため消費が利用量に比例する
+- 応答時間の目標（レシピ取得 p95 2s以内、11章）もキャッシュヒット時は数msで満たせる
+
+TTL 7日は 4.2 の記述通りとする。レシピサイトのURLは頻繁には変わらないため。
