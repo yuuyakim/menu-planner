@@ -76,6 +76,9 @@ func TestMain(m *testing.M) {
 
 // newTestPool はテスト用の接続プールを返す。
 // テスト終了時に menus をクリアし、次のテストに影響を残さない。
+//
+// このパッケージのテストは t.Parallel() を使わない。1つのDBを共有しており、
+// 後始末の TRUNCATE が並走中のテストのデータまで消してしまうため。
 func newTestPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
@@ -88,7 +91,11 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		_, err := pool.Exec(context.Background(), "TRUNCATE menus")
+		// CASCADE を付けるのは recipe_link_caches が menus を参照しているため。
+		// 付けないと "cannot truncate a table referenced in a foreign key
+		// constraint" で落ちる。参照側も一緒に消えるのは、どちらもテストの
+		// 後始末として消したい表なので都合が良い。
+		_, err := pool.Exec(context.Background(), "TRUNCATE menus CASCADE")
 		require.NoError(t, err)
 		pool.Close()
 	})

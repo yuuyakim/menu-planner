@@ -70,7 +70,8 @@ func run() error {
 	slog.Info("レシピ検索を設定しました", "provider", os.Getenv("SEARCH_API_PROVIDER"))
 
 	menuRepo := repository.NewMenuRepository(pool)
-	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway)
+	recipeCache := repository.NewRecipeLinkCache(pool)
+	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway, recipeCache)
 	menuHandler := handler.NewMenuHandler(menuSvc)
 
 	e := echo.New()

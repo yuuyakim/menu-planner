@@ -364,7 +364,7 @@ func TestGetMenu_repositoryの障害は存在しないことと区別できる(t
 // newTestService はレシピ検索を使わないテスト用に MenuService を組み立てる。
 // SuggestMenu / GetMenu の検証では gateway を使わないため、定型の fake を挿す。
 func newTestService(repo service.MenuRepository, rand service.Randomizer) *service.MenuService {
-	return service.NewMenuService(repo, rand, newFakeRecipeGateway())
+	return service.NewMenuService(repo, rand, newFakeRecipeGateway(), newFakeRecipeCache())
 }
 
 func TestRecipeLinks_献立名で検索して結果を返す(t *testing.T) {
@@ -377,7 +377,7 @@ func TestRecipeLinks_献立名で検索して結果を返す(t *testing.T) {
 		newRecipeLink("簡単 肉じゃが", "https://cooking.example.net/2"),
 		newRecipeLink("本格 肉じゃが", "https://kitchen.example.org/3"),
 	)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0), gw)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), gw, newFakeRecipeCache())
 
 	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
 
@@ -392,7 +392,7 @@ func TestRecipeLinks_存在しない献立ならgatewayを呼ばない(t *testin
 
 	repo := newFakeMenuRepository(testMenus()...)
 	gw := newFakeRecipeGateway()
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0), gw)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), gw, newFakeRecipeCache())
 
 	_, err := svc.RecipeLinks(context.Background(), domain.NewMenuID())
 
@@ -407,7 +407,7 @@ func TestRecipeLinks_3件未満でも成功する(t *testing.T) {
 	// spec.md 2.3: 検索結果が3件未満の場合は取得できた件数のみを表示する。
 	menus := testMenus()
 	gw := newFakeRecipeGateway(newRecipeLink("肉じゃがの作り方", "https://recipe.example.com/1"))
-	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw)
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw, newFakeRecipeCache())
 
 	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
 
@@ -419,7 +419,7 @@ func TestRecipeLinks_0件でも成功する(t *testing.T) {
 	t.Parallel()
 
 	menus := testMenus()
-	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), newFakeRecipeGateway())
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
 
 	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
 
@@ -433,7 +433,7 @@ func TestRecipeLinks_gatewayの障害はErrRecipeSearchFailedとして返る(t *
 	menus := testMenus()
 	gw := newFakeRecipeGateway()
 	gw.err = service.ErrRecipeSearchFailed
-	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw)
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw, newFakeRecipeCache())
 
 	_, err := svc.RecipeLinks(context.Background(), menus[0].ID)
 
@@ -450,7 +450,7 @@ func TestRecipeLinks_締め切りを過ぎたらErrRecipeSearchFailedになる(t
 	menus := testMenus()
 	gw := newFakeRecipeGateway()
 	gw.block = make(chan struct{}) // 閉じないので gateway は返ってこない
-	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw,
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw, newFakeRecipeCache(),
 		service.WithRecipeBudget(20*time.Millisecond))
 
 	_, err := svc.RecipeLinks(context.Background(), menus[0].ID)
@@ -467,7 +467,7 @@ func TestRecipeLinks_呼び出し側の中断はそのまま返す(t *testing.T)
 	menus := testMenus()
 	gw := newFakeRecipeGateway()
 	gw.block = make(chan struct{})
-	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw)
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw, newFakeRecipeCache())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go cancel()
@@ -484,7 +484,213 @@ func TestRecipeLinks_既定の締め切りは5秒(t *testing.T) {
 
 	// gateway 単体の最悪は 3s × 3回 + バックオフ ≒ 9.6秒。画面がそれだけ回ると
 	// 体験が悪いため、レシピ取得全体に上限を課す。
-	svc := service.NewMenuService(newFakeMenuRepository(), randomtest.NewFixed(0), newFakeRecipeGateway())
+	svc := service.NewMenuService(newFakeMenuRepository(), randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
 
 	assert.Equal(t, 5*time.Second, svc.RecipeBudget())
+}
+
+// 2026-07-17 12:00:00 JST 相当。キャッシュの鮮度判定を固定するための基準時刻。
+var testNow = time.Date(2026, 7, 17, 3, 0, 0, 0, time.UTC)
+
+// newCachingService は時刻を固定した MenuService を組み立てる。
+func newCachingService(repo service.MenuRepository, gw service.RecipeSearchGateway, cache service.RecipeLinkCache) *service.MenuService {
+	return service.NewMenuService(repo, randomtest.NewFixed(0), gw, cache,
+		service.WithNow(func() time.Time { return testNow }))
+}
+
+func TestRecipeLinks_初回はgatewayを呼びキャッシュに保存する(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	gw := newFakeRecipeGateway(newRecipeLink("肉じゃがの作り方", "https://recipe.example.com/1"))
+	cache := newFakeRecipeCache()
+	svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, 1, gw.calls)
+	assert.Equal(t, 1, cache.saveCalls, "取得した結果を保存すること")
+	assert.Equal(t, testNow, cache.lastSaved.FetchedAt, "保存時刻は service の時計に従うこと")
+}
+
+func TestRecipeLinks_2回目はgatewayを呼ばない(t *testing.T) {
+	t.Parallel()
+
+	// ここがキャッシュの目的。献立120件 × 1回に消費を抑える（spec.md 13.2）。
+	menus := testMenus()
+	gw := newFakeRecipeGateway(newRecipeLink("肉じゃがの作り方", "https://recipe.example.com/1"))
+	cache := newFakeRecipeCache()
+	svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+	first, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+	require.NoError(t, err)
+	second, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, first, second, "同じ結果が返ること")
+	assert.Equal(t, 1, gw.calls, "2回目は検索APIを叩かないこと")
+}
+
+func TestRecipeLinks_献立ごとに別のキャッシュになる(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	gw := newFakeRecipeGateway(newRecipeLink("レシピ", "https://recipe.example.com/1"))
+	cache := newFakeRecipeCache()
+	svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+	_, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+	require.NoError(t, err)
+	_, err = svc.RecipeLinks(context.Background(), menus[1].ID)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, gw.calls, "別の献立なら別途取得すること")
+}
+
+func TestRecipeLinks_TTL内はキャッシュを使う(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]time.Duration{
+		"直後":      0,
+		"1日前":     24 * time.Hour,
+		"7日ちょうど前": 7 * 24 * time.Hour, // 境界値: ちょうどはヒット
+	}
+	for name, age := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			menus := testMenus()
+			gw := newFakeRecipeGateway()
+			cache := newFakeRecipeCache()
+			cache.put(menus[0].ID, testNow.Add(-age), newRecipeLink("キャッシュ", "https://cached.example.com/1"))
+			svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+			got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			assert.Equal(t, "キャッシュ", got[0].Title)
+			assert.Equal(t, 0, gw.calls, "検索APIを叩かないこと")
+		})
+	}
+}
+
+func TestRecipeLinks_TTLを過ぎたら取り直す(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]time.Duration{
+		"7日と1秒前": 7*24*time.Hour + time.Second, // 境界値: 1秒過ぎたら失効
+		"30日前":   30 * 24 * time.Hour,
+	}
+	for name, age := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			menus := testMenus()
+			gw := newFakeRecipeGateway(newRecipeLink("新しい", "https://fresh.example.com/1"))
+			cache := newFakeRecipeCache()
+			cache.put(menus[0].ID, testNow.Add(-age), newRecipeLink("古い", "https://stale.example.com/1"))
+			svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+			got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			assert.Equal(t, "新しい", got[0].Title)
+			assert.Equal(t, 1, gw.calls)
+			assert.Equal(t, testNow, cache.lastSaved.FetchedAt, "取り直した時刻で上書きすること")
+		})
+	}
+}
+
+func TestRecipeLinks_キャッシュの読み出しが壊れてもgatewayで応える(t *testing.T) {
+	t.Parallel()
+
+	// キャッシュは高速化の手段であって、壊れたらリクエストごと失敗させる筋合いはない。
+	menus := testMenus()
+	gw := newFakeRecipeGateway(newRecipeLink("新しい", "https://fresh.example.com/1"))
+	cache := newFakeRecipeCache()
+	cache.findErr = errors.New("キャッシュの読み出しに失敗しました")
+	svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, 1, gw.calls, "検索APIにフォールバックすること")
+}
+
+func TestRecipeLinks_キャッシュの書き込みが失敗しても結果は返す(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	gw := newFakeRecipeGateway(newRecipeLink("新しい", "https://fresh.example.com/1"))
+	cache := newFakeRecipeCache()
+	cache.saveErr = errors.New("キャッシュの書き込みに失敗しました")
+	svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.NoError(t, err, "保存の失敗で検索結果を捨てないこと")
+	assert.Len(t, got, 1)
+}
+
+func TestRecipeLinks_0件でもキャッシュする(t *testing.T) {
+	t.Parallel()
+
+	// 0件も「探した結果」。保存しないと、該当の無い献立で毎回APIを消費する。
+	menus := testMenus()
+	gw := newFakeRecipeGateway()
+	cache := newFakeRecipeCache()
+	svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+	_, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+	require.NoError(t, err)
+	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+	require.NoError(t, err)
+
+	assert.Empty(t, got)
+	assert.Equal(t, 1, cache.saveCalls, "0件でも保存すること")
+	assert.Equal(t, 1, gw.calls, "2回目は叩かないこと")
+}
+
+func TestRecipeLinks_gateway障害のときはキャッシュを書かない(t *testing.T) {
+	t.Parallel()
+
+	// 失敗を保存すると、TTLが切れるまで失敗を返し続けることになる。
+	menus := testMenus()
+	gw := newFakeRecipeGateway()
+	gw.err = service.ErrRecipeSearchFailed
+	cache := newFakeRecipeCache()
+	svc := newCachingService(newFakeMenuRepository(menus...), gw, cache)
+
+	_, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.Error(t, err)
+	assert.Equal(t, 0, cache.saveCalls)
+}
+
+func TestRecipeLinks_存在しない献立ならキャッシュも見ない(t *testing.T) {
+	t.Parallel()
+
+	gw := newFakeRecipeGateway()
+	cache := newFakeRecipeCache()
+	svc := newCachingService(newFakeMenuRepository(testMenus()...), gw, cache)
+
+	_, err := svc.RecipeLinks(context.Background(), domain.NewMenuID())
+
+	require.Error(t, err)
+	assert.Equal(t, 0, cache.findCalls)
+	assert.Equal(t, 0, gw.calls)
+}
+
+func TestRecipeLinks_既定のTTLは7日(t *testing.T) {
+	t.Parallel()
+
+	svc := service.NewMenuService(newFakeMenuRepository(), randomtest.NewFixed(0),
+		newFakeRecipeGateway(), newFakeRecipeCache())
+
+	assert.Equal(t, 7*24*time.Hour, svc.RecipeCacheTTL())
 }

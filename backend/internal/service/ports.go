@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
@@ -35,6 +36,32 @@ type RecipeSearchGateway interface {
 	// Search は献立名で検索し、上位 limit 件のリンクを返す。
 	// 該当が無い場合は空スライスを返し、エラーにはしない（結果0件は障害ではない）。
 	Search(ctx context.Context, menuName string, limit int) ([]domain.RecipeLink, error)
+}
+
+// ErrRecipeCacheMiss はキャッシュに該当が無いことを表す。
+// 障害ではなく通常の結果なので、呼び出し側は検索APIに問い合わせればよい。
+var ErrRecipeCacheMiss = errors.New("レシピのキャッシュがありません")
+
+// CachedRecipeLinks はキャッシュされたレシピリンクと、それを取得した時刻。
+// 鮮度の判定は保存側ではなく service が行うため、時刻をそのまま返す。
+type CachedRecipeLinks struct {
+	Links     []domain.RecipeLink
+	FetchedAt time.Time
+}
+
+// RecipeLinkCache はレシピリンクのキャッシュを抽象化する。
+// 実装は internal/repository にある。
+//
+// キャッシュのキーが献立IDであるため、この抽象は献立IDを知っている層
+// （service）に置く。RecipeSearchGateway は献立名しか受け取らないため、
+// gateway をキャッシュで包む形にはできない。
+type RecipeLinkCache interface {
+	// Find は献立IDに対応するキャッシュを返す。
+	// 該当が無い場合は ErrRecipeCacheMiss を返す。
+	Find(ctx context.Context, id domain.MenuID) (CachedRecipeLinks, error)
+
+	// Save はキャッシュを保存する。既存があれば上書きする。
+	Save(ctx context.Context, id domain.MenuID, links []domain.RecipeLink, fetchedAt time.Time) error
 }
 
 // Randomizer は乱数源を抽象化する。
