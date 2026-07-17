@@ -38,6 +38,22 @@ type fakeMenuService struct {
 	// lastID は最後に GetMenu に渡されたID。
 	lastID   domain.MenuID
 	getCalls int
+
+	// recipes / recipeErr は RecipeLinks の返り値。
+	recipes   []domain.RecipeLink
+	recipeErr error
+	// lastRecipeID は最後に RecipeLinks に渡されたID。
+	lastRecipeID domain.MenuID
+	recipeCalls  int
+}
+
+func (s *fakeMenuService) RecipeLinks(_ context.Context, id domain.MenuID) ([]domain.RecipeLink, error) {
+	s.recipeCalls++
+	s.lastRecipeID = id
+	if s.recipeErr != nil {
+		return nil, s.recipeErr
+	}
+	return s.recipes, nil
 }
 
 func (s *fakeMenuService) SuggestMenu(_ context.Context, f domain.MenuFilter) (*domain.Menu, error) {
@@ -360,4 +376,148 @@ func keysOf(m map[string]any) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// doGetRecipes は GET /api/v1/menus/:id/recipes をルーティング経由で叩く。
+func doGetRecipes(t *testing.T, s *fakeMenuService, id string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewMenuHandler(s).RegisterRoutes(e)
+
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/menus/"+id+"/recipes", nil))
+	return rec
+}
+
+func testRecipeLinks(n int) []domain.RecipeLink {
+	all := []struct{ title, url string }{
+		{"親子丼の作り方", "https://recipe.example.com/1"},
+		{"簡単 親子丼", "https://cooking.example.net/2"},
+		{"本格 親子丼", "https://kitchen.example.org/3"},
+	}
+	links := make([]domain.RecipeLink, 0, n)
+	for _, r := range all[:n] {
+		link, err := domain.NewRecipeLink(r.title, r.url, r.title+"の説明")
+		if err != nil {
+			panic(err)
+		}
+		links = append(links, link)
+	}
+	return links
+}
+
+func TestRecipes_200と3件(t *testing.T) {
+	t.Parallel()
+
+	id := domain.NewMenuID()
+	s := &fakeMenuService{recipes: testRecipeLinks(3)}
+	rec := doGetRecipes(t, s, id.String())
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), echo.MIMEApplicationJSON)
+
+	var body struct {
+		Recipes []map[string]any `json:"recipes"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Recipes, 3)
+
+	assert.Equal(t, "親子丼の作り方", body.Recipes[0]["title"])
+	assert.Equal(t, "https://recipe.example.com/1", body.Recipes[0]["url"])
+	assert.Equal(t, "recipe.example.com", body.Recipes[0]["domain"])
+	assert.Equal(t, "親子丼の作り方の説明", body.Recipes[0]["snippet"])
+	assert.Equal(t, id, s.lastRecipeID, "パスのIDが service に渡ること")
+}
+
+func TestRecipes_レスポンスの項目はspecの通り(t *testing.T) {
+	t.Parallel()
+
+	// spec.md 5.1 の例: title / url / domain / snippet
+	rec := doGetRecipes(t, &fakeMenuService{recipes: testRecipeLinks(1)}, domain.NewMenuID().String())
+
+	var body struct {
+		Recipes []map[string]any `json:"recipes"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.Recipes, 1)
+
+	assert.ElementsMatch(t, []string{"title", "url", "domain", "snippet"}, keysOf(body.Recipes[0]))
+}
+
+func TestRecipes_3件未満でも200(t *testing.T) {
+	t.Parallel()
+
+	// spec.md 2.3: 取得できた件数のみを表示する。
+	for _, n := range []int{1, 2} {
+		t.Run(fmt.Sprintf("%d件", n), func(t *testing.T) {
+			t.Parallel()
+
+			rec := doGetRecipes(t, &fakeMenuService{recipes: testRecipeLinks(n)}, domain.NewMenuID().String())
+
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var body struct {
+				Recipes []map[string]any `json:"recipes"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			assert.Len(t, body.Recipes, n)
+		})
+	}
+}
+
+func TestRecipes_0件でも200で空配列(t *testing.T) {
+	t.Parallel()
+
+	// null ではなく [] を返す。フロントが length を見るだけで扱えるようにする。
+	rec := doGetRecipes(t, &fakeMenuService{recipes: []domain.RecipeLink{}}, domain.NewMenuID().String())
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.JSONEq(t, `{"recipes":[]}`, rec.Body.String())
+}
+
+func TestRecipes_存在しない献立で404(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{recipeErr: fmt.Errorf("献立の取得に失敗しました: %w", repository.ErrMenuNotFound)}
+	rec := doGetRecipes(t, s, domain.NewMenuID().String())
+
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), handler.ProblemContentType)
+}
+
+func TestRecipes_gateway障害で502(t *testing.T) {
+	t.Parallel()
+
+	// 外部APIの不調は自分の障害ではない。500ではなく502で「上流が悪い」と示す。
+	s := &fakeMenuService{recipeErr: fmt.Errorf("レシピの取得に失敗しました: %w", service.ErrRecipeSearchFailed)}
+	rec := doGetRecipes(t, s, domain.NewMenuID().String())
+
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	assert.Contains(t, rec.Header().Get(echo.HeaderContentType), handler.ProblemContentType)
+
+	body := decodeProblem(t, rec)
+	assert.InDelta(t, float64(http.StatusBadGateway), body["status"], 0)
+	assert.NotEmpty(t, body["title"])
+}
+
+func TestRecipes_不正なUUIDで400(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{recipes: testRecipeLinks(3)}
+	rec := doGetRecipes(t, s, "not-a-uuid")
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, 0, s.recipeCalls, "IDが不正なら service を呼ばないこと")
+}
+
+func TestRecipes_未知のエラーは500で詳細を漏らさない(t *testing.T) {
+	t.Parallel()
+
+	secret := errors.New("pq: password authentication failed for user \"app\"")
+	rec := doGetRecipes(t, &fakeMenuService{recipeErr: secret}, domain.NewMenuID().String())
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "password")
 }

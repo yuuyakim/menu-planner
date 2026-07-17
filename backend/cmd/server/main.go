@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/db"
+	"github.com/yuuyakim/menu-planner/backend/internal/gateway"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
 	"github.com/yuuyakim/menu-planner/backend/internal/random"
 	"github.com/yuuyakim/menu-planner/backend/internal/repository"
@@ -57,8 +58,19 @@ func run() error {
 	defer pool.Close()
 	slog.Info("DBに接続しました")
 
+	// 検索APIの設定不備は起動時に落とす。プロバイダ未設定のまま起動できると、
+	// 利用者にダミーのレシピを配り続けることになり誰も気付けない。
+	recipeGateway, err := gateway.New(gateway.Config{
+		Provider: os.Getenv("SEARCH_API_PROVIDER"),
+		APIKey:   os.Getenv("SEARCH_API_KEY"),
+	})
+	if err != nil {
+		return fmt.Errorf("レシピ検索の設定に失敗しました: %w", err)
+	}
+	slog.Info("レシピ検索を設定しました", "provider", os.Getenv("SEARCH_API_PROVIDER"))
+
 	menuRepo := repository.NewMenuRepository(pool)
-	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto())
+	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway)
 	menuHandler := handler.NewMenuHandler(menuSvc)
 
 	e := echo.New()

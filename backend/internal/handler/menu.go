@@ -24,10 +24,16 @@ type MenuGetter interface {
 	GetMenu(ctx context.Context, id domain.MenuID) (*domain.Menu, error)
 }
 
+// MenuRecipeLister は献立のレシピ取得を抽象化する。実装は service.MenuService。
+type MenuRecipeLister interface {
+	RecipeLinks(ctx context.Context, id domain.MenuID) ([]domain.RecipeLink, error)
+}
+
 // MenuUseCase は献立APIが必要とする操作をまとめたもの。
 type MenuUseCase interface {
 	MenuSuggester
 	MenuGetter
+	MenuRecipeLister
 }
 
 // MenuHandler は献立APIの受け口。
@@ -48,6 +54,7 @@ func (h *MenuHandler) RegisterRoutes(e *echo.Echo) {
 	// パラメータより優先して照合するため、:id に飲み込まれることはない。
 	g.GET("/menus/suggest", h.Suggest)
 	g.GET("/menus/:id", h.Get)
+	g.GET("/menus/:id/recipes", h.Recipes)
 }
 
 // menuDTO は献立のAPI表現。
@@ -127,6 +134,47 @@ func parseMenuFilter(c echo.Context) (domain.MenuFilter, error) {
 	}
 
 	return f, nil
+}
+
+// recipeDTO はレシピリンクのAPI表現（spec.md 5.1）。
+type recipeDTO struct {
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Domain  string `json:"domain"`
+	Snippet string `json:"snippet"`
+}
+
+// recipesResponse は GET /menus/:id/recipes のレスポンス。
+type recipesResponse struct {
+	Recipes []recipeDTO `json:"recipes"`
+}
+
+// Recipes は献立のレシピ掲載ページを返す。
+//
+//	GET /api/v1/menus/:id/recipes
+func (h *MenuHandler) Recipes(c echo.Context) error {
+	id, err := domain.ParseMenuID(c.Param("id"))
+	if err != nil {
+		return err
+	}
+
+	links, err := h.svc.RecipeLinks(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+
+	// 0件でも null ではなく [] を返す。フロントが length を見るだけで
+	// 扱えるようにするため。
+	recipes := make([]recipeDTO, 0, len(links))
+	for _, l := range links {
+		recipes = append(recipes, recipeDTO{
+			Title:   l.Title,
+			URL:     l.URL,
+			Domain:  l.Domain,
+			Snippet: l.Snippet,
+		})
+	}
+	return c.JSON(http.StatusOK, recipesResponse{Recipes: recipes})
 }
 
 func toMenuDTO(m domain.Menu) menuDTO {
