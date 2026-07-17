@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
@@ -11,6 +13,12 @@ import (
 // fakeMenuRepository はメモリ上の献立マスタ。実装が service.MenuRepository を
 // 満たすことをコンパイル時に保証する。
 var _ service.MenuRepository = (*fakeMenuRepository)(nil)
+
+// errFakeMenuNotFound は fake における「献立が存在しない」を表す。
+// 本物の repository.ErrMenuNotFound の代役。service は repository を知らない
+// （依存関係逆転）ため、実物の番兵ではなくテスト固有の番兵で代用し、
+// service がエラーの同一性を保ったまま返すことだけを検証する。
+var errFakeMenuNotFound = errors.New("献立が見つかりません(fake)")
 
 // fakeMenuRepository は Postgres 実装の代わりにメモリ上で絞り込みを行う。
 // 本物と同じ「条件に合う献立を返す / 該当が無ければ空スライス」という契約を守る。
@@ -22,6 +30,10 @@ type fakeMenuRepository struct {
 	lastFilter domain.MenuFilter
 	// filterCalls は FindByFilter が呼ばれた回数。
 	filterCalls int
+	// lastID は最後に FindByID に渡されたID。
+	lastID domain.MenuID
+	// idCalls は FindByID が呼ばれた回数。
+	idCalls int
 }
 
 func newFakeMenuRepository(menus ...domain.Menu) *fakeMenuRepository {
@@ -29,6 +41,8 @@ func newFakeMenuRepository(menus ...domain.Menu) *fakeMenuRepository {
 }
 
 func (r *fakeMenuRepository) FindByID(_ context.Context, id domain.MenuID) (*domain.Menu, error) {
+	r.idCalls++
+	r.lastID = id
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -37,7 +51,8 @@ func (r *fakeMenuRepository) FindByID(_ context.Context, id domain.MenuID) (*dom
 			return &m, nil
 		}
 	}
-	return nil, domain.ErrInvalidMenuID
+	// 本物の repository と同じく、存在しないことを示す番兵を包んで返す。
+	return nil, fmt.Errorf("%w: %s", errFakeMenuNotFound, id)
 }
 
 func (r *fakeMenuRepository) FindByFilter(_ context.Context, f domain.MenuFilter) ([]domain.Menu, error) {

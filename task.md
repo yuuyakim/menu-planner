@@ -106,12 +106,14 @@ repository の統合テストが緑。
 - [x] 🟢 `MenuHandler.Suggest` を実装
 - [x] 🔧 `/api/v1` にルーティング（`MenuHandler.RegisterRoutes`。main.go への結線は PR 2-H）
 
-### PR 2-G: `GET /menus/:id` `feat/api-get-menu`
+### PR 2-G: `GET /menus/:id` `feat/api-get-menu` ✅
 
-- [ ] 🔴 テスト: 200 と献立の詳細
-- [ ] 🔴 テスト: 存在しないIDで 404
-- [ ] 🔴 テスト: 不正なUUIDで 400
-- [ ] 🟢 `MenuHandler.Get` を実装
+- [x] 🔴 テスト: 200 と献立の詳細
+- [x] 🔴 テスト: 存在しないIDで 404
+- [x] 🔴 テスト: 不正なUUIDで 400（ゼロ値UUIDを含む）
+- [x] 🔴 テスト: `/menus/suggest` が `:id` に飲み込まれない
+- [x] 🟢 `MenuHandler.Get` を実装
+- [x] 🟢 `service.GetMenu` を実装（repository の `FindByID` は PR #2 で実装済み）
 
 ### PR 2-H: 実機結線 `feat/wire-menu-api`
 

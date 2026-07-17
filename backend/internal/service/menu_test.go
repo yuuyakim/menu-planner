@@ -313,3 +313,49 @@ func TestSuggestMenu_返る献立はマスタの内容をそのまま持つ(t *t
 	assert.Equal(t, "ハンバーグの説明", got.Description)
 	assert.False(t, got.ID.IsZero())
 }
+
+func TestGetMenu_IDで献立が返る(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	repo := newFakeMenuRepository(menus...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+	want := menus[2] // ハンバーグ
+	got, err := svc.GetMenu(context.Background(), want.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, want, *got, "マスタの内容がそのまま返ること")
+	assert.Equal(t, want.ID, repo.lastID, "IDがそのまま repository に渡ること")
+}
+
+func TestGetMenu_存在しないIDはrepositoryのエラーを保ったまま返る(t *testing.T) {
+	t.Parallel()
+
+	// 呼び出し側はこのエラーを 404 に変換する。ラップしても errors.Is で
+	// 辿れなくなると 500 に落ちてしまうため、同一性が保たれることを固定する。
+	repo := newFakeMenuRepository(testMenus()...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+	_, err := svc.GetMenu(context.Background(), domain.NewMenuID())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errFakeMenuNotFound)
+}
+
+func TestGetMenu_repositoryの障害は存在しないことと区別できる(t *testing.T) {
+	t.Parallel()
+
+	// 「存在しない(404)」と「DB障害(500)」の出し分けが崩れないようにする。
+	dbErr := errors.New("DBへの接続に失敗しました")
+	repo := newFakeMenuRepository(testMenus()...)
+	repo.err = dbErr
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+
+	_, err := svc.GetMenu(context.Background(), domain.NewMenuID())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, dbErr)
+	assert.NotErrorIs(t, err, errFakeMenuNotFound, "DB障害を存在しないと誤認しないこと")
+	assert.NotEqual(t, dbErr.Error(), err.Error(), "文脈が付与されていること")
+}

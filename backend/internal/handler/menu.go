@@ -19,21 +19,35 @@ type MenuSuggester interface {
 	SuggestMenu(ctx context.Context, f domain.MenuFilter) (*domain.Menu, error)
 }
 
+// MenuGetter は献立の取得を抽象化する。実装は service.MenuService。
+type MenuGetter interface {
+	GetMenu(ctx context.Context, id domain.MenuID) (*domain.Menu, error)
+}
+
+// MenuUseCase は献立APIが必要とする操作をまとめたもの。
+type MenuUseCase interface {
+	MenuSuggester
+	MenuGetter
+}
+
 // MenuHandler は献立APIの受け口。
 type MenuHandler struct {
-	suggester MenuSuggester
+	svc MenuUseCase
 }
 
 // NewMenuHandler は MenuHandler を生成する。
-func NewMenuHandler(s MenuSuggester) *MenuHandler {
-	return &MenuHandler{suggester: s}
+func NewMenuHandler(s MenuUseCase) *MenuHandler {
+	return &MenuHandler{svc: s}
 }
 
 // RegisterRoutes は献立APIのルーティングを登録する。
 // パスの定義をハンドラと同じ場所に置き、テストで実際のパスごと検証できるようにする。
 func (h *MenuHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
+	// /menus/suggest は /menus/:id と同じ階層にあるが、echo は静的なパスを
+	// パラメータより優先して照合するため、:id に飲み込まれることはない。
 	g.GET("/menus/suggest", h.Suggest)
+	g.GET("/menus/:id", h.Get)
 }
 
 // menuDTO は献立のAPI表現。
@@ -47,9 +61,10 @@ type menuDTO struct {
 	Description string `json:"description"`
 }
 
-// suggestResponse は GET /menus/suggest のレスポンス。
+// menuResponse は献立1件を返すエンドポイントの共通レスポンス。
 // 献立を menu キーで包むのは、後から項目を足してもレスポンスの形が壊れないようにするため。
-type suggestResponse struct {
+// suggest と :id で同じ型を使い、片方だけ形が変わることを防ぐ。
+type menuResponse struct {
 	Menu menuDTO `json:"menu"`
 }
 
@@ -62,12 +77,30 @@ func (h *MenuHandler) Suggest(c echo.Context) error {
 		return err
 	}
 
-	menu, err := h.suggester.SuggestMenu(c.Request().Context(), f)
+	menu, err := h.svc.SuggestMenu(c.Request().Context(), f)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, suggestResponse{Menu: toMenuDTO(*menu)})
+	return c.JSON(http.StatusOK, menuResponse{Menu: toMenuDTO(*menu)})
+}
+
+// Get はIDで献立の詳細を返す。
+//
+//	GET /api/v1/menus/:id
+func (h *MenuHandler) Get(c echo.Context) error {
+	// 不正なIDをDBに投げても0件が返るだけで理由が分からないため、先に弾く。
+	id, err := domain.ParseMenuID(c.Param("id"))
+	if err != nil {
+		return err
+	}
+
+	menu, err := h.svc.GetMenu(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, menuResponse{Menu: toMenuDTO(*menu)})
 }
 
 // parseMenuFilter はクエリ文字列を絞り込み条件に変換する。
