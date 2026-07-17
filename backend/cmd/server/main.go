@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,8 +16,18 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/db"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
+	"github.com/yuuyakim/menu-planner/backend/internal/random"
+	"github.com/yuuyakim/menu-planner/backend/internal/repository"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
+
+// dbConnectTimeout は起動時のDB接続に費やしてよい上限。
+// db.NewPool はコールドスタート（Neonのスリープ復帰など）を見込んで指数バックオフで
+// リトライするため、その分の猶予を持たせる。ホスト名が解決できない場合などは
+// リトライが尽きる前にこの上限が先に効いて起動を打ち切る。
+const dbConnectTimeout = 30 * time.Second
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -29,6 +40,27 @@ func main() {
 }
 
 func run() error {
+	// DBに繋がらないまま起動すると、献立APIが全て500を返すサーバが
+	// ヘルスチェックだけ通る状態になる。起動時に失敗させて気付けるようにする。
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		return errors.New("DATABASE_URL が設定されていません")
+	}
+
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), dbConnectTimeout)
+	defer dbCancel()
+
+	pool, err := db.NewPool(dbCtx, db.Config{DSN: dsn})
+	if err != nil {
+		return fmt.Errorf("DBへの接続に失敗しました: %w", err)
+	}
+	defer pool.Close()
+	slog.Info("DBに接続しました")
+
+	menuRepo := repository.NewMenuRepository(pool)
+	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto())
+	menuHandler := handler.NewMenuHandler(menuSvc)
+
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -45,6 +77,7 @@ func run() error {
 
 	health := handler.NewHealthHandler()
 	e.GET("/health", health.Health)
+	menuHandler.RegisterRoutes(e)
 
 	addr := ":" + env("PORT", "8080")
 
