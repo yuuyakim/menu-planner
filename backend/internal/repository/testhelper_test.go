@@ -2,6 +2,7 @@ package repository_test
 
 import (
 	"context"
+	"log"
 	"testing"
 	"time"
 
@@ -17,11 +18,32 @@ import (
 // sharedDSN はテスト用Postgresの接続文字列。
 // コンテナの起動は数秒かかるためパッケージ内で1度だけ行い、
 // 各テストはトランザクションではなくテーブルのクリアで独立性を保つ。
+// Docker が使えない環境では空のままになり、各テストは newTestPool でスキップされる。
 var sharedDSN string
+
+// dockerAvailable は Docker が利用できるかを返す。
+//
+// testcontainers.SkipIfProviderIsNotHealthy は同じ判定をするが、内部で t.Skip
+// （＝runtime.Goexit）を呼ぶため TestMain からは使えない。TestMain は
+// テスト本体の goroutine ではないので、Goexit すると走る goroutine が無くなり
+// スキップではなく deadlock でクラッシュする。判定だけを自前で行う。
+func dockerAvailable() error {
+	provider, err := testcontainers.ProviderDocker.GetProvider()
+	if err != nil {
+		return err
+	}
+	return provider.Health(context.Background())
+}
 
 // TestMain はパッケージ内の全テストで共有するPostgresを起動する。
 func TestMain(m *testing.M) {
-	testcontainers.SkipIfProviderIsNotHealthy(&testing.T{})
+	// Docker が無い環境ではコンテナを起動せずテストへ進む。sharedDSN が空のまま
+	// なので、DBを要するテストは newTestPool がスキップする。
+	if err := dockerAvailable(); err != nil {
+		log.Printf("Dockerが利用できないため、DBを要するテストをスキップします: %v", err)
+		m.Run()
+		return
+	}
 
 	ctx := context.Background()
 	container, err := tcpostgres.Run(ctx,
