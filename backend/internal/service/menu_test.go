@@ -757,23 +757,31 @@ func TestSuggestWeekly_dayは起点当日から始まる(t *testing.T) {
 func TestSuggestWeekly_乱数列に従って献立が選ばれる(t *testing.T) {
 	t.Parallel()
 
+	// 添字は「残りの候補」に対するもの。重複回避で候補が 8→7→…→2 と縮むため、
+	// 毎日その時点の末尾を引かせる（7,6,5,4,3,2,1）とマスタの逆順になる。
 	menus := weeklyMenus()
-	// 候補8件から順に添字 0..6 を引かせる。
-	svc := newWeeklyService(menus, 0, 1, 2, 3, 4, 5, 6)
+	svc := newWeeklyService(menus, 7, 6, 5, 4, 3, 2, 1)
 
 	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
 	for i, d := range got {
-		assert.Equal(t, menus[i].Name, d.Menu.Name, "%d日目", i+1)
+		want := menus[len(menus)-1-i].Name
+		assert.Equal(t, want, d.Menu.Name, "%d日目", i+1)
 	}
 }
 
 func TestSuggestWeekly_条件がrepositoryに渡る(t *testing.T) {
 	t.Parallel()
 
-	repo := newFakeMenuRepository(weeklyMenus()...)
+	// 重複回避が入ったため、7日分を埋めるには候補が7件以上要る。
+	// 条件の伝播を見るテストなので、絞った結果が7件になるマスタを用意する。
+	menus := make([]domain.Menu, 0, 7)
+	for _, name := range []string{"肉じゃが", "茶碗蒸し", "天ぷら", "刺身", "焼き魚", "うどん", "そば"} {
+		menus = append(menus, newMenu(name, domain.GenreJapanese, domain.DifficultyEasy))
+	}
+	repo := newFakeMenuRepository(menus...)
 	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
 
 	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
@@ -865,19 +873,84 @@ func TestSuggestWeekly_乱数源のエラーは該当なしと区別できる(t 
 	assert.NotErrorIs(t, err, service.ErrNoMenuFound)
 }
 
-func TestSuggestWeekly_骨格の段階では重複を許す(t *testing.T) {
+func TestSuggestWeekly_同一献立が週内に2度出現しない(t *testing.T) {
 	t.Parallel()
 
-	// 重複回避は 4-B で入れる。この段階では候補1件でも7日分を返せることを
-	// 固定しておき、4-B での挙動の変化が差分として見えるようにする。
-	menus := []domain.Menu{newMenu("肉じゃが", domain.GenreJapanese, domain.DifficultyEasy)}
+	// 乱数源は常に先頭を返す。重複回避が無ければ7日とも同じ献立になる。
+	svc := newWeeklyService(weeklyMenus(), 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+
+	seen := map[domain.MenuID]string{}
+	for _, d := range got {
+		if prev, dup := seen[d.Menu.ID]; dup {
+			t.Fatalf("%d日目の %q が %q と重複している", d.Day, d.Menu.Name, prev)
+		}
+		seen[d.Menu.ID] = d.Menu.Name
+	}
+}
+
+func TestSuggestWeekly_候補がちょうど7件なら7件とも異なる(t *testing.T) {
+	t.Parallel()
+
+	// 境界値。候補と日数が同じとき、1件でも重複すると7日目が埋まらない。
+	menus := weeklyMenus()[:7]
 	svc := newWeeklyService(menus, 0)
 
 	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
 
 	require.NoError(t, err)
 	require.Len(t, got, 7)
+
+	names := make([]string, 0, 7)
 	for _, d := range got {
-		assert.Equal(t, "肉じゃが", d.Menu.Name)
+		names = append(names, d.Menu.Name)
+	}
+	want := make([]string, 0, 7)
+	for _, m := range menus {
+		want = append(want, m.Name)
+	}
+	assert.ElementsMatch(t, want, names, "候補が全て1度ずつ使われること")
+}
+
+func TestSuggestWeekly_選ばれた献立は以降の候補から外れる(t *testing.T) {
+	t.Parallel()
+
+	// 乱数源が常に 0 を返すなら、候補の先頭から順に消費される。
+	menus := weeklyMenus()[:7]
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	for i, d := range got {
+		assert.Equal(t, menus[i].Name, d.Menu.Name, "%d日目", i+1)
+	}
+}
+
+func TestSuggestWeekly_候補が7件未満なら現時点ではErrNoMenuFound(t *testing.T) {
+	t.Parallel()
+
+	// 4-A では重複を許して7日分を返していたが、重複回避を入れたことで
+	// 候補が足りないと埋められなくなった。
+	//
+	// これは 4-D（候補枯渇時の緩和）で解消する。それまでの中間状態として
+	// ここに固定しておく。週間献立のAPIは 4-F まで公開されないため、
+	// この状態が利用者に見えることはない。
+	tests := map[string]int{"1件": 1, "6件": 6}
+	for name, n := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := newWeeklyService(weeklyMenus()[:n], 0)
+
+			_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+			assert.ErrorIs(t, err, service.ErrNoMenuFound)
+		})
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
@@ -110,8 +111,9 @@ func (s *MenuService) SuggestMenu(ctx context.Context, f domain.MenuFilter) (*do
 // SuggestWeekly は7日分の献立を提案する（spec.md 2.2）。
 // 起点は呼び出した日で、返る Day は起点からの通し番号 1..7（spec.md 13.3）。
 //
-// 現時点では重複回避を行わない。同一献立の回避は 4-B、同ジャンルの連続回避は
-// 4-C、候補が足りない場合の緩和は 4-D で順に足す。
+// 同一献立は週内に2度出現しない。同ジャンルの連続回避は 4-C、候補が足りない
+// 場合の緩和は 4-D で順に足す。現時点では候補が7件に満たないと ErrNoMenuFound
+// になる。
 func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter) ([]domain.DayMenu, error) {
 	if err := f.Validate(); err != nil {
 		return nil, err
@@ -123,9 +125,12 @@ func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter) ([
 		return nil, fmt.Errorf("献立の検索に失敗しました: %w", err)
 	}
 
+	// 選んだ献立を候補から取り除いていくため、呼び出し元の値を壊さないよう複製する。
+	remaining := slices.Clone(candidates)
+
 	week := make([]domain.DayMenu, 0, domain.WeekLength)
 	for day := 1; day <= domain.WeekLength; day++ {
-		menu, err := Pick(s.rand, candidates)
+		menu, err := Pick(s.rand, remaining)
 		switch {
 		case errors.Is(err, ErrNoCandidates):
 			// 候補が無いのは障害ではなく「条件に合う献立が無い」という結果。
@@ -134,6 +139,12 @@ func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter) ([
 			return nil, fmt.Errorf("%d日目の献立の選択に失敗しました: %w", day, err)
 		}
 		week = append(week, domain.DayMenu{Day: day, Menu: menu})
+
+		// 一度出した献立は以降の候補から外す。残りから選ばせることで、
+		// 「引き直して重複なら再抽選」のような終わらない可能性のある処理を避ける。
+		remaining = slices.DeleteFunc(remaining, func(m domain.Menu) bool {
+			return m.ID == menu.ID
+		})
 	}
 	return week, nil
 }
