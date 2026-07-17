@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
@@ -23,12 +24,20 @@ const recipeCount = 3
 // 1回目が失敗しても2回目の試行に入れる。
 const defaultRecipeBudget = 5 * time.Second
 
+// defaultRecipeCacheTTL はレシピのキャッシュを有効とみなす期間（spec.md 4.2 / 13.2）。
+// レシピサイトのURLは頻繁には変わらないため長めに取る。
+const defaultRecipeCacheTTL = 7 * 24 * time.Hour
+
 // MenuService は献立の選定を担う。
 type MenuService struct {
 	repo         MenuRepository
 	rand         Randomizer
 	recipes      RecipeSearchGateway
+	recipeCache  RecipeLinkCache
 	recipeBudget time.Duration
+	recipeTTL    time.Duration
+	// now は現在時刻を返す。キャッシュの鮮度判定を固定できるよう外から差し替える。
+	now func() time.Time
 }
 
 // MenuServiceOption は MenuService の任意設定。
@@ -39,13 +48,26 @@ func WithRecipeBudget(d time.Duration) MenuServiceOption {
 	return func(s *MenuService) { s.recipeBudget = d }
 }
 
+// WithRecipeCacheTTL はキャッシュを有効とみなす期間を変える。
+func WithRecipeCacheTTL(d time.Duration) MenuServiceOption {
+	return func(s *MenuService) { s.recipeTTL = d }
+}
+
+// WithNow は現在時刻の取得方法を変える。テストで時刻を固定するために使う。
+func WithNow(now func() time.Time) MenuServiceOption {
+	return func(s *MenuService) { s.now = now }
+}
+
 // NewMenuService は献立サービスを組み立てる。
-func NewMenuService(repo MenuRepository, rand Randomizer, recipes RecipeSearchGateway, opts ...MenuServiceOption) *MenuService {
+func NewMenuService(repo MenuRepository, rand Randomizer, recipes RecipeSearchGateway, cache RecipeLinkCache, opts ...MenuServiceOption) *MenuService {
 	s := &MenuService{
 		repo:         repo,
 		rand:         rand,
 		recipes:      recipes,
+		recipeCache:  cache,
 		recipeBudget: defaultRecipeBudget,
+		recipeTTL:    defaultRecipeCacheTTL,
+		now:          time.Now,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -55,6 +77,9 @@ func NewMenuService(repo MenuRepository, rand Randomizer, recipes RecipeSearchGa
 
 // RecipeBudget はレシピ取得に許す時間を返す。
 func (s *MenuService) RecipeBudget() time.Duration { return s.recipeBudget }
+
+// RecipeCacheTTL はキャッシュを有効とみなす期間を返す。
+func (s *MenuService) RecipeCacheTTL() time.Duration { return s.recipeTTL }
 
 // SuggestMenu は条件に合う献立から1件を無作為に選んで返す。
 // 条件が不正な場合は domain.ErrInvalidGenre / domain.ErrInvalidDifficulty を返す。
@@ -96,6 +121,10 @@ func (s *MenuService) RecipeLinks(ctx context.Context, id domain.MenuID) ([]doma
 		return nil, fmt.Errorf("献立の取得に失敗しました(id=%s): %w", id, err)
 	}
 
+	if links, ok := s.cachedLinks(ctx, id); ok {
+		return links, nil
+	}
+
 	searchCtx, cancel := context.WithTimeout(ctx, s.recipeBudget)
 	defer cancel()
 
@@ -117,7 +146,41 @@ func (s *MenuService) RecipeLinks(ctx context.Context, id domain.MenuID) ([]doma
 		// 「利用者が中断した」との区別がつかなくなるため。
 		return nil, fmt.Errorf("レシピの取得に失敗しました(%q): %w (原因: %s)", menu.Name, ErrRecipeSearchFailed, err.Error())
 	}
+
+	// 0件も「探した結果」なので保存する。保存しないと、該当の無い献立で
+	// 毎回APIを消費することになる。
+	//
+	// 失敗を保存しないのは意図的。TTLが切れるまで失敗を返し続けてしまうため、
+	// エラー時はここに到達しない。
+	if err := s.recipeCache.Save(ctx, id, links, s.now()); err != nil {
+		// キャッシュは高速化の手段であって、保存できないことは
+		// 検索結果を捨てる理由にならない。
+		slog.Warn("レシピのキャッシュを保存できませんでした",
+			"menu_id", id, "menu_name", menu.Name, "error", err)
+	}
 	return links, nil
+}
+
+// cachedLinks は有効なキャッシュがあればそれを返す。
+//
+// キャッシュは高速化の手段であって、読めないことはリクエストを失敗させる
+// 理由にならない。障害も期限切れも「無い」として扱い、検索APIに任せる。
+func (s *MenuService) cachedLinks(ctx context.Context, id domain.MenuID) ([]domain.RecipeLink, bool) {
+	cached, err := s.recipeCache.Find(ctx, id)
+	switch {
+	case errors.Is(err, ErrRecipeCacheMiss):
+		return nil, false
+	case err != nil:
+		slog.Warn("レシピのキャッシュを読めませんでした。検索APIに問い合わせます",
+			"menu_id", id, "error", err)
+		return nil, false
+	}
+
+	// 取得から TTL を過ぎたものは使わない。ちょうど TTL の時点はまだ有効とする。
+	if s.now().Sub(cached.FetchedAt) > s.recipeTTL {
+		return nil, false
+	}
+	return cached.Links, true
 }
 
 // GetMenu はIDで献立を1件返す。
