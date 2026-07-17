@@ -48,3 +48,14 @@ func (s *MenuService) SuggestMenu(ctx context.Context, f domain.MenuFilter) (*do
 
 	return &menu, nil
 }
+
+// GetMenu はIDで献立を1件返す。
+// 献立が存在しない場合とDB障害は repository が別のエラーで表現しており、
+// 呼び出し側が 404 と 500 を出し分けられるよう、原因を包んだまま返す。
+func (s *MenuService) GetMenu(ctx context.Context, id domain.MenuID) (*domain.Menu, error) {
+	menu, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("献立の取得に失敗しました(id=%s): %w", id, err)
+	}
+	return menu, nil
+}
