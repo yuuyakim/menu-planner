@@ -46,6 +46,8 @@ var problemMapping = []struct {
 	{repository.ErrMenuNotFound, http.StatusNotFound, "menu-not-found", "献立が見つかりません"},
 	// リクエストは正しいが条件に合う献立が無い状態。構文は正しいので400ではなく422。
 	{service.ErrNoMenuFound, http.StatusUnprocessableEntity, "no-menu-found", "条件に合う献立が見つかりません"},
+	// 外部の検索APIの不調。自分の障害ではないので500ではなく502で上流起因だと示す。
+	{service.ErrRecipeSearchFailed, http.StatusBadGateway, "recipe-search-failed", "レシピの取得に失敗しました"},
 }
 
 // ErrorHandler は echo のカスタムエラーハンドラを返す。

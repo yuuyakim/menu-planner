@@ -5,9 +5,18 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
+
+// ErrRecipeSearchFailed は外部の検索APIから結果を得られなかったことを表す。
+// 呼び出し側はこれを 502 に変換する。
+//
+// インターフェースの持ち主である service 側で定義する。実装（internal/gateway）で
+// 定義すると、service がそれを参照できず（gateway → service の一方向依存のため
+// 逆向きは循環になる）、この層で失敗を判定できなくなる。
+var ErrRecipeSearchFailed = errors.New("レシピの検索に失敗しました")
 
 // MenuRepository は献立マスタへのアクセスを抽象化する。
 // 実装は internal/repository にある。

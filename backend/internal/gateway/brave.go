@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
 // ErrMissingAPIKey はAPIキーが設定されていないことを表す。
@@ -23,7 +24,11 @@ var ErrMissingAPIKey = errors.New("検索APIのキーが設定されていませ
 // ErrSearchFailed は外部の検索APIから結果を得られなかったことを表す。
 // 呼び出し側はこれを 502 に変換する。設定漏れ（ErrMissingAPIKey）や
 // 呼び出し方の誤り（ErrEmptyMenuName）とは区別する。
-var ErrSearchFailed = errors.New("レシピの検索に失敗しました")
+//
+// 実体はインターフェースの持ち主が定義する service.ErrRecipeSearchFailed。
+// service 側も自身が課した締め切り超過をこの失敗として返す必要があり、
+// 判定を1つの識別子に揃えるため同じ値を指す。
+var ErrSearchFailed = service.ErrRecipeSearchFailed
 
 // braveEndpoint は Brave Web Search API のエンドポイント。
 const braveEndpoint = "https://api.search.brave.com/res/v1/web/search"
@@ -34,6 +39,18 @@ const braveMaxCount = 20
 // recipeQuerySuffix は検索語に付ける接尾辞。
 // 献立名だけで検索すると料理の解説や通販が混ざるため（spec.md 2.3）。
 const recipeQuerySuffix = " レシピ"
+
+// 日本語のレシピを返させるための指定。
+//
+// 指定しないと英語圏のページが混ざる（実キーでの確認では「親子丼 レシピ」の
+// 3件中2件が kurashiru.com/us/ と cookpad.com/eng/ だった）。
+//
+// braveSearchLang は "ja" ではなく "jp"。"ja" は 422 で拒否される。
+// APIリファレンスが値を列挙していないため実測で確かめた。
+const (
+	braveCountry    = "JP"
+	braveSearchLang = "jp"
+)
 
 // 既定値。
 const (
@@ -258,6 +275,8 @@ func (b *Brave) newRequest(ctx context.Context, menuName string, limit int) (*ht
 	q := url.Values{}
 	q.Set("q", menuName+recipeQuerySuffix)
 	q.Set("count", strconv.Itoa(min(limit, braveMaxCount)))
+	q.Set("country", braveCountry)
+	q.Set("search_lang", braveSearchLang)
 	req.URL.RawQuery = q.Encode()
 
 	req.Header.Set("Accept", "application/json")

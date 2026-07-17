@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
@@ -12,16 +13,48 @@ import (
 // リクエスト自体は正しいので、呼び出し側はこれを 4xx として扱う。
 var ErrNoMenuFound = errors.New("条件に合う献立が見つかりません")
 
+// recipeCount は献立1件につき提示するレシピの件数（spec.md 2.3）。
+const recipeCount = 3
+
+// defaultRecipeBudget はレシピ取得全体に許す時間。
+//
+// gateway 単体の最悪は 3秒 × 3試行 + バックオフ ≒ 9.6秒（task.md 3-D）。
+// 画面がそれだけ回るのは体験が悪いため、上限をここで課す。5秒あれば
+// 1回目が失敗しても2回目の試行に入れる。
+const defaultRecipeBudget = 5 * time.Second
+
 // MenuService は献立の選定を担う。
 type MenuService struct {
-	repo MenuRepository
-	rand Randomizer
+	repo         MenuRepository
+	rand         Randomizer
+	recipes      RecipeSearchGateway
+	recipeBudget time.Duration
+}
+
+// MenuServiceOption は MenuService の任意設定。
+type MenuServiceOption func(*MenuService)
+
+// WithRecipeBudget はレシピ取得に許す時間を変える。
+func WithRecipeBudget(d time.Duration) MenuServiceOption {
+	return func(s *MenuService) { s.recipeBudget = d }
 }
 
 // NewMenuService は献立サービスを組み立てる。
-func NewMenuService(repo MenuRepository, rand Randomizer) *MenuService {
-	return &MenuService{repo: repo, rand: rand}
+func NewMenuService(repo MenuRepository, rand Randomizer, recipes RecipeSearchGateway, opts ...MenuServiceOption) *MenuService {
+	s := &MenuService{
+		repo:         repo,
+		rand:         rand,
+		recipes:      recipes,
+		recipeBudget: defaultRecipeBudget,
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
+
+// RecipeBudget はレシピ取得に許す時間を返す。
+func (s *MenuService) RecipeBudget() time.Duration { return s.recipeBudget }
 
 // SuggestMenu は条件に合う献立から1件を無作為に選んで返す。
 // 条件が不正な場合は domain.ErrInvalidGenre / domain.ErrInvalidDifficulty を返す。
@@ -47,6 +80,44 @@ func (s *MenuService) SuggestMenu(ctx context.Context, f domain.MenuFilter) (*do
 	}
 
 	return &menu, nil
+}
+
+// RecipeLinks は献立のレシピ掲載ページを最大3件返す。
+// 献立が存在しない場合は repository のエラーを包んで返す（呼び出し側で 404）。
+// 検索に失敗した場合は ErrRecipeSearchFailed を返す（同 502）。
+//
+// 結果が0件でもエラーにしない。該当が無いことは障害ではなく、
+// 呼び出し側は空のレシピ欄として表示できる（spec.md 2.3）。
+func (s *MenuService) RecipeLinks(ctx context.Context, id domain.MenuID) ([]domain.RecipeLink, error) {
+	// 検索語は献立名なので、まず献立を引く。存在しないIDで外部APIを
+	// 消費しないよう、ここで先に弾く。
+	menu, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("献立の取得に失敗しました(id=%s): %w", id, err)
+	}
+
+	searchCtx, cancel := context.WithTimeout(ctx, s.recipeBudget)
+	defer cancel()
+
+	links, err := s.recipes.Search(searchCtx, menu.Name, recipeCount)
+	if err != nil {
+		// 呼び出し側の中断（利用者が画面を離れたなど）は失敗として扱わず、
+		// そのまま返す。502 として記録する筋合いではないため。
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("レシピの取得を中断しました(%q): %w", menu.Name, ctx.Err())
+		}
+		// ここに来る時点で原因は外部API側。gateway は自身の締め切り超過を
+		// 素の context エラーで返すため、こちらの締め切りによる打ち切りも
+		// 含めて「検索が失敗した」に寄せる。
+		if errors.Is(err, ErrRecipeSearchFailed) {
+			return nil, fmt.Errorf("レシピの取得に失敗しました(%q): %w", menu.Name, err)
+		}
+		// 原因は文字列として添えるに留め、エラーとしては包まない。%w で包むと、
+		// こちらが課した締め切りの DeadlineExceeded が呼び出し側まで伝播し、
+		// 「利用者が中断した」との区別がつかなくなるため。
+		return nil, fmt.Errorf("レシピの取得に失敗しました(%q): %w (原因: %s)", menu.Name, ErrRecipeSearchFailed, err.Error())
+	}
+	return links, nil
 }
 
 // GetMenu はIDで献立を1件返す。

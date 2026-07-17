@@ -336,3 +336,22 @@ func TestBrave_クエリはURLエスケープされる(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "肉じゃが&煮物 レシピ", q.Get("q"))
 }
+
+func TestBrave_日本語の結果を要求する(t *testing.T) {
+	t.Parallel()
+
+	// 言語を指定しないと英語版のページが混ざる。実キーで確認したところ、
+	// 「親子丼 レシピ」の3件中2件が kurashiru.com/us/ と cookpad.com/eng/ だった。
+	//
+	// search_lang の値は "ja" ではなく "jp"。"ja" は実際に 422 で拒否される
+	// （Brave のAPIリファレンスは値を列挙していないため実測で確かめた）。
+	var got http.Request
+	srv := braveServer(t, sampleResults(3), &got)
+
+	_, err := newTestBrave(t, srv).Search(context.Background(), "親子丼", 3)
+	require.NoError(t, err)
+
+	q := got.URL.Query()
+	assert.Equal(t, "JP", q.Get("country"))
+	assert.Equal(t, "jp", q.Get("search_lang"))
+}

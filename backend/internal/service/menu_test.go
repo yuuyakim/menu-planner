@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,7 +29,7 @@ func TestSuggestMenu_genre指定で該当ジャンルのみ候補になる(t *te
 
 	menus := testMenus()
 	repo := newFakeMenuRepository(menus...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	// 和食は2件。乱数源が 0 / 1 を返せば、それぞれ順に選ばれる。
 	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
@@ -46,7 +47,7 @@ func TestSuggestMenu_difficulty指定で該当難易度のみ候補になる(t *
 
 	repo := newFakeMenuRepository(testMenus()...)
 	// easy は「肉じゃが」「麻婆豆腐」の2件。2件目を選ばせる。
-	svc := service.NewMenuService(repo, randomtest.NewFixed(1))
+	svc := newTestService(repo, randomtest.NewFixed(1))
 
 	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
 		Difficulty: difficultyPtr(domain.DifficultyEasy),
@@ -61,7 +62,7 @@ func TestSuggestMenu_両方指定で両方に合うもののみ(t *testing.T) {
 	t.Parallel()
 
 	repo := newFakeMenuRepository(testMenus()...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
 		Genre:      genrePtr(domain.GenreJapanese),
@@ -85,7 +86,7 @@ func TestSuggestMenu_両方nilで全件が候補(t *testing.T) {
 			t.Parallel()
 
 			repo := newFakeMenuRepository(menus...)
-			svc := service.NewMenuService(repo, randomtest.NewFixed(i))
+			svc := newTestService(repo, randomtest.NewFixed(i))
 
 			got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{})
 
@@ -101,7 +102,7 @@ func TestSuggestMenu_不正なgenreはErrInvalidGenre(t *testing.T) {
 	t.Parallel()
 
 	repo := newFakeMenuRepository(testMenus()...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	_, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
 		Genre: genrePtr(domain.Genre("フレンチ")),
@@ -115,7 +116,7 @@ func TestSuggestMenu_不正なdifficultyはErrInvalidDifficulty(t *testing.T) {
 	t.Parallel()
 
 	repo := newFakeMenuRepository(testMenus()...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	_, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
 		Difficulty: difficultyPtr(domain.Difficulty("むずかしい")),
@@ -144,7 +145,7 @@ func TestSuggestMenu_候補0件でErrNoMenuFound(t *testing.T) {
 			t.Parallel()
 
 			repo := newFakeMenuRepository(tt.menus...)
-			svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+			svc := newTestService(repo, randomtest.NewFixed(0))
 
 			_, err := svc.SuggestMenu(context.Background(), tt.filter)
 
@@ -159,7 +160,7 @@ func TestSuggestMenu_候補1件ならそれが返る(t *testing.T) {
 
 	// 境界値。0件と1件の境目で ErrNoMenuFound にならないことを確かめる。
 	repo := newFakeMenuRepository(testMenus()...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	// 洋食は「ハンバーグ」の1件だけ。
 	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
@@ -176,7 +177,7 @@ func TestSuggestMenu_repositoryのエラーがラップされて返る(t *testin
 	sentinel := errors.New("DBへの接続に失敗しました")
 	repo := newFakeMenuRepository(testMenus()...)
 	repo.err = sentinel
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	_, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{})
 
@@ -194,10 +195,10 @@ func TestSuggestMenu_ErrNoMenuFoundとrepositoryのエラーが区別できる(t
 
 	failing := newFakeMenuRepository(testMenus()...)
 	failing.err = dbErr
-	_, gotDBErr := service.NewMenuService(failing, randomtest.NewFixed(0)).
+	_, gotDBErr := newTestService(failing, randomtest.NewFixed(0)).
 		SuggestMenu(context.Background(), domain.MenuFilter{})
 
-	_, gotEmptyErr := service.NewMenuService(newFakeMenuRepository(), randomtest.NewFixed(0)).
+	_, gotEmptyErr := newTestService(newFakeMenuRepository(), randomtest.NewFixed(0)).
 		SuggestMenu(context.Background(), domain.MenuFilter{})
 
 	assert.ErrorIs(t, gotDBErr, dbErr)
@@ -212,7 +213,7 @@ func TestSuggestMenu_乱数源のエラーは該当なしと区別できる(t *t
 
 	// 乱数源の故障は候補が無いことを意味しない。500 に倒すべきなので混同させない。
 	sentinel := errors.New("乱数源の故障")
-	svc := service.NewMenuService(newFakeMenuRepository(testMenus()...), failingRandomizer{err: sentinel})
+	svc := newTestService(newFakeMenuRepository(testMenus()...), failingRandomizer{err: sentinel})
 
 	_, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{})
 
@@ -226,7 +227,7 @@ func TestSuggestMenu_ExcludeIDsの献立が候補から外れる(t *testing.T) {
 
 	menus := testMenus()
 	repo := newFakeMenuRepository(menus...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	// 和食は「肉じゃが」「茶碗蒸し」の2件。先頭の肉じゃがを除外すれば、
 	// 乱数源が 0 を返しても残った茶碗蒸しが選ばれる。
@@ -246,7 +247,7 @@ func TestSuggestMenu_全件除外するとErrNoMenuFound(t *testing.T) {
 
 	menus := testMenus()
 	repo := newFakeMenuRepository(menus...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	all := make([]domain.MenuID, 0, len(menus))
 	for _, m := range menus {
@@ -270,7 +271,7 @@ func TestSuggestMenu_ExcludeIDsが空なら除外しない(t *testing.T) {
 			t.Parallel()
 
 			repo := newFakeMenuRepository(testMenus()...)
-			svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+			svc := newTestService(repo, randomtest.NewFixed(0))
 
 			got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{ExcludeIDs: ids})
 
@@ -285,7 +286,7 @@ func TestSuggestMenu_知らないIDを除外しても影響しない(t *testing.
 
 	// 履歴に残っていた献立がマスタから消えている場合を想定する。
 	repo := newFakeMenuRepository(testMenus()...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
 		Genre:      genrePtr(domain.GenreJapanese),
@@ -300,7 +301,7 @@ func TestSuggestMenu_返る献立はマスタの内容をそのまま持つ(t *t
 	t.Parallel()
 
 	repo := newFakeMenuRepository(testMenus()...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	got, err := svc.SuggestMenu(context.Background(), domain.MenuFilter{
 		Genre: genrePtr(domain.GenreWestern),
@@ -319,7 +320,7 @@ func TestGetMenu_IDで献立が返る(t *testing.T) {
 
 	menus := testMenus()
 	repo := newFakeMenuRepository(menus...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	want := menus[2] // ハンバーグ
 	got, err := svc.GetMenu(context.Background(), want.ID)
@@ -335,7 +336,7 @@ func TestGetMenu_存在しないIDはrepositoryのエラーを保ったまま返
 	// 呼び出し側はこのエラーを 404 に変換する。ラップしても errors.Is で
 	// 辿れなくなると 500 に落ちてしまうため、同一性が保たれることを固定する。
 	repo := newFakeMenuRepository(testMenus()...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	_, err := svc.GetMenu(context.Background(), domain.NewMenuID())
 
@@ -350,7 +351,7 @@ func TestGetMenu_repositoryの障害は存在しないことと区別できる(t
 	dbErr := errors.New("DBへの接続に失敗しました")
 	repo := newFakeMenuRepository(testMenus()...)
 	repo.err = dbErr
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0))
+	svc := newTestService(repo, randomtest.NewFixed(0))
 
 	_, err := svc.GetMenu(context.Background(), domain.NewMenuID())
 
@@ -358,4 +359,132 @@ func TestGetMenu_repositoryの障害は存在しないことと区別できる(t
 	assert.ErrorIs(t, err, dbErr)
 	assert.NotErrorIs(t, err, errFakeMenuNotFound, "DB障害を存在しないと誤認しないこと")
 	assert.NotEqual(t, dbErr.Error(), err.Error(), "文脈が付与されていること")
+}
+
+// newTestService はレシピ検索を使わないテスト用に MenuService を組み立てる。
+// SuggestMenu / GetMenu の検証では gateway を使わないため、定型の fake を挿す。
+func newTestService(repo service.MenuRepository, rand service.Randomizer) *service.MenuService {
+	return service.NewMenuService(repo, rand, newFakeRecipeGateway())
+}
+
+func TestRecipeLinks_献立名で検索して結果を返す(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	repo := newFakeMenuRepository(menus...)
+	gw := newFakeRecipeGateway(
+		newRecipeLink("肉じゃがの作り方", "https://recipe.example.com/1"),
+		newRecipeLink("簡単 肉じゃが", "https://cooking.example.net/2"),
+		newRecipeLink("本格 肉じゃが", "https://kitchen.example.org/3"),
+	)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), gw)
+
+	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.NoError(t, err)
+	assert.Len(t, got, 3)
+	assert.Equal(t, "肉じゃが", gw.lastMenuName, "IDではなく献立名で検索すること")
+	assert.Equal(t, 3, gw.lastLimit, "spec.md 2.3 の3件")
+}
+
+func TestRecipeLinks_存在しない献立ならgatewayを呼ばない(t *testing.T) {
+	t.Parallel()
+
+	repo := newFakeMenuRepository(testMenus()...)
+	gw := newFakeRecipeGateway()
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), gw)
+
+	_, err := svc.RecipeLinks(context.Background(), domain.NewMenuID())
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errFakeMenuNotFound, "呼び出し側が404に変換できること")
+	assert.Equal(t, 0, gw.calls, "存在しない献立でAPIを消費しないこと")
+}
+
+func TestRecipeLinks_3件未満でも成功する(t *testing.T) {
+	t.Parallel()
+
+	// spec.md 2.3: 検索結果が3件未満の場合は取得できた件数のみを表示する。
+	menus := testMenus()
+	gw := newFakeRecipeGateway(newRecipeLink("肉じゃがの作り方", "https://recipe.example.com/1"))
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw)
+
+	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.NoError(t, err)
+	assert.Len(t, got, 1)
+}
+
+func TestRecipeLinks_0件でも成功する(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), newFakeRecipeGateway())
+
+	got, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestRecipeLinks_gatewayの障害はErrRecipeSearchFailedとして返る(t *testing.T) {
+	t.Parallel()
+
+	menus := testMenus()
+	gw := newFakeRecipeGateway()
+	gw.err = service.ErrRecipeSearchFailed
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw)
+
+	_, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, service.ErrRecipeSearchFailed, "呼び出し側が502に変換できること")
+}
+
+func TestRecipeLinks_締め切りを過ぎたらErrRecipeSearchFailedになる(t *testing.T) {
+	t.Parallel()
+
+	// gateway は context 切れを素の context エラーとして返す（呼び出し側の中断と
+	// 区別するため）。それをそのまま通すと 500 に化けるので、こちらが課した
+	// 締め切りによる打ち切りは「検索が失敗した」= 502 に寄せる。
+	menus := testMenus()
+	gw := newFakeRecipeGateway()
+	gw.block = make(chan struct{}) // 閉じないので gateway は返ってこない
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw,
+		service.WithRecipeBudget(20*time.Millisecond))
+
+	_, err := svc.RecipeLinks(context.Background(), menus[0].ID)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, service.ErrRecipeSearchFailed)
+	assert.NotErrorIs(t, err, context.DeadlineExceeded, "内部の締め切りを外に漏らさないこと")
+}
+
+func TestRecipeLinks_呼び出し側の中断はそのまま返す(t *testing.T) {
+	t.Parallel()
+
+	// 利用者が画面を離れた場合。502として記録する筋合いではない。
+	menus := testMenus()
+	gw := newFakeRecipeGateway()
+	gw.block = make(chan struct{})
+	svc := service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(0), gw)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go cancel()
+
+	_, err := svc.RecipeLinks(ctx, menus[0].ID)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, service.ErrRecipeSearchFailed)
+}
+
+func TestRecipeLinks_既定の締め切りは5秒(t *testing.T) {
+	t.Parallel()
+
+	// gateway 単体の最悪は 3s × 3回 + バックオフ ≒ 9.6秒。画面がそれだけ回ると
+	// 体験が悪いため、レシピ取得全体に上限を課す。
+	svc := service.NewMenuService(newFakeMenuRepository(), randomtest.NewFixed(0), newFakeRecipeGateway())
+
+	assert.Equal(t, 5*time.Second, svc.RecipeBudget())
 }
