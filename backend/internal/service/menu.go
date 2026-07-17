@@ -107,6 +107,37 @@ func (s *MenuService) SuggestMenu(ctx context.Context, f domain.MenuFilter) (*do
 	return &menu, nil
 }
 
+// SuggestWeekly は7日分の献立を提案する（spec.md 2.2）。
+// 起点は呼び出した日で、返る Day は起点からの通し番号 1..7（spec.md 13.3）。
+//
+// 現時点では重複回避を行わない。同一献立の回避は 4-B、同ジャンルの連続回避は
+// 4-C、候補が足りない場合の緩和は 4-D で順に足す。
+func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter) ([]domain.DayMenu, error) {
+	if err := f.Validate(); err != nil {
+		return nil, err
+	}
+
+	// 候補は一度だけ引いて使い回す。日ごとに問い合わせるとDBへの負荷が7倍になる。
+	candidates, err := s.repo.FindByFilter(ctx, f)
+	if err != nil {
+		return nil, fmt.Errorf("献立の検索に失敗しました: %w", err)
+	}
+
+	week := make([]domain.DayMenu, 0, domain.WeekLength)
+	for day := 1; day <= domain.WeekLength; day++ {
+		menu, err := Pick(s.rand, candidates)
+		switch {
+		case errors.Is(err, ErrNoCandidates):
+			// 候補が無いのは障害ではなく「条件に合う献立が無い」という結果。
+			return nil, ErrNoMenuFound
+		case err != nil:
+			return nil, fmt.Errorf("%d日目の献立の選択に失敗しました: %w", day, err)
+		}
+		week = append(week, domain.DayMenu{Day: day, Menu: menu})
+	}
+	return week, nil
+}
+
 // RecipeLinks は献立のレシピ掲載ページを最大3件返す。
 // 献立が存在しない場合は repository のエラーを包んで返す（呼び出し側で 404）。
 // 検索に失敗した場合は ErrRecipeSearchFailed を返す（同 502）。
