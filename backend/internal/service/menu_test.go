@@ -694,3 +694,190 @@ func TestRecipeLinks_既定のTTLは7日(t *testing.T) {
 
 	assert.Equal(t, 7*24*time.Hour, svc.RecipeCacheTTL())
 }
+
+// weeklyMenus は週間献立のテスト用マスタ。7日分を重複なく引ける最低限として8件用意する。
+func weeklyMenus() []domain.Menu {
+	return []domain.Menu{
+		newMenu("肉じゃが", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("茶碗蒸し", domain.GenreJapanese, domain.DifficultyElaborate),
+		newMenu("ハンバーグ", domain.GenreWestern, domain.DifficultyNormal),
+		newMenu("オムライス", domain.GenreWestern, domain.DifficultyEasy),
+		newMenu("麻婆豆腐", domain.GenreChinese, domain.DifficultyEasy),
+		newMenu("餃子", domain.GenreChinese, domain.DifficultyNormal),
+		newMenu("タコライス", domain.GenreOther, domain.DifficultyEasy),
+		newMenu("ガパオライス", domain.GenreOther, domain.DifficultyNormal),
+	}
+}
+
+// newWeeklyService は指定の乱数列で週間献立を組み立てるサービスを返す。
+func newWeeklyService(menus []domain.Menu, values ...int) *service.MenuService {
+	return service.NewMenuService(newFakeMenuRepository(menus...), randomtest.NewFixed(values...),
+		newFakeRecipeGateway(), newFakeRecipeCache())
+}
+
+func TestSuggestWeekly_7件返る(t *testing.T) {
+	t.Parallel()
+
+	svc := newWeeklyService(weeklyMenus(), 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	assert.Len(t, got, 7, "spec.md 2.2 の7日分")
+}
+
+func TestSuggestWeekly_dayが1から7の連番(t *testing.T) {
+	t.Parallel()
+
+	svc := newWeeklyService(weeklyMenus(), 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	for i, d := range got {
+		assert.Equal(t, i+1, d.Day, "%d番目の day", i)
+	}
+}
+
+func TestSuggestWeekly_dayは起点当日から始まる(t *testing.T) {
+	t.Parallel()
+
+	// 当日起点（spec.md 13.3）。day=1 が今日で、曜日はサーバが持たない。
+	svc := newWeeklyService(weeklyMenus(), 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+	assert.Equal(t, 1, got[0].Day)
+	assert.Equal(t, 7, got[len(got)-1].Day)
+}
+
+func TestSuggestWeekly_乱数列に従って献立が選ばれる(t *testing.T) {
+	t.Parallel()
+
+	menus := weeklyMenus()
+	// 候補8件から順に添字 0..6 を引かせる。
+	svc := newWeeklyService(menus, 0, 1, 2, 3, 4, 5, 6)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	for i, d := range got {
+		assert.Equal(t, menus[i].Name, d.Menu.Name, "%d日目", i+1)
+	}
+}
+
+func TestSuggestWeekly_条件がrepositoryに渡る(t *testing.T) {
+	t.Parallel()
+
+	repo := newFakeMenuRepository(weeklyMenus()...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
+
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
+		Genre: genrePtr(domain.GenreJapanese),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.lastFilter.Genre)
+	assert.Equal(t, domain.GenreJapanese, *repo.lastFilter.Genre)
+}
+
+func TestSuggestWeekly_候補を1度だけ問い合わせる(t *testing.T) {
+	t.Parallel()
+
+	// 7日分それぞれでDBを叩くと7倍の負荷になる。候補は一度引いて使い回す。
+	repo := newFakeMenuRepository(weeklyMenus()...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
+
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, repo.filterCalls)
+}
+
+func TestSuggestWeekly_候補0件でErrNoMenuFound(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		menus  []domain.Menu
+		filter domain.MenuFilter
+	}{
+		"マスタが空":      {menus: nil, filter: domain.MenuFilter{}},
+		"条件に合うものが無い": {menus: weeklyMenus(), filter: domain.MenuFilter{Genre: genrePtr(domain.GenreOther), Difficulty: difficultyPtr(domain.DifficultyElaborate)}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := newWeeklyService(tt.menus, 0)
+
+			_, err := svc.SuggestWeekly(context.Background(), tt.filter)
+
+			assert.ErrorIs(t, err, service.ErrNoMenuFound)
+			assert.NotErrorIs(t, err, service.ErrNoCandidates, "Pick の内部事情は漏らさないこと")
+		})
+	}
+}
+
+func TestSuggestWeekly_不正な条件はErrInvalidGenre(t *testing.T) {
+	t.Parallel()
+
+	repo := newFakeMenuRepository(weeklyMenus()...)
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
+
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
+		Genre: genrePtr(domain.Genre("フレンチ")),
+	})
+
+	assert.ErrorIs(t, err, domain.ErrInvalidGenre)
+	assert.Equal(t, 0, repo.filterCalls, "条件が不正ならDBに問い合わせないこと")
+}
+
+func TestSuggestWeekly_repositoryのエラーがラップされて返る(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("DBへの接続に失敗しました")
+	repo := newFakeMenuRepository(weeklyMenus()...)
+	repo.err = sentinel
+	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
+
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+	assert.NotErrorIs(t, err, service.ErrNoMenuFound, "DB障害を該当なしと誤認しないこと")
+}
+
+func TestSuggestWeekly_乱数源のエラーは該当なしと区別できる(t *testing.T) {
+	t.Parallel()
+
+	sentinel := errors.New("乱数源の故障")
+	svc := service.NewMenuService(newFakeMenuRepository(weeklyMenus()...), failingRandomizer{err: sentinel},
+		newFakeRecipeGateway(), newFakeRecipeCache())
+
+	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, sentinel)
+	assert.NotErrorIs(t, err, service.ErrNoMenuFound)
+}
+
+func TestSuggestWeekly_骨格の段階では重複を許す(t *testing.T) {
+	t.Parallel()
+
+	// 重複回避は 4-B で入れる。この段階では候補1件でも7日分を返せることを
+	// 固定しておき、4-B での挙動の変化が差分として見えるようにする。
+	menus := []domain.Menu{newMenu("肉じゃが", domain.GenreJapanese, domain.DifficultyEasy)}
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	for _, d := range got {
+		assert.Equal(t, "肉じゃが", d.Menu.Name)
+	}
+}
