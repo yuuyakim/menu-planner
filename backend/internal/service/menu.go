@@ -134,36 +134,98 @@ func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter) ([
 
 	week := make([]domain.DayMenu, 0, domain.WeekLength)
 	for day := 1; day <= domain.WeekLength; day++ {
-		menu, err := Pick(s.rand, eligible(remaining, week))
+		picked, err := s.pickDay(candidates, remaining, week)
 		switch {
 		case errors.Is(err, ErrNoCandidates):
-			// 候補が無いのは障害ではなく「条件に合う献立が無い」という結果。
+			// 緩和しても選べないのは候補が0件のときだけ。障害ではなく
+			// 「条件に合う献立が無い」という結果。
 			return nil, ErrNoMenuFound
 		case err != nil:
 			return nil, fmt.Errorf("%d日目の献立の選択に失敗しました: %w", day, err)
 		}
-		week = append(week, domain.DayMenu{Day: day, Menu: menu})
+		picked.Day = day
+		week = append(week, picked)
 
 		// 一度出した献立は以降の候補から外す。残りから選ばせることで、
 		// 「引き直して重複なら再抽選」のような終わらない可能性のある処理を避ける。
 		remaining = slices.DeleteFunc(remaining, func(m domain.Menu) bool {
-			return m.ID == menu.ID
+			return m.ID == picked.Menu.ID
 		})
 	}
 	return week, nil
 }
 
-// eligible はその日に選んでよい候補を返す。
-// 直前の日々が同一ジャンルで上限まで続いている場合、そのジャンルを候補から外す。
-func eligible(remaining []domain.Menu, week []domain.DayMenu) []domain.Menu {
-	g, ok := streakingGenre(week)
-	if !ok {
-		return remaining
+// pickDay はその日の献立を1件選ぶ。
+//
+// 規則を全て守れる候補が無い場合、段階的に緩めて必ず7日を埋める（spec.md 2.2）。
+// 緩める順序は spec.md 2.2 のルールの列挙順の逆、すなわち重要度の低いものから。
+//
+//  1. 規則を全て守る（remaining のうちジャンル連続にならないもの）
+//  2. ジャンル連続を緩める（remaining から選ぶ。重複はさせない）
+//  3. 重複を緩める（candidates のうちジャンル連続にならないもの）
+//  4. 両方を緩める（candidates から選ぶ）
+//
+// ジャンル連続を重複より先に緩めるのは、同じ献立が週に2度出るより、
+// 同ジャンルが3日続くほうが受け入れやすいため。段階2に降りるのは remaining が
+// 尽きていない場合だけなので、候補が残るうちは重複を作らない。
+//
+// 絞り込み条件（ジャンル・難易度）は緩めない。それは利用者が指定したもので、
+// 勝手に外すと要求と違うものを返すことになる。
+//
+// 候補が7件以上あれば重複は決して起きない。残りが尽きないため段階3以降に
+// 降りることがないため。
+//
+// 先読みはしない。その日その日で選ぶため、週全体では3連続を避けられる並びが
+// あるのに袋小路に入ることが理論上ある（例: 残り1件が直前2日と同じジャンル）。
+// 候補1〜12件・ジャンル1〜4種を総当たりで2400回試して5回、いずれも候補が
+// 2ジャンルしか無い作為的な形でのみ起きた。実マスタ相当（120件・4ジャンル）
+// では2000回試して0回であり、先読みを入れる複雑さに見合わないと判断した。
+func (s *MenuService) pickDay(candidates, remaining []domain.Menu, week []domain.DayMenu) (domain.DayMenu, error) {
+	streak, hasStreak := streakingGenre(week)
+
+	// withoutStreak はジャンル連続になる候補を除く。連続の心配が無い日は
+	// そのまま返す（複製を作らない）。
+	withoutStreak := func(pool []domain.Menu) []domain.Menu {
+		if !hasStreak {
+			return pool
+		}
+		return slices.DeleteFunc(slices.Clone(pool), func(m domain.Menu) bool {
+			return m.Genre == streak
+		})
 	}
-	// 呼び出し元の remaining は次の日にも使うため、複製してから削る。
-	return slices.DeleteFunc(slices.Clone(remaining), func(m domain.Menu) bool {
-		return m.Genre == g
-	})
+
+	levels := []domain.DayMenu{
+		{},
+		{RelaxedGenreStreak: hasStreak},
+		{RelaxedDuplicate: true},
+		{RelaxedDuplicate: true, RelaxedGenreStreak: hasStreak},
+	}
+	pools := [][]domain.Menu{
+		withoutStreak(remaining),
+		remaining,
+		withoutStreak(candidates),
+		candidates,
+	}
+
+	for i, pool := range pools {
+		menu, err := Pick(s.rand, pool)
+		if errors.Is(err, ErrNoCandidates) {
+			// この段階では選べない。次の段階へ降りる。
+			// Pick は候補が空なら乱数を引かないため、段階を試すこと自体は
+			// 選択結果に影響しない。
+			continue
+		}
+		if err != nil {
+			return domain.DayMenu{}, err
+		}
+
+		picked := levels[i]
+		picked.Menu = menu
+		return picked, nil
+	}
+
+	// 全段階で選べないのは candidates が空のときだけ。
+	return domain.DayMenu{}, ErrNoCandidates
 }
 
 // streakingGenre は直前 genreStreakLimit 日が同一ジャンルで埋まっている場合に

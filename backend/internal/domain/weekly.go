@@ -13,4 +13,16 @@ type DayMenu struct {
 	Day int
 	// Menu はその日の献立。
 	Menu Menu
+
+	// RelaxedGenreStreak はこの日を埋めるために「同ジャンル3連続の回避」を
+	// 緩めたことを表す（spec.md 2.2 のルール2）。
+	RelaxedGenreStreak bool
+	// RelaxedDuplicate はこの日を埋めるために「同一献立の重複回避」を
+	// 緩めたことを表す（同 ルール1）。この日の献立は週内の別の日にも出現する。
+	RelaxedDuplicate bool
+}
+
+// Relaxed は何らかの規則を緩めて選ばれた日かを返す。
+func (d DayMenu) Relaxed() bool {
+	return d.RelaxedGenreStreak || d.RelaxedDuplicate
 }

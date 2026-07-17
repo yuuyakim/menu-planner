@@ -802,30 +802,6 @@ func TestSuggestWeekly_条件がrepositoryに渡る(t *testing.T) {
 	assert.Equal(t, domain.DifficultyEasy, *repo.lastFilter.Difficulty)
 }
 
-func TestSuggestWeekly_ジャンルで絞ると現時点ではErrNoMenuFound(t *testing.T) {
-	t.Parallel()
-
-	// ジャンルで絞ると候補が全て同一ジャンルになり、3日目で選べる候補が尽きる。
-	// 件数が足りていても起きるため、候補数の問題ではない。
-	//
-	// spec.md 2.2 はジャンル指定を許しているので、これは 4-D の
-	// 「候補が全て同一ジャンルなら3連続禁止を緩和する」で解消する必要がある。
-	// 週間献立のAPIは 4-F まで公開されないため利用者には見えない。
-	menus := make([]domain.Menu, 0, 10)
-	for i := range 10 {
-		menus = append(menus, newMenu(fmt.Sprintf("和%d", i+1), domain.GenreJapanese, domain.DifficultyEasy))
-	}
-	repo := newFakeMenuRepository(menus...)
-	svc := service.NewMenuService(repo, randomtest.NewFixed(0), newFakeRecipeGateway(), newFakeRecipeCache())
-
-	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
-		Genre: genrePtr(domain.GenreJapanese),
-	})
-
-	assert.ErrorIs(t, err, service.ErrNoMenuFound, "候補は10件あるが3連続を避けられない")
-	require.NotNil(t, repo.lastFilter.Genre, "条件自体は渡っていること")
-}
-
 func TestSuggestWeekly_候補を1度だけ問い合わせる(t *testing.T) {
 	t.Parallel()
 
@@ -965,29 +941,6 @@ func TestSuggestWeekly_選ばれた献立は以降の候補から外れる(t *te
 	}
 }
 
-func TestSuggestWeekly_候補が7件未満なら現時点ではErrNoMenuFound(t *testing.T) {
-	t.Parallel()
-
-	// 4-A では重複を許して7日分を返していたが、重複回避を入れたことで
-	// 候補が足りないと埋められなくなった。
-	//
-	// これは 4-D（候補枯渇時の緩和）で解消する。それまでの中間状態として
-	// ここに固定しておく。週間献立のAPIは 4-F まで公開されないため、
-	// この状態が利用者に見えることはない。
-	tests := map[string]int{"1件": 1, "6件": 6}
-	for name, n := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			svc := newWeeklyService(weeklyMenus()[:n], 0)
-
-			_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
-
-			assert.ErrorIs(t, err, service.ErrNoMenuFound)
-		})
-	}
-}
-
 // streakMenus は先頭3件が同じジャンルのマスタ。
 // 乱数源が常に先頭を返すと、連続回避が無ければ和食が3日続く。
 func streakMenus() []domain.Menu {
@@ -1104,16 +1057,204 @@ func TestSuggestWeekly_重複回避と連続回避が同時に効く(t *testing.
 	assertNoGenreStreak(t, got)
 }
 
-func TestSuggestWeekly_候補が全て同一ジャンルなら現時点ではErrNoMenuFound(t *testing.T) {
+// assertNoRelaxation は緩和が1日も起きていないことを確かめる。
+func assertNoRelaxation(t *testing.T, week []domain.DayMenu) {
+	t.Helper()
+
+	for _, d := range week {
+		assert.False(t, d.Relaxed(), "%d日目(%s)で緩和が起きている", d.Day, d.Menu.Name)
+	}
+}
+
+// relaxedDays は緩和が起きた日を返す。
+func relaxedDays(week []domain.DayMenu) []int {
+	days := []int{}
+	for _, d := range week {
+		if d.Relaxed() {
+			days = append(days, d.Day)
+		}
+	}
+	return days
+}
+
+func TestSuggestWeekly_候補が足りていれば緩和しない(t *testing.T) {
 	t.Parallel()
 
-	// 3日目で選べる候補が無くなる。4-D（候補枯渇時の緩和）で
-	// 「候補が全て同一ジャンルなら3連続禁止を緩和する」として解消する中間状態。
-	menus := make([]domain.Menu, 0, 8)
-	for i := range 8 {
+	// 緩和は最後の手段。8件あるなら規則を全て守れる。
+	svc := newWeeklyService(weeklyMenus(), 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	assertNoRelaxation(t, got)
+}
+
+func TestSuggestWeekly_候補がちょうど7件でも緩和しない(t *testing.T) {
+	t.Parallel()
+
+	// 境界値。ぴったり足りているのに緩めるようでは緩和が早すぎる。
+	svc := newWeeklyService(weeklyMenus()[:7], 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	assertNoRelaxation(t, got)
+}
+
+func TestSuggestWeekly_候補6件なら緩和して重複を許す(t *testing.T) {
+	t.Parallel()
+
+	// 6件では7日を埋められない。1日だけ重複を許せば足りる。
+	menus := easyMenus()[:6]
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	assert.Equal(t, []int{7}, relaxedDays(got), "7日目だけ緩和されること")
+	assert.True(t, got[6].RelaxedDuplicate, "重複回避を緩めたこと")
+	assert.False(t, got[6].RelaxedGenreStreak, "ジャンル連続は緩めずに済むこと")
+
+	// 6件は全て1度ずつ使われ、7日目だけがそのいずれかと重複する。
+	seen := map[domain.MenuID]int{}
+	for _, d := range got {
+		seen[d.Menu.ID]++
+	}
+	assert.Len(t, seen, 6, "6件すべてが使われること")
+}
+
+func TestSuggestWeekly_候補1件なら7日とも同じ献立(t *testing.T) {
+	t.Parallel()
+
+	// 極端値。ここで無限ループやエラーにならないことを固定する。
+	menus := []domain.Menu{newMenu("肉じゃが", domain.GenreJapanese, domain.DifficultyEasy)}
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	for _, d := range got {
+		assert.Equal(t, "肉じゃが", d.Menu.Name)
+	}
+
+	// 1日目は緩和不要。2日目から重複、3日目からはジャンル連続も緩む。
+	assert.False(t, got[0].Relaxed(), "1日目は緩和なし")
+	assert.True(t, got[1].RelaxedDuplicate, "2日目は重複を緩める")
+	assert.False(t, got[1].RelaxedGenreStreak, "2日目はまだ3連続にならない")
+	assert.True(t, got[2].RelaxedDuplicate, "3日目は重複を緩める")
+	assert.True(t, got[2].RelaxedGenreStreak, "3日目はジャンル連続も緩める")
+}
+
+func TestSuggestWeekly_候補が全て同一ジャンルなら3連続禁止を緩和する(t *testing.T) {
+	t.Parallel()
+
+	// 4-C で「ジャンルで絞ると必ず失敗する」としていた制約の解消。
+	// 件数は足りているので、緩めるのはジャンル連続だけでよい。
+	menus := make([]domain.Menu, 0, 10)
+	for i := range 10 {
 		menus = append(menus, newMenu(fmt.Sprintf("和%d", i+1), domain.GenreJapanese, domain.DifficultyEasy))
 	}
 	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+
+	seen := map[domain.MenuID]bool{}
+	for _, d := range got {
+		assert.False(t, seen[d.Menu.ID], "%q が重複している", d.Menu.Name)
+		seen[d.Menu.ID] = true
+		assert.False(t, d.RelaxedDuplicate, "%d日目: 件数は足りるので重複は緩めないこと", d.Day)
+	}
+	assert.Equal(t, []int{3, 4, 5, 6, 7}, relaxedDays(got), "3日目以降はジャンル連続を緩めること")
+}
+
+func TestSuggestWeekly_ジャンルで絞っても7日分が返る(t *testing.T) {
+	t.Parallel()
+
+	// 4-C の制約の解消を、利用者に近い形（spec.md 2.2 が許すジャンル指定）で確かめる。
+	menus := make([]domain.Menu, 0, 10)
+	for i := range 10 {
+		menus = append(menus, newMenu(fmt.Sprintf("和%d", i+1), domain.GenreJapanese, domain.DifficultyEasy))
+	}
+	menus = append(menus, newMenu("ハンバーグ", domain.GenreWestern, domain.DifficultyEasy))
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
+		Genre: genrePtr(domain.GenreJapanese),
+	})
+
+	require.NoError(t, err)
+	assert.Len(t, got, 7)
+	for _, d := range got {
+		assert.Equal(t, domain.GenreJapanese, d.Menu.Genre, "絞り込みは緩めないこと")
+	}
+}
+
+func TestSuggestWeekly_絞り込み条件は緩めない(t *testing.T) {
+	t.Parallel()
+
+	// 緩めるのは重複回避と連続回避だけ。利用者が指定した条件を勝手に外して
+	// 別ジャンルを混ぜたら、それは要求と違うものを返している。
+	menus := []domain.Menu{
+		newMenu("和1", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("洋1", domain.GenreWestern, domain.DifficultyEasy),
+		newMenu("洋2", domain.GenreWestern, domain.DifficultyEasy),
+	}
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{
+		Genre: genrePtr(domain.GenreJapanese),
+	})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+	for _, d := range got {
+		assert.Equal(t, "和1", d.Menu.Name, "候補1件でも他ジャンルを混ぜないこと")
+	}
+}
+
+func TestSuggestWeekly_緩和はジャンル連続を先に緩める(t *testing.T) {
+	t.Parallel()
+
+	// spec.md 2.2 はルール1(重複しない)を先に挙げており、より重要度が高い。
+	// 同じ献立が週に2度出るより、同ジャンルが3日続くほうが受け入れやすい。
+	// 残りの候補があるうちは重複を作らず、ジャンル連続のほうを先に緩める。
+	//
+	// 候補: 和1, 和2, 和3, 洋1（4件）。乱数源は常に先頭。
+	//   1日目 和1 / 2日目 和2 → ここで和食が2連続
+	//   3日目 残り[和3, 洋1] のうち和食を避けると洋1。緩和は起きない
+	menus := []domain.Menu{
+		newMenu("和1", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("和2", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("和3", domain.GenreJapanese, domain.DifficultyEasy),
+		newMenu("洋1", domain.GenreWestern, domain.DifficultyEasy),
+	}
+	svc := newWeeklyService(menus, 0)
+
+	got, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, got, 7)
+
+	// 4日目までは4件で賄えるため重複は起きない。
+	for i := range 4 {
+		assert.False(t, got[i].RelaxedDuplicate, "%d日目: 候補が残るうちは重複させないこと", i+1)
+	}
+	// 5日目以降は候補を使い切っているので重複が始まる。
+	assert.True(t, got[4].RelaxedDuplicate, "5日目: 候補を使い切ったら重複を許すこと")
+}
+
+func TestSuggestWeekly_緩和しても候補0件ならErrNoMenuFound(t *testing.T) {
+	t.Parallel()
+
+	// 緩和は候補を増やす操作ではない。0件は0件のまま。
+	svc := newWeeklyService(nil, 0)
 
 	_, err := svc.SuggestWeekly(context.Background(), domain.MenuFilter{})
 
