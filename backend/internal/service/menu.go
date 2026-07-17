@@ -108,12 +108,16 @@ func (s *MenuService) SuggestMenu(ctx context.Context, f domain.MenuFilter) (*do
 	return &menu, nil
 }
 
+// genreStreakLimit は同一ジャンルを連続させてよい日数（spec.md 2.2）。
+// これを超える連続を作らない。2連続までは許す。
+const genreStreakLimit = 2
+
 // SuggestWeekly は7日分の献立を提案する（spec.md 2.2）。
 // 起点は呼び出した日で、返る Day は起点からの通し番号 1..7（spec.md 13.3）。
 //
-// 同一献立は週内に2度出現しない。同ジャンルの連続回避は 4-C、候補が足りない
-// 場合の緩和は 4-D で順に足す。現時点では候補が7件に満たないと ErrNoMenuFound
-// になる。
+// 同一献立は週内に2度出現せず、同一ジャンルも3日以上は続かない。
+// 候補が足りない場合の緩和は 4-D で足す。現時点では候補が7件に満たない場合や、
+// 連続を避けた結果その日の候補が尽きた場合に ErrNoMenuFound になる。
 func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter) ([]domain.DayMenu, error) {
 	if err := f.Validate(); err != nil {
 		return nil, err
@@ -130,7 +134,7 @@ func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter) ([
 
 	week := make([]domain.DayMenu, 0, domain.WeekLength)
 	for day := 1; day <= domain.WeekLength; day++ {
-		menu, err := Pick(s.rand, remaining)
+		menu, err := Pick(s.rand, eligible(remaining, week))
 		switch {
 		case errors.Is(err, ErrNoCandidates):
 			// 候補が無いのは障害ではなく「条件に合う献立が無い」という結果。
@@ -147,6 +151,38 @@ func (s *MenuService) SuggestWeekly(ctx context.Context, f domain.MenuFilter) ([
 		})
 	}
 	return week, nil
+}
+
+// eligible はその日に選んでよい候補を返す。
+// 直前の日々が同一ジャンルで上限まで続いている場合、そのジャンルを候補から外す。
+func eligible(remaining []domain.Menu, week []domain.DayMenu) []domain.Menu {
+	g, ok := streakingGenre(week)
+	if !ok {
+		return remaining
+	}
+	// 呼び出し元の remaining は次の日にも使うため、複製してから削る。
+	return slices.DeleteFunc(slices.Clone(remaining), func(m domain.Menu) bool {
+		return m.Genre == g
+	})
+}
+
+// streakingGenre は直前 genreStreakLimit 日が同一ジャンルで埋まっている場合に
+// そのジャンルを返す。次の日にこのジャンルを選ぶと上限を超える。
+//
+// 見るのは直前の数日だけで、週全体での出現回数は数えない。「和食は週2回まで」
+// ではなく「3日以上続かない」が仕様のため、別ジャンルを挟めばまた選べる。
+func streakingGenre(week []domain.DayMenu) (domain.Genre, bool) {
+	if len(week) < genreStreakLimit {
+		return "", false
+	}
+
+	last := week[len(week)-1].Menu.Genre
+	for _, d := range week[len(week)-genreStreakLimit:] {
+		if d.Menu.Genre != last {
+			return "", false
+		}
+	}
+	return last, true
 }
 
 // RecipeLinks は献立のレシピ掲載ページを最大3件返す。
