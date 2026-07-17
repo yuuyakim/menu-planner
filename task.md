@@ -181,11 +181,13 @@ APIキー無しで全機能が動く状態を保つため、実装より先に�
 
 ### PR 3-E: gateway ファクトリ `feat/recipe-gateway-factory`
 
-- [ ] 🔴 テスト: `SEARCH_API_PROVIDER=stub` で stub が返る
-- [ ] 🔴 テスト: `brave` で実装が返る
-- [ ] 🔴 テスト: 未知の値でエラー
-- [ ] 🔴 テスト: `brave` なのにAPIキーが空ならエラー
-- [ ] 🟢 ファクトリを実装
+- [x] 🔴 テスト: `SEARCH_API_PROVIDER=stub` で stub が返る
+- [x] 🔴 テスト: `brave` で実装が返る
+- [x] 🔴 テスト: 未知の値でエラー（`google_cse` を含む）
+- [x] 🔴 テスト: `brave` なのにAPIキーが空ならエラー
+- [x] 🔴 テスト: **プロバイダが空でもエラー**（stub に既定しない）
+- [x] 🔴 テスト: 表記ゆれ（大文字・前後の空白）は吸収する
+- [x] 🟢 ファクトリを実装（環境変数は読まず、値として受け取る）
 
 ### PR 3-F: `GET /menus/:id/recipes` `feat/api-get-recipes`
 
