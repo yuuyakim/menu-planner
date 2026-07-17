@@ -94,17 +94,17 @@ repository の統合テストが緑。
       （`AND NOT (id = ANY($3::uuid[]))`、統合テスト3件）で、SuggestMenu は
       filter をそのまま渡すため既に動いていた。テストのみ追加して契約を固定した。
 
-### PR 2-F: `GET /menus/suggest` `feat/api-suggest-menu`
+### PR 2-F: `GET /menus/suggest` `feat/api-suggest-menu` ✅
 
-- [ ] 🔴 テスト: 200 とJSON構造（id / name / genre / difficulty / description）
-- [ ] 🔴 テスト: `?genre=japanese` が service に渡る
-- [ ] 🔴 テスト: `?difficulty=easy` が service に渡る
-- [ ] 🔴 テスト: クエリ無しで両方 nil が渡る
-- [ ] 🔴 テスト: 不正な genre で 400
-- [ ] 🔴 テスト: 不正な difficulty で 400
-- [ ] 🔴 テスト: 候補0件で 422
-- [ ] 🟢 `MenuHandler.Suggest` を実装
-- [ ] 🔧 `/api/v1` にルーティング
+- [x] 🔴 テスト: 200 とJSON構造（id / name / genre / difficulty / description）
+- [x] 🔴 テスト: `?genre=japanese` が service に渡る
+- [x] 🔴 テスト: `?difficulty=easy` が service に渡る
+- [x] 🔴 テスト: クエリ無しで両方 nil が渡る
+- [x] 🔴 テスト: 不正な genre で 400
+- [x] 🔴 テスト: 不正な difficulty で 400
+- [x] 🔴 テスト: 候補0件で 422
+- [x] 🟢 `MenuHandler.Suggest` を実装
+- [x] 🔧 `/api/v1` にルーティング（`MenuHandler.RegisterRoutes`。main.go への結線は PR 2-H）
 
 ### PR 2-G: `GET /menus/:id` `feat/api-get-menu`
 
