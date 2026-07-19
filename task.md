@@ -478,13 +478,26 @@ API消費は生涯約120クエリで頭打ちになる。
 > / `AuthService.CurrentUser`）。有効なトークンが指すユーザーが消えていたら 401
 > （`ErrUserNotFound` → 401）。フェーズ5の認証境界はここで完成（残りは 5-H/5-I の Google SSO）。
 
-### PR 5-H: Google SSO の認可URL `feat/google-auth-url`
+### PR 5-H: Google SSO の認可URL `feat/google-auth-url` ✅（コード）
 
-- [ ] 🔧 Google Cloud Console で OAuth クライアントを作成（**要ユーザー操作**）
-- [ ] 🔴 テスト: 認可URLに PKCE の code_challenge が含まれる
-- [ ] 🔴 テスト: state が生成され Cookie に保存される
-- [ ] 🔴 テスト: state は毎回異なる
-- [ ] 🟢 `GET /auth/google` を実装
+- [ ] 🔧 Google Cloud Console で OAuth クライアントを作成（**要ユーザー操作・未完**）
+      → コード・単体テストはダミー設定で完了。**実クレデンシャルは 5-I の
+        コールバック実機確認で必要**。リダイレクトURIは
+        `http://localhost:8080/api/v1/auth/google/callback`。
+- [x] 🔴 テスト: 認可URLに PKCE の code_challenge が含まれる（S256）
+- [x] 🔴 テスト: state が生成され Cookie に保存される（URL の state と一致）
+- [x] 🔴 テスト: state は毎回異なる
+- [x] 🔴 テスト: Cookie 属性（HttpOnly / Secure / SameSite=Lax / Path=/api/v1/auth）
+- [x] 🔴 テスト: 未設定（client_id 空）なら 503
+- [x] 🟢 `GET /auth/google` を実装（`internal/auth` の `GoogleOAuth`、x/oauth2）
+- [x] 🔧 実機確認: 未設定→503 / ダミー設定→302 で Google 認可URLへ
+      （code_challenge・state・scope が乗り、state と oauth_state Cookie が一致）
+
+> Google 認可フローは **Authorization Code + PKCE**。verifier と CSRF 対策の
+> state を生成し、短命 Cookie（10分・SameSite=Lax）に保存してから認可URLへ 302。
+> **SameSite=Lax はコールバック（トップレベルGET遷移）で Cookie を送るために必須**
+> （Strict だと送られない）。認可URLの生成は x/oauth2 に任せる（5-I のトークン交換でも使う）。
+> Google 未設定でも起動し、`/auth/google` だけ 503 にする（任意機能）。
 
 ### PR 5-I: Google SSO のコールバック `feat/google-callback`
 

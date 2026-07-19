@@ -85,9 +85,16 @@ func run() error {
 		return fmt.Errorf("JWTの初期化に失敗しました: %w", err)
 	}
 
+	// Google SSO は任意。未設定でも起動し、/auth/google だけ 503 になる。
+	googleOAuth := auth.NewGoogleOAuth(
+		os.Getenv("GOOGLE_CLIENT_ID"),
+		os.Getenv("GOOGLE_CLIENT_SECRET"),
+		os.Getenv("GOOGLE_REDIRECT_URL"),
+	)
+
 	userRepo := repository.NewUserRepository(pool)
 	authSvc := service.NewAuthService(userRepo, auth.Hasher{})
-	authHandler := handler.NewAuthHandler(authSvc, tokens)
+	authHandler := handler.NewAuthHandler(authSvc, tokens, googleOAuth)
 
 	e := echo.New()
 	e.HideBanner = true
