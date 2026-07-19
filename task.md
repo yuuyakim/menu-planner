@@ -381,13 +381,25 @@ API消費は生涯約120クエリで頭打ちになる。
 > （`ErrPasswordMismatch`）と壊れたハッシュのエラーは呼び出し側が
 > 区別できるよう分ける。`golang.org/x/crypto` が direct 依存に昇格。
 
-### PR 5-C: サインアップ `feat/signup`
+### PR 5-C: サインアップ `feat/signup` ✅
 
-- [ ] 🔴 テスト: user と auth_identity が作られる
-- [ ] 🔴 テスト: 登録済みメールで 409
-- [ ] 🔴 テスト: メール形式が不正で 400
-- [ ] 🔴 テスト: パスワードが短いと 400
-- [ ] 🟢 `service.SignUp` と `POST /auth/signup` を実装
+- [x] 🔴 テスト: user と auth_identity が作られる（統合: 対で1件ずつ・トランザクション）
+- [x] 🔴 テスト: 登録済みメールで 409（`ErrEmailTaken`。制約名まで見て判定）
+- [x] 🔴 テスト: メール形式が不正で 400（`domain.ErrInvalidEmail`）
+- [x] 🔴 テスト: パスワードが短いと 400（`auth.ErrPasswordTooShort`）
+- [x] 🟢 `service.SignUp` と `POST /auth/signup` を実装
+- [x] 🔧 実機確認: 正常→201 / **大文字メールの再登録→409**（正規化が効く）/
+      不正メール→400 / 短いパスワード→400。DBに user 1件 + password identity
+      1件（hash は `$2a$12$`）
+
+> **表示名はメールのローカル部から導出**する。サインアップは表示名を受け取らない
+> （spec.md 5.2）が users.display_name は NOT NULL のため。
+>
+> ドメインに `Email`（正規化・検証つき）/ `User` / `UserID` を追加。メールは
+> 小文字に正規化して持ち、大小違いでの二重登録を防ぐ。パスワードのハッシュ化は
+> `PasswordHasher` として注入（乱数源と同じDIの形。テストは実物 `auth.Hasher`）。
+> user と auth_identity は必ず対で作るため repository でトランザクションに束ねる。
+> **成功時は 201。Cookie/JWT の発行は 5-E / 5-F で行う**。
 
 ### PR 5-D: ログイン `feat/login`
 

@@ -69,6 +69,30 @@ type RecipeLinkCache interface {
 	Save(ctx context.Context, id domain.MenuID, links []domain.RecipeLink, fetchedAt time.Time) error
 }
 
+// ErrEmailTaken はメールアドレスが既に登録済みであることを表す。
+// 呼び出し側はこれを 409 に変換する。インターフェースの持ち主である
+// service 側で定義し、repository はこれを返す。
+var ErrEmailTaken = errors.New("メールアドレスは既に登録されています")
+
+// UserRepository はユーザーと認証情報の永続化を抽象化する。
+// 実装は internal/repository にある。
+type UserRepository interface {
+	// CreateWithPassword は user とパスワード認証の identity を
+	// 1トランザクションで作る。片方だけ残る状態を防ぐため必ず両方一括で作る。
+	// メールが既に使われている場合は ErrEmailTaken を返す。
+	CreateWithPassword(ctx context.Context, u domain.User, passwordHash string) error
+}
+
+// PasswordHasher はパスワードのハッシュ化と検証を抽象化する。
+// 実装は internal/auth にある。service にハッシュ手段を直接持たせず注入するのは、
+// テストで差し替えられるようにし、乱数源と同じく依存を外に出すため。
+type PasswordHasher interface {
+	// Hash は平文パスワードをハッシュ化する。長さなどの検証もここで行う。
+	Hash(plain string) (string, error)
+	// Verify は平文がハッシュと一致するか検証する。
+	Verify(hash, plain string) error
+}
+
 // Randomizer は乱数源を抽象化する。
 // service 自身が乱数を生成すると提案結果が毎回変わりテストが書けないため、
 // 乱数源を外から注入できるようにする。実装は internal/random にある。
