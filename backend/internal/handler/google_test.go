@@ -24,7 +24,7 @@ func doGoogleStart(t *testing.T, google *auth.GoogleOAuth) *httptest.ResponseRec
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(&fakeAuthService{}, tokens, google).RegisterRoutes(e)
+	handler.NewAuthHandler(&fakeAuthService{}, tokens, google, testFrontendURL).RegisterRoutes(e)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google", nil)
 	rec := httptest.NewRecorder()

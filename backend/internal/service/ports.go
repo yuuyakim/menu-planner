@@ -105,6 +105,14 @@ type UserRepository interface {
 
 	// FindByID はIDでユーザーを取得する。存在しない場合は ErrUserNotFound を返す。
 	FindByID(ctx context.Context, id domain.UserID) (domain.User, error)
+
+	// FindOrCreateGoogleUser は Google 認証のユーザーを取得または作成する。
+	//  1. (provider=google, provider_uid=sub) が既にあればそのユーザー。
+	//  2. 無ければ email で既存ユーザーを探し、あれば google の identity を足す
+	//     （パスワードと Google の共存。spec.md 1.4）。
+	//  3. どちらも無ければ user と google identity を新規作成する。
+	// displayName は新規作成時の表示名。
+	FindOrCreateGoogleUser(ctx context.Context, sub string, email domain.Email, displayName string) (domain.User, error)
 }
 
 // PasswordHasher はパスワードのハッシュ化と検証を抽象化する。

@@ -21,6 +21,12 @@ type fakeUserRepository struct {
 	credentials map[string]service.PasswordCredential
 	// err は非nilなら CreateWithPassword がそのまま返すエラー。
 	err error
+
+	// Google upsert に渡された最後の値。
+	lastGoogleSub   string
+	lastGoogleEmail string
+	lastGoogleName  string
+	googleCalls     int
 }
 
 func newFakeUserRepository() *fakeUserRepository {
@@ -36,6 +42,18 @@ func (r *fakeUserRepository) FindPasswordCredential(_ context.Context, email dom
 		return service.PasswordCredential{}, service.ErrCredentialNotFound
 	}
 	return cred, nil
+}
+
+func (r *fakeUserRepository) FindOrCreateGoogleUser(_ context.Context, sub string, email domain.Email, displayName string) (domain.User, error) {
+	r.googleCalls++
+	r.lastGoogleSub = sub
+	r.lastGoogleEmail = email.String()
+	r.lastGoogleName = displayName
+	u, err := domain.NewUser(email)
+	if err != nil {
+		return domain.User{}, err
+	}
+	return u, nil
 }
 
 func (r *fakeUserRepository) FindByID(_ context.Context, id domain.UserID) (domain.User, error) {

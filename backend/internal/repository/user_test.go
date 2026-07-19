@@ -69,6 +69,74 @@ func TestUserRepository_CreateWithPassword_DuplicateEmail(t *testing.T) {
 	require.Zero(t, count, "重複時はユーザーも作られないべき")
 }
 
+func TestUserRepository_FindOrCreateGoogleUser_CreatesOnFirst(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	email, err := domain.NewEmail("newbie@gmail.com")
+	require.NoError(t, err)
+
+	user, err := repo.FindOrCreateGoogleUser(ctx, "google-sub-A", email, "新人")
+	require.NoError(t, err)
+	require.Equal(t, "newbie@gmail.com", user.Email.String())
+	require.Equal(t, "新人", user.DisplayName)
+
+	// user と google identity が1件ずつできる。
+	var users, googleIdents int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&users))
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM auth_identities WHERE provider='google' AND provider_uid='google-sub-A'`).Scan(&googleIdents))
+	require.Equal(t, 1, users)
+	require.Equal(t, 1, googleIdents)
+}
+
+func TestUserRepository_FindOrCreateGoogleUser_ReusesOnSecond(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	email, err := domain.NewEmail("repeat@gmail.com")
+	require.NoError(t, err)
+
+	first, err := repo.FindOrCreateGoogleUser(ctx, "google-sub-B", email, "常連")
+	require.NoError(t, err)
+
+	// 2回目は同じ sub。新しいユーザーを作らず既存を返す。
+	second, err := repo.FindOrCreateGoogleUser(ctx, "google-sub-B", email, "常連")
+	require.NoError(t, err)
+	require.Equal(t, first.ID.String(), second.ID.String())
+
+	var users int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&users))
+	require.Equal(t, 1, users, "2回目でユーザーは増えないべき")
+}
+
+func TestUserRepository_FindOrCreateGoogleUser_LinksToPasswordUser(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	// 先にパスワードで登録したユーザー。
+	pwUser := newUser(t, "shared@example.com")
+	require.NoError(t, repo.CreateWithPassword(ctx, pwUser, "hash"))
+
+	// 同じメールで Google ログイン → 同一ユーザーに google identity が足される。
+	email, err := domain.NewEmail("shared@example.com")
+	require.NoError(t, err)
+	googleUser, err := repo.FindOrCreateGoogleUser(ctx, "google-sub-C", email, "共有太郎")
+	require.NoError(t, err)
+	require.Equal(t, pwUser.ID.String(), googleUser.ID.String(), "同じユーザーに紐付くべき")
+
+	// ユーザーは1件のまま、identity は password と google の2件。
+	var users, idents int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&users))
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT count(*) FROM auth_identities WHERE user_id=$1`, pwUser.ID.String()).Scan(&idents))
+	require.Equal(t, 1, users)
+	require.Equal(t, 2, idents, "password と google の2つの認証手段を持つべき")
+}
+
 func TestUserRepository_FindByID_Found(t *testing.T) {
 	pool := newTestPool(t)
 	repo := repository.NewUserRepository(pool)

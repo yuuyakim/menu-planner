@@ -94,7 +94,7 @@ func run() error {
 
 	userRepo := repository.NewUserRepository(pool)
 	authSvc := service.NewAuthService(userRepo, auth.Hasher{})
-	authHandler := handler.NewAuthHandler(authSvc, tokens, googleOAuth)
+	authHandler := handler.NewAuthHandler(authSvc, tokens, googleOAuth, env("FRONTEND_ORIGIN", "http://localhost:5173"))
 
 	e := echo.New()
 	e.HideBanner = true
