@@ -20,6 +20,8 @@ type fakeHistoryStore struct {
 	lastLimit   int
 	calls       int
 	manyCalls   int
+	listCalls   int
+	entries     []domain.HistoryEntry
 	err         error
 }
 
@@ -39,6 +41,12 @@ func (s *fakeHistoryStore) RecordManyWithLimit(_ context.Context, userID domain.
 	s.lastMode = mode
 	s.lastLimit = limit
 	return s.err
+}
+
+func (s *fakeHistoryStore) List(_ context.Context, userID domain.UserID) ([]domain.HistoryEntry, error) {
+	s.lastUserID = userID
+	s.listCalls++
+	return s.entries, s.err
 }
 
 func TestHistoryService_Record_PassesLimit15(t *testing.T) {
@@ -68,6 +76,31 @@ func TestHistoryService_Record_PropagatesError(t *testing.T) {
 
 	err := svc.Record(context.Background(), domain.NewUserID(), domain.NewMenuID(), domain.SearchModeWeekly)
 	require.Error(t, err)
+}
+
+func TestHistoryService_List_ParsesUserIDAndDelegates(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeHistoryStore{entries: []domain.HistoryEntry{{}}}
+	svc := service.NewHistoryService(store)
+
+	userID := domain.NewUserID()
+	entries, err := svc.List(context.Background(), userID.String())
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, 1, store.listCalls)
+	require.Equal(t, userID.String(), store.lastUserID.String())
+}
+
+func TestHistoryService_List_MalformedUserID(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeHistoryStore{}
+	svc := service.NewHistoryService(store)
+
+	_, err := svc.List(context.Background(), "not-a-uuid")
+	require.ErrorIs(t, err, service.ErrUserNotFound)
+	require.Zero(t, store.listCalls)
 }
 
 func TestHistoryService_RecordMany_PassesAllAndLimit15(t *testing.T) {

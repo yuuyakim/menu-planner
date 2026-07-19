@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -57,6 +58,80 @@ func (r *HistoryRepository) RecordWithLimit(ctx context.Context, userID domain.U
 		return fmt.Errorf("トランザクションのコミットに失敗しました: %w", err)
 	}
 	return nil
+}
+
+// List はユーザーの履歴を新しい順に返す。献立の情報を JOIN して読み取りモデルにする。
+// 該当が無い場合は空スライスを返す（nilではない）。
+// FIFO で最大15件しか残らないため件数の上限指定は不要。
+func (r *HistoryRepository) List(ctx context.Context, userID domain.UserID) ([]domain.HistoryEntry, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT h.id, h.search_mode, h.searched_at,
+		        m.id, m.name, m.name_kana, m.genre, m.difficulty, m.description
+		   FROM search_histories h
+		   JOIN menus m ON m.id = h.menu_id
+		  WHERE h.user_id = $1
+		  ORDER BY h.searched_at DESC, h.seq DESC`, userID.String())
+	if err != nil {
+		return nil, fmt.Errorf("履歴の取得に失敗しました: %w", err)
+	}
+	defer rows.Close()
+
+	entries := make([]domain.HistoryEntry, 0)
+	for rows.Next() {
+		entry, err := scanHistoryEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("履歴の読み取りに失敗しました: %w", err)
+	}
+	return entries, nil
+}
+
+// scanHistoryEntry は1行を HistoryEntry に読む。
+func scanHistoryEntry(row pgx.Row) (domain.HistoryEntry, error) {
+	var (
+		histID, mode                              string
+		searchedAt                                time.Time
+		menuID, name, kana, genre, diff, descript string
+	)
+	if err := row.Scan(&histID, &mode, &searchedAt,
+		&menuID, &name, &kana, &genre, &diff, &descript); err != nil {
+		return domain.HistoryEntry{}, fmt.Errorf("履歴の読み取りに失敗しました: %w", err)
+	}
+
+	id, err := domain.ParseHistoryID(histID)
+	if err != nil {
+		return domain.HistoryEntry{}, fmt.Errorf("DBの履歴IDが不正です: %w", err)
+	}
+	m, err := domain.ParseSearchMode(mode)
+	if err != nil {
+		return domain.HistoryEntry{}, fmt.Errorf("DBの検索種別が不正です: %w", err)
+	}
+	menu, err := hydrateMenu(menuID, name, kana, genre, diff, descript)
+	if err != nil {
+		return domain.HistoryEntry{}, err
+	}
+	return domain.HistoryEntry{ID: id, Menu: menu, Mode: m, SearchedAt: searchedAt}, nil
+}
+
+// hydrateMenu は献立の各カラムからドメインの Menu を組み立てる。
+func hydrateMenu(id, name, kana, genre, diff, descript string) (domain.Menu, error) {
+	menuID, err := domain.ParseMenuID(id)
+	if err != nil {
+		return domain.Menu{}, fmt.Errorf("DBの献立IDが不正です: %w", err)
+	}
+	g, err := domain.ParseGenre(genre)
+	if err != nil {
+		return domain.Menu{}, fmt.Errorf("DBのジャンルが不正です: %w", err)
+	}
+	d, err := domain.ParseDifficulty(diff)
+	if err != nil {
+		return domain.Menu{}, fmt.Errorf("DBの難易度が不正です: %w", err)
+	}
+	return domain.Menu{ID: menuID, Name: name, NameKana: kana, Genre: g, Difficulty: d, Description: descript}, nil
 }
 
 // RecordManyWithLimit は複数の献立を一括で記録し、最新 limit 件に保つ。
