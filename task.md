@@ -572,13 +572,19 @@ API消費は生涯約120クエリで頭打ちになる。
 > （挿入ごとに走らせる必要はなく無駄）。seq タイブレークにより一括の7件は
 > 同一 searched_at でも挿入順が保たれる。途中失敗は全件ロールバック。
 
-### PR 6-D: `GET /histories` `feat/api-list-histories`
+### PR 6-D: `GET /histories` `feat/api-list-histories` ✅
 
-- [ ] 🔴 テスト: 新しい順に返る
-- [ ] 🔴 テスト: 未認証で 401
-- [ ] 🔴 テスト: 他ユーザーの履歴は返らない
-- [ ] 🔴 テスト: 0件のとき空配列
-- [ ] 🟢 `GET /histories` を実装
+- [x] 🔴 テスト: 新しい順に返る（searched_at DESC, seq DESC）
+- [x] 🔴 テスト: 未認証で 401
+- [x] 🔴 テスト: 他ユーザーの履歴は返らない（user_id で絞る）
+- [x] 🔴 テスト: 0件のとき空配列（null ではなく []）
+- [x] 🟢 `GET /histories` を実装
+- [x] 🔧 実機確認: 未認証→401 / ログイン→空配列 / 履歴1件で献立情報つき一覧
+
+> 読み取りモデル `domain.HistoryEntry`（HistoryID + Menu + Mode + SearchedAt）を追加。
+> repository が menus を JOIN して組み立てる。並びは 6-B の seq タイブレークに揃える。
+> 認証済み userID は RequireAuth がコンテキストに載せたものを使い、SQL で user_id を
+> 絞るので他人の履歴は構造上返らない。個別削除(6-E)に使うため履歴IDも返す。
 
 ### PR 6-E: 履歴の削除 `feat/api-delete-histories`
 

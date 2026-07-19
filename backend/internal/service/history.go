@@ -17,6 +17,9 @@ type HistoryStore interface {
 
 	// RecordManyWithLimit は複数の献立を一括記録し、最新 limit 件に切り詰める。
 	RecordManyWithLimit(ctx context.Context, userID domain.UserID, menuIDs []domain.MenuID, mode domain.SearchMode, limit int) error
+
+	// List はユーザーの履歴を新しい順に返す。該当が無ければ空スライス。
+	List(ctx context.Context, userID domain.UserID) ([]domain.HistoryEntry, error)
 }
 
 // HistoryService は検索履歴の記録を担う。
@@ -38,4 +41,15 @@ func (s *HistoryService) Record(ctx context.Context, userID domain.UserID, menuI
 // 週間献立の確定時に7件をまとめて記録するのに使う。
 func (s *HistoryService) RecordMany(ctx context.Context, userID domain.UserID, menuIDs []domain.MenuID, mode domain.SearchMode) error {
 	return s.store.RecordManyWithLimit(ctx, userID, menuIDs, mode, HistoryLimit)
+}
+
+// List は認証済みユーザーの履歴を新しい順に返す。
+// userID は認証ミドルウェアが検証したトークンの sub。壊れていれば
+// ErrUserNotFound（呼び出し側で 401）に丸める。
+func (s *HistoryService) List(ctx context.Context, userID string) ([]domain.HistoryEntry, error) {
+	id, err := domain.ParseUserID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+	return s.store.List(ctx, id)
 }

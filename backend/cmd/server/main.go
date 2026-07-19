@@ -96,6 +96,10 @@ func run() error {
 	authSvc := service.NewAuthService(userRepo, auth.Hasher{})
 	authHandler := handler.NewAuthHandler(authSvc, tokens, googleOAuth, env("FRONTEND_ORIGIN", "http://localhost:5173"))
 
+	historyRepo := repository.NewHistoryRepository(pool)
+	historySvc := service.NewHistoryService(historyRepo)
+	historyHandler := handler.NewHistoryHandler(historySvc, tokens)
+
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -114,6 +118,7 @@ func run() error {
 	e.GET("/health", health.Health)
 	menuHandler.RegisterRoutes(e)
 	authHandler.RegisterRoutes(e)
+	historyHandler.RegisterRoutes(e)
 
 	addr := ":" + env("PORT", "8080")
 
