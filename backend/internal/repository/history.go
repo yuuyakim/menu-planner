@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
 // HistoryRepository は検索履歴の永続化を提供する。
@@ -88,6 +90,41 @@ func (r *HistoryRepository) List(ctx context.Context, userID domain.UserID) ([]d
 		return nil, fmt.Errorf("履歴の読み取りに失敗しました: %w", err)
 	}
 	return entries, nil
+}
+
+// Delete は履歴を1件削除する。存在しなければ service.ErrHistoryNotFound、
+// 他人のものなら service.ErrHistoryForbidden を返す。
+//
+// 先に所有者を確認してから消す。「存在しない(404)」と「他人のもの(403)」を
+// 呼び出し側が区別できるようにするため、DELETE の件数だけでは判別しない。
+func (r *HistoryRepository) Delete(ctx context.Context, userID domain.UserID, historyID domain.HistoryID) error {
+	var owner string
+	err := r.pool.QueryRow(ctx,
+		`SELECT user_id FROM search_histories WHERE id = $1`, historyID.String()).Scan(&owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return service.ErrHistoryNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("履歴の取得に失敗しました: %w", err)
+	}
+	if owner != userID.String() {
+		return service.ErrHistoryForbidden
+	}
+
+	if _, err := r.pool.Exec(ctx,
+		`DELETE FROM search_histories WHERE id = $1`, historyID.String()); err != nil {
+		return fmt.Errorf("履歴の削除に失敗しました: %w", err)
+	}
+	return nil
+}
+
+// DeleteAll はユーザーの履歴を全件削除する。0件でもエラーにしない。
+func (r *HistoryRepository) DeleteAll(ctx context.Context, userID domain.UserID) error {
+	if _, err := r.pool.Exec(ctx,
+		`DELETE FROM search_histories WHERE user_id = $1`, userID.String()); err != nil {
+		return fmt.Errorf("履歴の全件削除に失敗しました: %w", err)
+	}
+	return nil
 }
 
 // scanHistoryEntry は1行を HistoryEntry に読む。

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
@@ -9,6 +10,14 @@ import (
 // HistoryLimit はユーザーごとに保持する履歴の最大件数（spec.md 2.5・FIFO 15件）。
 // 保持件数は業務ルールなので service で持ち、repository には値として渡す。
 const HistoryLimit = 15
+
+// 履歴削除にまつわるエラー。
+var (
+	// ErrHistoryNotFound は指定した履歴が存在しないことを表す（404）。
+	ErrHistoryNotFound = errors.New("履歴が見つかりません")
+	// ErrHistoryForbidden は他人の履歴を操作しようとしたことを表す（403）。
+	ErrHistoryForbidden = errors.New("この履歴を操作する権限がありません")
+)
 
 // HistoryStore は履歴の永続化を抽象化する。実装は internal/repository。
 type HistoryStore interface {
@@ -20,6 +29,13 @@ type HistoryStore interface {
 
 	// List はユーザーの履歴を新しい順に返す。該当が無ければ空スライス。
 	List(ctx context.Context, userID domain.UserID) ([]domain.HistoryEntry, error)
+
+	// Delete は履歴を1件削除する。存在しなければ ErrHistoryNotFound、
+	// 他人のものなら ErrHistoryForbidden を返す。
+	Delete(ctx context.Context, userID domain.UserID, historyID domain.HistoryID) error
+
+	// DeleteAll はユーザーの履歴を全件削除する。0件でも成功。
+	DeleteAll(ctx context.Context, userID domain.UserID) error
 }
 
 // HistoryService は検索履歴の記録を担う。
@@ -52,4 +68,28 @@ func (s *HistoryService) List(ctx context.Context, userID string) ([]domain.Hist
 		return nil, ErrUserNotFound
 	}
 	return s.store.List(ctx, id)
+}
+
+// Delete は認証済みユーザーの履歴を1件削除する。
+// 不正な履歴IDは ErrInvalidHistoryID（400）、存在しなければ ErrHistoryNotFound（404）、
+// 他人のものなら ErrHistoryForbidden（403）。
+func (s *HistoryService) Delete(ctx context.Context, userID, historyID string) error {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	hid, err := domain.ParseHistoryID(historyID)
+	if err != nil {
+		return err
+	}
+	return s.store.Delete(ctx, uid, hid)
+}
+
+// DeleteAll は認証済みユーザーの履歴を全件削除する。
+func (s *HistoryService) DeleteAll(ctx context.Context, userID string) error {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	return s.store.DeleteAll(ctx, uid)
 }

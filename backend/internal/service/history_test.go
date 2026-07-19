@@ -13,16 +13,19 @@ import (
 
 // fakeHistoryStore は HistoryStore を代用し、渡された limit を記録する。
 type fakeHistoryStore struct {
-	lastUserID  domain.UserID
-	lastMenuID  domain.MenuID
-	lastMenuIDs []domain.MenuID
-	lastMode    domain.SearchMode
-	lastLimit   int
-	calls       int
-	manyCalls   int
-	listCalls   int
-	entries     []domain.HistoryEntry
-	err         error
+	lastUserID     domain.UserID
+	lastMenuID     domain.MenuID
+	lastMenuIDs    []domain.MenuID
+	lastMode       domain.SearchMode
+	lastLimit      int
+	calls          int
+	manyCalls      int
+	listCalls      int
+	deleteCalls    int
+	deleteAllCalls int
+	lastHistoryID  domain.HistoryID
+	entries        []domain.HistoryEntry
+	err            error
 }
 
 func (s *fakeHistoryStore) RecordWithLimit(_ context.Context, userID domain.UserID, menuID domain.MenuID, mode domain.SearchMode, limit int) error {
@@ -47,6 +50,19 @@ func (s *fakeHistoryStore) List(_ context.Context, userID domain.UserID) ([]doma
 	s.lastUserID = userID
 	s.listCalls++
 	return s.entries, s.err
+}
+
+func (s *fakeHistoryStore) Delete(_ context.Context, userID domain.UserID, historyID domain.HistoryID) error {
+	s.deleteCalls++
+	s.lastUserID = userID
+	s.lastHistoryID = historyID
+	return s.err
+}
+
+func (s *fakeHistoryStore) DeleteAll(_ context.Context, userID domain.UserID) error {
+	s.deleteAllCalls++
+	s.lastUserID = userID
+	return s.err
 }
 
 func TestHistoryService_Record_PassesLimit15(t *testing.T) {
@@ -101,6 +117,43 @@ func TestHistoryService_List_MalformedUserID(t *testing.T) {
 	_, err := svc.List(context.Background(), "not-a-uuid")
 	require.ErrorIs(t, err, service.ErrUserNotFound)
 	require.Zero(t, store.listCalls)
+}
+
+func TestHistoryService_Delete_ParsesIDs(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeHistoryStore{}
+	svc := service.NewHistoryService(store)
+
+	userID := domain.NewUserID()
+	histID := "018f0000-0000-7000-8000-000000000001"
+	require.NoError(t, svc.Delete(context.Background(), userID.String(), histID))
+	require.Equal(t, 1, store.deleteCalls)
+	require.Equal(t, userID.String(), store.lastUserID.String())
+	require.Equal(t, histID, store.lastHistoryID.String())
+}
+
+func TestHistoryService_Delete_InvalidHistoryID(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeHistoryStore{}
+	svc := service.NewHistoryService(store)
+
+	err := svc.Delete(context.Background(), domain.NewUserID().String(), "not-a-uuid")
+	require.ErrorIs(t, err, domain.ErrInvalidHistoryID)
+	require.Zero(t, store.deleteCalls)
+}
+
+func TestHistoryService_DeleteAll_Delegates(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeHistoryStore{}
+	svc := service.NewHistoryService(store)
+
+	userID := domain.NewUserID()
+	require.NoError(t, svc.DeleteAll(context.Background(), userID.String()))
+	require.Equal(t, 1, store.deleteAllCalls)
+	require.Equal(t, userID.String(), store.lastUserID.String())
 }
 
 func TestHistoryService_RecordMany_PassesAllAndLimit15(t *testing.T) {
