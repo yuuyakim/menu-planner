@@ -16,6 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/db"
 	"github.com/yuuyakim/menu-planner/backend/internal/gateway"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
@@ -74,6 +75,10 @@ func run() error {
 	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway, recipeCache)
 	menuHandler := handler.NewMenuHandler(menuSvc)
 
+	userRepo := repository.NewUserRepository(pool)
+	authSvc := service.NewAuthService(userRepo, auth.Hasher{})
+	authHandler := handler.NewAuthHandler(authSvc)
+
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -91,6 +96,7 @@ func run() error {
 	health := handler.NewHealthHandler()
 	e.GET("/health", health.Health)
 	menuHandler.RegisterRoutes(e)
+	authHandler.RegisterRoutes(e)
 
 	addr := ":" + env("PORT", "8080")
 

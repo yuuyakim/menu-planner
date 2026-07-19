@@ -7,6 +7,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/repository"
 	"github.com/yuuyakim/menu-planner/backend/internal/service"
@@ -46,6 +47,11 @@ var problemMapping = []struct {
 	{repository.ErrMenuNotFound, http.StatusNotFound, "menu-not-found", "献立が見つかりません"},
 	{service.ErrInvalidDay, http.StatusBadRequest, "invalid-day", "不正な日の指定です"},
 	{service.ErrInvalidWeek, http.StatusBadRequest, "invalid-week", "不正な週間献立です"},
+	{domain.ErrInvalidEmail, http.StatusBadRequest, "invalid-email", "不正なメールアドレスです"},
+	{auth.ErrPasswordTooShort, http.StatusBadRequest, "password-too-short", "パスワードが短すぎます"},
+	{auth.ErrPasswordTooLong, http.StatusBadRequest, "password-too-long", "パスワードが長すぎます"},
+	// メールの重複は「今の状態と競合する」ので 409。
+	{service.ErrEmailTaken, http.StatusConflict, "email-taken", "メールアドレスは既に登録されています"},
 	// リクエストは正しいが条件に合う献立が無い状態。構文は正しいので400ではなく422。
 	{service.ErrNoMenuFound, http.StatusUnprocessableEntity, "no-menu-found", "条件に合う献立が見つかりません"},
 	// 外部の検索APIの不調。自分の障害ではないので500ではなく502で上流起因だと示す。
