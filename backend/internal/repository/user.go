@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -65,6 +66,46 @@ func (r *UserRepository) CreateWithPassword(ctx context.Context, u domain.User, 
 		return fmt.Errorf("トランザクションのコミットに失敗しました: %w", err)
 	}
 	return nil
+}
+
+// FindPasswordCredential はメールに対応するパスワード認証を返す。
+// ユーザーが居ない、または Google 認証のみでパスワードを持たない場合は
+// service.ErrCredentialNotFound を返す（JOIN が1行も返さない）。
+func (r *UserRepository) FindPasswordCredential(ctx context.Context, email domain.Email) (service.PasswordCredential, error) {
+	// provider='password' の identity を内部結合するため、パスワードを
+	// 持たないユーザー（Google のみ）は自然に0行になる。
+	row := r.pool.QueryRow(ctx,
+		`SELECT u.id, u.email, u.display_name, a.password_hash
+		   FROM users u
+		   JOIN auth_identities a
+		     ON a.user_id = u.id AND a.provider = 'password'
+		  WHERE u.email = $1`, email.String())
+
+	var id, mail, displayName, hash string
+	if err := row.Scan(&id, &mail, &displayName, &hash); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.PasswordCredential{}, service.ErrCredentialNotFound
+		}
+		return service.PasswordCredential{}, fmt.Errorf("認証情報の取得に失敗しました: %w", err)
+	}
+
+	userID, err := domain.ParseUserID(id)
+	if err != nil {
+		return service.PasswordCredential{}, fmt.Errorf("DBのユーザーIDが不正です: %w", err)
+	}
+	addr, err := domain.NewEmail(mail)
+	if err != nil {
+		return service.PasswordCredential{}, fmt.Errorf("DBのメールが不正です: %w", err)
+	}
+
+	return service.PasswordCredential{
+		User: domain.User{
+			ID:          userID,
+			Email:       addr,
+			DisplayName: displayName,
+		},
+		PasswordHash: hash,
+	}, nil
 }
 
 // isEmailTaken はエラーがメールの一意制約違反かどうかを返す。

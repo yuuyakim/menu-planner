@@ -15,13 +15,24 @@ type UserSignUpper interface {
 	SignUp(ctx context.Context, email, password string) (domain.User, error)
 }
 
+// UserLoginner はログイン（認証情報の照合）を抽象化する。実装は service.AuthService。
+type UserLoginner interface {
+	Login(ctx context.Context, email, password string) (domain.User, error)
+}
+
+// AuthUseCase は認証APIが必要とする操作をまとめたもの。
+type AuthUseCase interface {
+	UserSignUpper
+	UserLoginner
+}
+
 // AuthHandler は認証APIの受け口。
 type AuthHandler struct {
-	svc UserSignUpper
+	svc AuthUseCase
 }
 
 // NewAuthHandler は AuthHandler を生成する。
-func NewAuthHandler(s UserSignUpper) *AuthHandler {
+func NewAuthHandler(s AuthUseCase) *AuthHandler {
 	return &AuthHandler{svc: s}
 }
 
@@ -29,6 +40,7 @@ func NewAuthHandler(s UserSignUpper) *AuthHandler {
 func (h *AuthHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
 	g.POST("/auth/signup", h.SignUp)
+	g.POST("/auth/login", h.Login)
 }
 
 // signupRequest は POST /auth/signup のリクエスト（spec.md 5.2）。
@@ -67,6 +79,32 @@ func (h *AuthHandler) SignUp(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, userResponse{User: toUserDTO(user)})
+}
+
+// loginRequest は POST /auth/login のリクエスト（spec.md 5.2）。
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// Login はメールとパスワードで認証する。
+//
+//	POST /api/v1/auth/login
+//
+// 成功時は 200。認証情報が正しくなければ 401（存在しないメールもパスワード
+// 違いも同じ）。Cookie / トークンの発行はこの段階では行わない（5-E / 5-F）。
+func (h *AuthHandler) Login(c echo.Context) error {
+	var req loginRequest
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	user, err := h.svc.Login(c.Request().Context(), req.Email, req.Password)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user)})
 }
 
 func toUserDTO(u domain.User) userDTO {

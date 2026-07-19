@@ -52,6 +52,8 @@ var problemMapping = []struct {
 	{auth.ErrPasswordTooLong, http.StatusBadRequest, "password-too-long", "パスワードが長すぎます"},
 	// メールの重複は「今の状態と競合する」ので 409。
 	{service.ErrEmailTaken, http.StatusConflict, "email-taken", "メールアドレスは既に登録されています"},
+	// 認証失敗。存在しないメールもパスワード違いも同じ 401 に丸める。
+	{service.ErrInvalidCredentials, http.StatusUnauthorized, "invalid-credentials", "メールアドレスまたはパスワードが正しくありません"},
 	// リクエストは正しいが条件に合う献立が無い状態。構文は正しいので400ではなく422。
 	{service.ErrNoMenuFound, http.StatusUnprocessableEntity, "no-menu-found", "条件に合う献立が見つかりません"},
 	// 外部の検索APIの不調。自分の障害ではないので500ではなく502で上流起因だと示す。
