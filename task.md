@@ -351,15 +351,19 @@ API消費は生涯約120クエリで頭打ちになる。
 
 > 完了条件: 認証境界のテストが緑
 
-### PR 5-A: users / auth_identities `feat/auth-schema`
+### PR 5-A: users / auth_identities `feat/auth-schema` ✅
 
-- [ ] 🔧 マイグレーション `000002_create_users`
-- [ ] 🔴 テスト: CHECK制約（password なら hash 必須）
-- [ ] 🔴 テスト: CHECK制約（google なら uid 必須）
-- [ ] 🔴 テスト: UNIQUE (provider, provider_uid)
-- [ ] 🔴 テスト: メールの UNIQUE
-- [ ] 🔴 テスト: user 削除で identity も消える（CASCADE）
-- [ ] 🟢 マイグレーションを実装
+- [x] 🔧 マイグレーション `000003_create_users`
+      → 番号は **`000002` ではなく `000003`**。`000002` は 3-G の
+        `recipe_link_caches` で使用済みのため繰り上げた。
+- [x] 🔴 テスト: CHECK制約（password なら hash 必須）
+- [x] 🔴 テスト: CHECK制約（google なら uid 必須）
+- [x] 🔴 テスト: UNIQUE (provider, provider_uid)
+- [x] 🔴 テスト: メールの UNIQUE
+- [x] 🔴 テスト: user 削除で identity も消える（CASCADE）
+- [x] 🟢 マイグレーションを実装（users / auth_identities）
+      → 統合テストの後始末 `TRUNCATE` に users を追加（menus と参照が無く、
+        メールの UNIQUE がテスト間で衝突するため）。
 
 ### PR 5-B: パスワードのハッシュ化 `feat/password-hashing`
 
