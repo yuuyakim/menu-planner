@@ -37,12 +37,13 @@ type AuthUseCase interface {
 type AuthHandler struct {
 	svc    AuthUseCase
 	tokens *auth.JWT
+	google *auth.GoogleOAuth
 }
 
 // NewAuthHandler は AuthHandler を生成する。
-// tokens はアクセス／リフレッシュトークンの発行・検証に使う。
-func NewAuthHandler(s AuthUseCase, tokens *auth.JWT) *AuthHandler {
-	return &AuthHandler{svc: s, tokens: tokens}
+// tokens はアクセス／リフレッシュトークンの発行・検証、google は Google SSO に使う。
+func NewAuthHandler(s AuthUseCase, tokens *auth.JWT, google *auth.GoogleOAuth) *AuthHandler {
+	return &AuthHandler{svc: s, tokens: tokens, google: google}
 }
 
 // RegisterRoutes は認証APIのルーティングを登録する。
@@ -52,6 +53,7 @@ func (h *AuthHandler) RegisterRoutes(e *echo.Echo) {
 	g.POST("/auth/login", h.Login)
 	g.POST("/auth/refresh", h.Refresh)
 	g.POST("/auth/logout", h.Logout)
+	g.GET("/auth/google", h.GoogleStart)
 	// /auth/me は認証必須。RequireAuth を通ったリクエストだけ来る。
 	g.GET("/auth/me", h.Me, RequireAuth(h.tokens))
 }

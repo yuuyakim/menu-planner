@@ -87,6 +87,15 @@ func newTestUser(t *testing.T, email string) domain.User {
 // authTestSecret はハンドラテスト用の JWT 秘密鍵。
 const authTestSecret = "handler-test-secret-please-ignore-1234"
 
+// testGoogleOAuth はハンドラテスト用の Google OAuth 設定（ダミー値）。
+func testGoogleOAuth() *auth.GoogleOAuth {
+	return auth.NewGoogleOAuth(
+		"test-client-id",
+		"test-client-secret",
+		"http://localhost:8080/api/v1/auth/google/callback",
+	)
+}
+
 // newAuthApp は AuthHandler を登録した echo アプリと、そのトークン発行器を返す。
 func newAuthApp(t *testing.T, svc handler.AuthUseCase, opts ...auth.JWTOption) (*echo.Echo, *auth.JWT) {
 	t.Helper()
@@ -95,7 +104,7 @@ func newAuthApp(t *testing.T, svc handler.AuthUseCase, opts ...auth.JWTOption) (
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(svc, tokens).RegisterRoutes(e)
+	handler.NewAuthHandler(svc, tokens, testGoogleOAuth()).RegisterRoutes(e)
 	return e, tokens
 }
 
