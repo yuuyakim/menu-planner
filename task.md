@@ -510,7 +510,9 @@ API消費は生涯約120クエリで頭打ちになる。
 - [x] 🔴 テスト: メール未確認は拒否（紐付け乗っ取り対策）
 - [x] 🟢 `GET /auth/google/callback` を実装
 - [x] 🔧 実機確認(自動): callback 結線（state無し→401）/ パスワード回帰（サインアップ→/auth/me→200）
-- [ ] 🔧 実機確認(ブラウザ): **Google 実ログイン通し**（要ユーザー操作。/auth/google → 同意 → /auth/me）
+- [x] 🔧 実機確認(ブラウザ): **Google 実ログイン通し** → 成功。/auth/me が
+      `yuuya.kim0801@gmail.com`「キムさん」を返し、DBに user + google identity
+      （provider_uid あり・password_hash なし）が作られた
 
 > コールバックは **state を Cookie と定数時間比較（CSRF対策）** → コードを本人情報に交換
 > （x/oauth2、verifier で PKCE 突合）→ ユーザー upsert → 認証 Cookie 発行 → フロントへ 302。
@@ -525,13 +527,20 @@ API消費は生涯約120クエリで頭打ちになる。
 
 > 完了条件: 16件目でFIFOが働くテストが緑
 
-### PR 6-A: search_histories `feat/history-schema`
+### PR 6-A: search_histories `feat/history-schema` ✅
 
-- [ ] 🔧 マイグレーション `000003_create_search_histories`
-- [ ] 🔧 INDEX (user_id, searched_at DESC)
-- [ ] 🔴 テスト: 履歴を1件記録できる
-- [ ] 🔴 テスト: user 削除で履歴も消える（CASCADE）
-- [ ] 🟢 マイグレーションと Repository の記録を実装
+- [x] 🔧 マイグレーション `000004_create_search_histories`
+      → 番号は `000003` ではなく **`000004`**（`000003` は users で使用済み）。
+- [x] 🔧 INDEX (user_id, searched_at DESC)
+- [x] 🔴 テスト: 履歴を1件記録できる
+- [x] 🔴 テスト: user 削除で履歴も消える（CASCADE）
+- [x] 🔴 テスト: `SearchMode`(single/weekly) の検証（ドメイン）
+- [x] 🟢 マイグレーションと Repository の記録を実装
+- [x] 🔧 実機確認: migrate version 4 適用、INDEX・CHECK・FK を確認
+
+> `search_mode` は single/weekly を CHECK と `domain.SearchMode` の両方で縛る。
+> menu_id の FK は CASCADE を付けない（献立マスタは固定で削除しない）。
+> FIFO（15件超の削除）は 6-B で。ここは1件INSERTのみ。
 
 ### PR 6-B: FIFO 15件 `feat/history-fifo`
 
