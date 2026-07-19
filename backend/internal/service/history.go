@@ -14,6 +14,9 @@ const HistoryLimit = 15
 type HistoryStore interface {
 	// RecordWithLimit は履歴を1件記録し、最新 limit 件に切り詰める。
 	RecordWithLimit(ctx context.Context, userID domain.UserID, menuID domain.MenuID, mode domain.SearchMode, limit int) error
+
+	// RecordManyWithLimit は複数の献立を一括記録し、最新 limit 件に切り詰める。
+	RecordManyWithLimit(ctx context.Context, userID domain.UserID, menuIDs []domain.MenuID, mode domain.SearchMode, limit int) error
 }
 
 // HistoryService は検索履歴の記録を担う。
@@ -29,4 +32,10 @@ func NewHistoryService(store HistoryStore) *HistoryService {
 // Record は履歴を1件記録し、FIFO で最新 HistoryLimit 件に保つ。
 func (s *HistoryService) Record(ctx context.Context, userID domain.UserID, menuID domain.MenuID, mode domain.SearchMode) error {
 	return s.store.RecordWithLimit(ctx, userID, menuID, mode, HistoryLimit)
+}
+
+// RecordMany は複数の献立を一括記録し、FIFO で最新 HistoryLimit 件に保つ。
+// 週間献立の確定時に7件をまとめて記録するのに使う。
+func (s *HistoryService) RecordMany(ctx context.Context, userID domain.UserID, menuIDs []domain.MenuID, mode domain.SearchMode) error {
+	return s.store.RecordManyWithLimit(ctx, userID, menuIDs, mode, HistoryLimit)
 }

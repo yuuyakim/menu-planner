@@ -561,12 +561,16 @@ API消費は生涯約120クエリで頭打ちになる。
 > FIFO は repository が INSERT+DELETE を1トランザクションで（spec.md 4.3）。
 > 保持件数15は業務ルールとして service（`HistoryLimit`）が repository に渡す。
 
-### PR 6-C: 週間献立の一括記録 `feat/history-bulk-record`
+### PR 6-C: 週間献立の一括記録 `feat/history-bulk-record` ✅
 
-- [ ] 🔴 テスト: 7件を1トランザクションで記録
-- [ ] 🔴 テスト: FIFOが7回ではなく1回だけ走る
-- [ ] 🔴 テスト: 途中で失敗したら全件ロールバック
-- [ ] 🟢 一括記録を実装
+- [x] 🔴 テスト: 7件を1トランザクションで記録
+- [x] 🔴 テスト: FIFOが7回ではなく1回だけ走る（全件INSERT後に1度だけ prune）
+- [x] 🔴 テスト: 途中で失敗したら全件ロールバック（FK違反で0件）
+- [x] 🟢 一括記録を実装（`RecordManyWithLimit` / `HistoryService.RecordMany`）
+
+> 7件を1トランザクションで INSERT し、**prune は最後に1度だけ**走らせる
+> （挿入ごとに走らせる必要はなく無駄）。seq タイブレークにより一括の7件は
+> 同一 searched_at でも挿入順が保たれる。途中失敗は全件ロールバック。
 
 ### PR 6-D: `GET /histories` `feat/api-list-histories`
 

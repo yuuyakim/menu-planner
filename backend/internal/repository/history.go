@@ -59,6 +59,41 @@ func (r *HistoryRepository) RecordWithLimit(ctx context.Context, userID domain.U
 	return nil
 }
 
+// RecordManyWithLimit は複数の献立を一括で記録し、最新 limit 件に保つ。
+// 週間献立（7件）の登録に使う。全件の INSERT と切り詰めを1トランザクションで行い、
+// FIFO は最後に1度だけ走らせる（挿入ごとに走らせる必要はなく無駄）。
+// 途中で失敗したら全件ロールバックする。
+func (r *HistoryRepository) RecordManyWithLimit(ctx context.Context, userID domain.UserID, menuIDs []domain.MenuID, mode domain.SearchMode, limit int) error {
+	if len(menuIDs) == 0 {
+		return nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("トランザクションの開始に失敗しました: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	for _, menuID := range menuIDs {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO search_histories (id, user_id, menu_id, search_mode)
+			 VALUES ($1, $2, $3, $4)`,
+			uuid.NewString(), userID.String(), menuID.String(), mode.String()); err != nil {
+			return fmt.Errorf("履歴の記録に失敗しました: %w", err)
+		}
+	}
+
+	// 全件入れ終わってから1度だけ切り詰める。
+	if err := pruneToLimit(ctx, tx, userID, limit); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("トランザクションのコミットに失敗しました: %w", err)
+	}
+	return nil
+}
+
 // pruneToLimit はユーザーの履歴を最新 limit 件に切り詰める。
 // 並びは searched_at の降順、同値なら seq の降順（挿入順のタイブレーク）。
 // now() はトランザクション時刻なので一括登録では searched_at が同値になり、
