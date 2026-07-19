@@ -625,12 +625,18 @@ API消費は生涯約120クエリで頭打ちになる。
 
 > 完了条件: 重複追加が409になるテストが緑
 
-### PR 7-A: favorites `feat/favorites-schema`
+### PR 7-A: favorites `feat/favorites-schema` ✅
 
-- [ ] 🔧 マイグレーション `000004_create_favorites`（UNIQUE (user_id, menu_id)）
-- [ ] 🔴 テスト: UNIQUE 制約が効く
-- [ ] 🔴 テスト: user 削除で消える（CASCADE）
-- [ ] 🟢 マイグレーションを実装
+- [x] 🔧 マイグレーション `000006_create_favorites`（UNIQUE (user_id, menu_id)）
+      → 番号は `000004` ではなく **`000006`**（004=search_histories, 005=seq で使用済み）。
+- [x] 🔴 テスト: UNIQUE 制約が効く（同一ユーザー×同一献立の二重登録を拒否）
+- [x] 🔴 テスト: 別ユーザーなら同じ献立を登録できる
+- [x] 🔴 テスト: user 削除で消える（CASCADE）
+- [x] 🟢 マイグレーションを実装
+- [x] 🔧 実機確認: migrate 000006 up/down/up、UNIQUE・INDEX・FK を確認
+
+> menu_id の FK は CASCADE を付けない（献立マスタは固定）。user_id は CASCADE。
+> INDEX (user_id, created_at DESC) は一覧表示の主経路。重複追加の 409 は 7-B。
 
 ### PR 7-B: お気に入りの追加 `feat/api-add-favorite`
 
