@@ -8,6 +8,7 @@ import (
 
 	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
 // UserSignUpper はサインアップを抽象化する。実装は service.AuthService。
@@ -26,24 +27,40 @@ type CurrentUserGetter interface {
 	CurrentUser(ctx context.Context, userID string) (domain.User, error)
 }
 
+// GoogleUpserter は Google 認証ユーザーの取得・作成を抽象化する。実装は service.AuthService。
+type GoogleUpserter interface {
+	UpsertGoogleUser(ctx context.Context, g service.GoogleUser) (domain.User, error)
+}
+
 // AuthUseCase は認証APIが必要とする操作をまとめたもの。
 type AuthUseCase interface {
 	UserSignUpper
 	UserLoginner
 	CurrentUserGetter
+	GoogleUpserter
+}
+
+// GoogleAuthenticator は Google の認可URL生成とコード交換を抽象化する。
+// 実装は auth.GoogleOAuth。テストで差し替えられるようにする。
+type GoogleAuthenticator interface {
+	Configured() bool
+	AuthCodeURL(state, verifier string) string
+	Exchange(ctx context.Context, code, verifier string) (auth.GoogleIdentity, error)
 }
 
 // AuthHandler は認証APIの受け口。
 type AuthHandler struct {
-	svc    AuthUseCase
-	tokens *auth.JWT
-	google *auth.GoogleOAuth
+	svc         AuthUseCase
+	tokens      *auth.JWT
+	google      GoogleAuthenticator
+	frontendURL string
 }
 
 // NewAuthHandler は AuthHandler を生成する。
-// tokens はアクセス／リフレッシュトークンの発行・検証、google は Google SSO に使う。
-func NewAuthHandler(s AuthUseCase, tokens *auth.JWT, google *auth.GoogleOAuth) *AuthHandler {
-	return &AuthHandler{svc: s, tokens: tokens, google: google}
+// tokens はトークンの発行・検証、google は Google SSO、frontendURL は
+// Google ログイン完了後に戻すフロントのURL。
+func NewAuthHandler(s AuthUseCase, tokens *auth.JWT, google GoogleAuthenticator, frontendURL string) *AuthHandler {
+	return &AuthHandler{svc: s, tokens: tokens, google: google, frontendURL: frontendURL}
 }
 
 // RegisterRoutes は認証APIのルーティングを登録する。
@@ -54,6 +71,7 @@ func (h *AuthHandler) RegisterRoutes(e *echo.Echo) {
 	g.POST("/auth/refresh", h.Refresh)
 	g.POST("/auth/logout", h.Logout)
 	g.GET("/auth/google", h.GoogleStart)
+	g.GET("/auth/google/callback", h.GoogleCallback)
 	// /auth/me は認証必須。RequireAuth を通ったリクエストだけ来る。
 	g.GET("/auth/me", h.Me, RequireAuth(h.tokens))
 }

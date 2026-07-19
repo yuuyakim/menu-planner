@@ -43,6 +43,11 @@ type fakeAuthService struct {
 	currentErr    error
 	lastCurrentID string
 	currentCalls  int
+
+	googleUser    domain.User
+	googleErr     error
+	lastGoogleSub string
+	googleCalls   int
 }
 
 func (s *fakeAuthService) SignUp(_ context.Context, email, password string) (domain.User, error) {
@@ -74,6 +79,15 @@ func (s *fakeAuthService) CurrentUser(_ context.Context, userID string) (domain.
 	return s.currentUser, nil
 }
 
+func (s *fakeAuthService) UpsertGoogleUser(_ context.Context, g service.GoogleUser) (domain.User, error) {
+	s.googleCalls++
+	s.lastGoogleSub = g.Sub
+	if s.googleErr != nil {
+		return domain.User{}, s.googleErr
+	}
+	return s.googleUser, nil
+}
+
 // newTestUser はレスポンス検証用のユーザーを作る。
 func newTestUser(t *testing.T, email string) domain.User {
 	t.Helper()
@@ -86,6 +100,9 @@ func newTestUser(t *testing.T, email string) domain.User {
 
 // authTestSecret はハンドラテスト用の JWT 秘密鍵。
 const authTestSecret = "handler-test-secret-please-ignore-1234"
+
+// testFrontendURL は Google ログイン後の戻り先（テスト用）。
+const testFrontendURL = "http://localhost:5173"
 
 // testGoogleOAuth はハンドラテスト用の Google OAuth 設定（ダミー値）。
 func testGoogleOAuth() *auth.GoogleOAuth {
@@ -104,7 +121,7 @@ func newAuthApp(t *testing.T, svc handler.AuthUseCase, opts ...auth.JWTOption) (
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(svc, tokens, testGoogleOAuth()).RegisterRoutes(e)
+	handler.NewAuthHandler(svc, tokens, testGoogleOAuth(), testFrontendURL).RegisterRoutes(e)
 	return e, tokens
 }
 

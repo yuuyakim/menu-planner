@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
@@ -94,6 +95,35 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (domain
 	}
 
 	return cred.User, nil
+}
+
+// GoogleUser は Google 認証で得た本人情報（service の入力）。
+type GoogleUser struct {
+	Sub         string
+	Email       string
+	DisplayName string
+}
+
+// UpsertGoogleUser は Google 認証のユーザーを取得または作成する。
+// 既存のパスワードユーザーと同じメールなら同一ユーザーに Google を紐付ける
+// （spec.md 1.4）。判断と永続化は repository がトランザクションで行う。
+func (s *AuthService) UpsertGoogleUser(ctx context.Context, g GoogleUser) (domain.User, error) {
+	email, err := domain.NewEmail(g.Email)
+	if err != nil {
+		return domain.User{}, err
+	}
+
+	// Google が表示名を返さないことがある。その場合はメールのローカル部から作る。
+	name := strings.TrimSpace(g.DisplayName)
+	if name == "" {
+		derived, err := domain.NewUser(email)
+		if err != nil {
+			return domain.User{}, err
+		}
+		name = derived.DisplayName
+	}
+
+	return s.users.FindOrCreateGoogleUser(ctx, g.Sub, email, name)
 }
 
 // CurrentUser はトークンの主体(userID)からユーザーを取得する。

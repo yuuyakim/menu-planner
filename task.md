@@ -499,16 +499,25 @@ API消費は生涯約120クエリで頭打ちになる。
 > （Strict だと送られない）。認可URLの生成は x/oauth2 に任せる（5-I のトークン交換でも使う）。
 > Google 未設定でも起動し、`/auth/google` だけ 503 にする（任意機能）。
 
-### PR 5-I: Google SSO のコールバック `feat/google-callback`
+### PR 5-I: Google SSO のコールバック `feat/google-callback` ✅（コード）
 
-- [ ] 🔴 テスト: state 不一致で 401（CSRF対策）
-- [ ] 🔴 テスト: state が無い場合も 401
-- [ ] 🔴 テスト: code_verifier 不一致で 401
-- [ ] 🔴 テスト: 初回コールバックで user が作られる
-- [ ] 🔴 テスト: 2回目は既存 user に紐づく（重複作成しない）
-- [ ] 🔴 テスト: **既存のパスワードユーザーと同じメール**なら同一userに identity を追加
-- [ ] 🟢 `GET /auth/google/callback` を実装
-- [ ] 🔧 実機確認: サインアップ→ログイン→/auth/me
+- [x] 🔴 テスト: state 不一致で 401（CSRF対策）
+- [x] 🔴 テスト: state が無い場合も 401
+- [x] 🔴 テスト: code_verifier 不一致で 401（Exchange 失敗を 401 に丸める）
+- [x] 🔴 テスト: 初回コールバックで user が作られる（統合）
+- [x] 🔴 テスト: 2回目は既存 user に紐づく（重複作成しない）（統合）
+- [x] 🔴 テスト: **既存のパスワードユーザーと同じメール**なら同一userに identity を追加（統合）
+- [x] 🔴 テスト: メール未確認は拒否（紐付け乗っ取り対策）
+- [x] 🟢 `GET /auth/google/callback` を実装
+- [x] 🔧 実機確認(自動): callback 結線（state無し→401）/ パスワード回帰（サインアップ→/auth/me→200）
+- [ ] 🔧 実機確認(ブラウザ): **Google 実ログイン通し**（要ユーザー操作。/auth/google → 同意 → /auth/me）
+
+> コールバックは **state を Cookie と定数時間比較（CSRF対策）** → コードを本人情報に交換
+> （x/oauth2、verifier で PKCE 突合）→ ユーザー upsert → 認証 Cookie 発行 → フロントへ 302。
+> **メール未確認は拒否**（未確認メールでの紐付けは乗っ取りに使えるため）。
+> upsert は3分岐（既存google / 同一メールに紐付け / 新規）をトランザクションで。
+> トークン交換・userinfo は httptest でスタブ、ハンドラは fake で検証。
+> 実フローは実クレデンシャル＋ブラウザ同意が要るためユーザーが踏む。
 
 ---
 
