@@ -75,9 +75,19 @@ func run() error {
 	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway, recipeCache)
 	menuHandler := handler.NewMenuHandler(menuSvc)
 
+	// JWT の秘密鍵が無いと誰でも通るサーバになりかねない。起動時に落とす。
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		return errors.New("JWT_SECRET が設定されていません")
+	}
+	tokens, err := auth.NewJWT([]byte(jwtSecret))
+	if err != nil {
+		return fmt.Errorf("JWTの初期化に失敗しました: %w", err)
+	}
+
 	userRepo := repository.NewUserRepository(pool)
 	authSvc := service.NewAuthService(userRepo, auth.Hasher{})
-	authHandler := handler.NewAuthHandler(authSvc)
+	authHandler := handler.NewAuthHandler(authSvc, tokens)
 
 	e := echo.New()
 	e.HideBanner = true

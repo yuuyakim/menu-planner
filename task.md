@@ -439,13 +439,27 @@ API消費は生涯約120クエリで頭打ちになる。
 > 前でなければ失効）なので、15分ちょうどは失効が正しい。`now` を差し替え可能にし、
 > 期限判定をテストと本番で同じ経路に通す。ライブラリ単体のため main 結線は 5-F 以降。
 
-### PR 5-F: Cookie とリフレッシュ `feat/auth-cookie`
+### PR 5-F: Cookie とリフレッシュ `feat/auth-cookie` ✅
 
-- [ ] 🔴 テスト: Cookie 属性（HttpOnly / Secure / SameSite=Lax）
-- [ ] 🔴 テスト: リフレッシュトークンで再発行（30日）
-- [ ] 🔴 テスト: 期限切れリフレッシュトークンで 401
-- [ ] 🔴 テスト: ログアウトで Cookie が失効する
-- [ ] 🟢 Cookie の発行・失効と `/auth/refresh`、`/auth/logout` を実装
+- [x] 🔴 テスト: Cookie 属性（HttpOnly / Secure / SameSite=Lax）
+- [x] 🔴 テスト: リフレッシュトークンで再発行（30日。exp は排他的）
+- [x] 🔴 テスト: 期限切れリフレッシュトークンで 401
+- [x] 🔴 テスト: ログアウトで Cookie が失効する
+- [x] 🔴 テスト: **リフレッシュ⇄アクセスの取り違えを拒否**（種別 typ クレーム）
+- [x] 🔴 テスト: リフレッシュ Cookie 欠落で 401
+- [x] 🟢 Cookie の発行・失効と `/auth/refresh`、`/auth/logout` を実装
+- [x] 🔧 実機確認: ログインで両Cookie発行（access Max-Age=900/refresh 2592000）/
+      refresh(Cookie有)→204・(無)→401 / logout で両Cookie Max-Age=0
+
+> **リフレッシュは stateless**（署名付きJWT・30日）。スキーマにトークン表が無く、
+> spec.md 66-67 も「JWTで受け渡し」のため。ログアウトは Cookie 失効で表す。
+>
+> **種別クレーム `typ`(access/refresh) を追加**。これが無いと長寿命の
+> リフレッシュトークンを短寿命のはずのアクセストークンとして使い回せてしまう。
+> **リフレッシュ Cookie はパスを `/api/v1/auth` に絞る**（長寿命トークンの露出範囲を最小化）。
+> サインアップ／ログイン成功時に両Cookieを発行（サインアップは自動ログイン）。
+> `/auth/refresh` はアクセスCookieだけ差し替えて 204、`/auth/logout` は冪等で 204。
+> `main.go` は `JWT_SECRET` 未設定なら起動時エラー。
 
 ### PR 5-G: 認証ミドルウェア `feat/auth-middleware`
 

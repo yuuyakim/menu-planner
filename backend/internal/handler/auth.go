@@ -6,6 +6,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
 
@@ -28,12 +29,14 @@ type AuthUseCase interface {
 
 // AuthHandler は認証APIの受け口。
 type AuthHandler struct {
-	svc AuthUseCase
+	svc    AuthUseCase
+	tokens *auth.JWT
 }
 
 // NewAuthHandler は AuthHandler を生成する。
-func NewAuthHandler(s AuthUseCase) *AuthHandler {
-	return &AuthHandler{svc: s}
+// tokens はアクセス／リフレッシュトークンの発行・検証に使う。
+func NewAuthHandler(s AuthUseCase, tokens *auth.JWT) *AuthHandler {
+	return &AuthHandler{svc: s, tokens: tokens}
 }
 
 // RegisterRoutes は認証APIのルーティングを登録する。
@@ -41,6 +44,8 @@ func (h *AuthHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
 	g.POST("/auth/signup", h.SignUp)
 	g.POST("/auth/login", h.Login)
+	g.POST("/auth/refresh", h.Refresh)
+	g.POST("/auth/logout", h.Logout)
 }
 
 // signupRequest は POST /auth/signup のリクエスト（spec.md 5.2）。
@@ -78,6 +83,11 @@ func (h *AuthHandler) SignUp(c echo.Context) error {
 		return err
 	}
 
+	// 登録と同時にログイン状態にする。認証 Cookie を発行する。
+	if err := h.issueSession(c, user.ID.String()); err != nil {
+		return err
+	}
+
 	return c.JSON(http.StatusCreated, userResponse{User: toUserDTO(user)})
 }
 
@@ -104,7 +114,46 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		return err
 	}
 
+	if err := h.issueSession(c, user.ID.String()); err != nil {
+		return err
+	}
+
 	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user)})
+}
+
+// Refresh はリフレッシュトークンでアクセストークンを再発行する。
+//
+//	POST /api/v1/auth/refresh
+//
+// リフレッシュ Cookie が無い・無効・期限切れならすべて 401。成功時は
+// アクセス Cookie を差し替えて 204（本体は無い。フロントは元の要求を再送する）。
+func (h *AuthHandler) Refresh(c echo.Context) error {
+	cookie, err := c.Cookie(refreshCookieName)
+	if err != nil {
+		// Cookie が無いのも「認証されていない」ので 401 に丸める。
+		return auth.ErrTokenInvalid
+	}
+
+	claims, err := h.tokens.VerifyRefresh(cookie.Value)
+	if err != nil {
+		return err
+	}
+
+	if err := h.refreshAccess(c, claims.UserID); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// Logout は認証 Cookie を失効させる。
+//
+//	POST /api/v1/auth/logout
+//
+// 未ログインでも成功扱い（冪等）。トークンは stateless なので、サーバ側では
+// Cookie を消すことでログアウトとする。
+func (h *AuthHandler) Logout(c echo.Context) error {
+	clearSession(c)
+	return c.NoContent(http.StatusNoContent)
 }
 
 func toUserDTO(u domain.User) userDTO {
