@@ -586,13 +586,20 @@ API消費は生涯約120クエリで頭打ちになる。
 > 認証済み userID は RequireAuth がコンテキストに載せたものを使い、SQL で user_id を
 > 絞るので他人の履歴は構造上返らない。個別削除(6-E)に使うため履歴IDも返す。
 
-### PR 6-E: 履歴の削除 `feat/api-delete-histories`
+### PR 6-E: 履歴の削除 `feat/api-delete-histories` ✅
 
-- [ ] 🔴 テスト: 個別削除
-- [ ] 🔴 テスト: 他ユーザーの履歴削除で 403
-- [ ] 🔴 テスト: 存在しない履歴の削除で 404
-- [ ] 🔴 テスト: 全件削除
-- [ ] 🟢 `DELETE /histories/:id` と `DELETE /histories` を実装
+- [x] 🔴 テスト: 個別削除（204）
+- [x] 🔴 テスト: 他ユーザーの履歴削除で 403（`ErrHistoryForbidden`）
+- [x] 🔴 テスト: 存在しない履歴の削除で 404（`ErrHistoryNotFound`）
+- [x] 🔴 テスト: 全件削除（他ユーザーの履歴は残る）
+- [x] 🔴 テスト: 不正なUUIDで 400 / 未認証で 401
+- [x] 🟢 `DELETE /histories/:id` と `DELETE /histories` を実装
+- [x] 🔧 実機確認: 個別204 / 存在しない404 / 不正UUID400 / 全件204 / 削除後は空配列
+
+> **所有権を先に確認してから消す**。DELETE の件数だけでは「存在しない(404)」と
+> 「他人のもの(403)」を区別できないため、先に user_id を引いて判定する。
+> spec は他人の履歴を 403 と定めるため、存在の有無が漏れることは許容する。
+> 静的な `DELETE /histories`（全件）は `:id` より優先照合され飲み込まれない。
 
 ### PR 6-F: 検索フローへの結線 `feat/wire-history`
 
