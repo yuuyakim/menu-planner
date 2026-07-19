@@ -67,6 +67,30 @@ func TestHistoryRepository_List_OnlyOwnUser(t *testing.T) {
 	require.Len(t, entries, 1, "自分の履歴だけが返るべき")
 }
 
+func TestHistoryRepository_RecentMenuIDs_Distinct(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+
+	u := newUser(t, "recent@example.com")
+	require.NoError(t, repository.NewUserRepository(pool).CreateWithPassword(ctx, u, "hash"))
+	m1 := insertMenu(t, pool, "親子丼", domain.GenreJapanese, domain.DifficultyEasy)
+	m2 := insertMenu(t, pool, "カレー", domain.GenreOther, domain.DifficultyEasy)
+
+	repo := repository.NewHistoryRepository(pool)
+	// m1 を2回、m2 を1回記録。
+	require.NoError(t, repo.Add(ctx, u.ID, m1.ID, domain.SearchModeSingle))
+	require.NoError(t, repo.Add(ctx, u.ID, m1.ID, domain.SearchModeSingle))
+	require.NoError(t, repo.Add(ctx, u.ID, m2.ID, domain.SearchModeSingle))
+
+	ids, err := repo.RecentMenuIDs(ctx, u.ID)
+	require.NoError(t, err)
+	// 重複を除いて2件。
+	require.Len(t, ids, 2)
+	got := map[string]bool{ids[0].String(): true, ids[1].String(): true}
+	require.True(t, got[m1.ID.String()])
+	require.True(t, got[m2.ID.String()])
+}
+
 func TestHistoryRepository_List_Empty(t *testing.T) {
 	pool := newTestPool(t)
 	ctx := context.Background()

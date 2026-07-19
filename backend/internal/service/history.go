@@ -30,6 +30,9 @@ type HistoryStore interface {
 	// List はユーザーの履歴を新しい順に返す。該当が無ければ空スライス。
 	List(ctx context.Context, userID domain.UserID) ([]domain.HistoryEntry, error)
 
+	// RecentMenuIDs は履歴に含まれる献立IDを返す（検索時の除外候補に使う）。
+	RecentMenuIDs(ctx context.Context, userID domain.UserID) ([]domain.MenuID, error)
+
 	// Delete は履歴を1件削除する。存在しなければ ErrHistoryNotFound、
 	// 他人のものなら ErrHistoryForbidden を返す。
 	Delete(ctx context.Context, userID domain.UserID, historyID domain.HistoryID) error
@@ -49,14 +52,33 @@ func NewHistoryService(store HistoryStore) *HistoryService {
 }
 
 // Record は履歴を1件記録し、FIFO で最新 HistoryLimit 件に保つ。
-func (s *HistoryService) Record(ctx context.Context, userID domain.UserID, menuID domain.MenuID, mode domain.SearchMode) error {
-	return s.store.RecordWithLimit(ctx, userID, menuID, mode, HistoryLimit)
+// userID は認証ミドルウェアが載せた検証済みの値。壊れていれば ErrUserNotFound。
+func (s *HistoryService) Record(ctx context.Context, userID string, menuID domain.MenuID, mode domain.SearchMode) error {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	return s.store.RecordWithLimit(ctx, uid, menuID, mode, HistoryLimit)
 }
 
 // RecordMany は複数の献立を一括記録し、FIFO で最新 HistoryLimit 件に保つ。
 // 週間献立の確定時に7件をまとめて記録するのに使う。
-func (s *HistoryService) RecordMany(ctx context.Context, userID domain.UserID, menuIDs []domain.MenuID, mode domain.SearchMode) error {
-	return s.store.RecordManyWithLimit(ctx, userID, menuIDs, mode, HistoryLimit)
+func (s *HistoryService) RecordMany(ctx context.Context, userID string, menuIDs []domain.MenuID, mode domain.SearchMode) error {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	return s.store.RecordManyWithLimit(ctx, uid, menuIDs, mode, HistoryLimit)
+}
+
+// RecentMenuIDs は直近履歴に含まれる献立IDを返す。検索時の除外候補に使う。
+// FIFO で最大15件しか残らないため、これが「直近15件」の献立に相当する。
+func (s *HistoryService) RecentMenuIDs(ctx context.Context, userID string) ([]domain.MenuID, error) {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+	return s.store.RecentMenuIDs(ctx, uid)
 }
 
 // List は認証済みユーザーの履歴を新しい順に返す。

@@ -2,12 +2,16 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
 // APIBasePath は全APIエンドポイントの接頭辞。
@@ -48,26 +52,46 @@ type MenuUseCase interface {
 	MenuDayReroller
 }
 
+// MenuHistory は献立検索と履歴の連携を抽象化する。実装は service.HistoryService。
+// 献立検索は未認証でも使えるため、履歴は「ログイン中なら活かす」補助的な依存。
+type MenuHistory interface {
+	// RecentMenuIDs は直近履歴の献立ID（除外候補）を返す。
+	RecentMenuIDs(ctx context.Context, userID string) ([]domain.MenuID, error)
+	// Record は提案した献立を履歴に記録する。
+	Record(ctx context.Context, userID string, menuID domain.MenuID, mode domain.SearchMode) error
+	// RecordMany は週間献立の複数件を履歴に記録する。
+	RecordMany(ctx context.Context, userID string, menuIDs []domain.MenuID, mode domain.SearchMode) error
+}
+
 // MenuHandler は献立APIの受け口。
 type MenuHandler struct {
-	svc MenuUseCase
+	svc     MenuUseCase
+	history MenuHistory
+	tokens  *auth.JWT
 }
 
 // NewMenuHandler は MenuHandler を生成する。
-func NewMenuHandler(s MenuUseCase) *MenuHandler {
-	return &MenuHandler{svc: s}
+// history / tokens はログイン中の利用者に履歴を連携するために使う。
+func NewMenuHandler(s MenuUseCase, history MenuHistory, tokens *auth.JWT) *MenuHandler {
+	return &MenuHandler{svc: s, history: history, tokens: tokens}
 }
 
 // RegisterRoutes は献立APIのルーティングを登録する。
 // パスの定義をハンドラと同じ場所に置き、テストで実際のパスごと検証できるようにする。
+//
+// OptionalAuth は履歴を活かす提案系のルートにだけ個別に付ける。グループ全体に
+// 付けると echo の method-not-allowed 判定が変わり、未対応メソッドが 405 ではなく
+// 404 になってしまうため（param ルート /menus/:id との兼ね合い）。未認証でも 200 の
+// まま使え、ログイン中なら userID をコンテキストから取れる（履歴の除外・記録に使う）。
 func (h *MenuHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
+	optional := OptionalAuth(h.tokens)
 	// /menus/suggest は /menus/:id と同じ階層にあるが、echo は静的なパスを
 	// パラメータより優先して照合するため、:id に飲み込まれることはない。
-	g.GET("/menus/suggest", h.Suggest)
+	g.GET("/menus/suggest", h.Suggest, optional)
 	// 状態は変えないが、条件をボディで受けるため POST（spec.md 5.1）。
-	g.POST("/menus/suggest-weekly", h.SuggestWeekly)
-	g.POST("/menus/reroll-day", h.RerollDay)
+	g.POST("/menus/suggest-weekly", h.SuggestWeekly, optional)
+	g.POST("/menus/reroll-day", h.RerollDay, optional)
 	g.GET("/menus/:id", h.Get)
 	g.GET("/menus/:id/recipes", h.Recipes)
 }
@@ -93,15 +117,43 @@ type menuResponse struct {
 // Suggest は条件に合う献立を1件提案する。
 //
 //	GET /api/v1/menus/suggest?genre=&difficulty=
+//
+// ログイン中なら直近履歴の献立を避け、提案結果を履歴に記録する。
+// 未認証なら履歴には触れず、これまで通り提案だけを返す。
 func (h *MenuHandler) Suggest(c echo.Context) error {
 	f, err := parseMenuFilter(c)
 	if err != nil {
 		return err
 	}
+	ctx := c.Request().Context()
+	userID, authed := UserIDFromContext(c)
 
-	menu, err := h.svc.SuggestMenu(c.Request().Context(), f)
+	// ログイン中は直近履歴を除外候補に足す。
+	base := f
+	if authed {
+		if recent, err := h.history.RecentMenuIDs(ctx, userID); err != nil {
+			// 履歴の取得失敗で提案を止めない。除外なしで続ける。
+			slog.Warn("直近履歴の取得に失敗しました", "error", err)
+		} else {
+			f.ExcludeIDs = append(f.ExcludeIDs, recent...)
+		}
+	}
+
+	menu, err := h.svc.SuggestMenu(ctx, f)
+	// 履歴除外で候補が尽きたら、除外を外して再試行する（履歴は可能な限り避けるが、
+	// 避けた結果1件も出せないなら履歴の献立を出す。spec.md 2.2 のルール3）。
+	if errors.Is(err, service.ErrNoMenuFound) && len(f.ExcludeIDs) > len(base.ExcludeIDs) {
+		menu, err = h.svc.SuggestMenu(ctx, base)
+	}
 	if err != nil {
 		return err
+	}
+
+	if authed {
+		// 記録の失敗で提案を失敗させない。ログだけ残す。
+		if err := h.history.Record(ctx, userID, menu.ID, domain.SearchModeSingle); err != nil {
+			slog.Warn("履歴の記録に失敗しました", "error", err)
+		}
 	}
 
 	return c.JSON(http.StatusOK, menuResponse{Menu: toMenuDTO(*menu)})
@@ -180,17 +232,38 @@ func (h *MenuHandler) SuggestWeekly(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	ctx := c.Request().Context()
+	userID, authed := UserIDFromContext(c)
 
-	// 履歴による除外はフェーズ6で結線する。現時点では何も避けない。
-	week, err := h.svc.SuggestWeekly(c.Request().Context(), f, nil)
+	// ログイン中は直近履歴を渡す。SuggestWeekly は候補が枯渇すれば履歴除外を
+	// 緩和する（4-E）ので、単発検索と違ってハード除外ではなく第3引数で渡す。
+	var recent []domain.MenuID
+	if authed {
+		if recent, err = h.history.RecentMenuIDs(ctx, userID); err != nil {
+			slog.Warn("直近履歴の取得に失敗しました", "error", err)
+			recent = nil
+		}
+	}
+
+	week, err := h.svc.SuggestWeekly(ctx, f, recent)
 	if err != nil {
 		return err
 	}
 
 	days := make([]dayMenuDTO, 0, len(week))
+	menuIDs := make([]domain.MenuID, 0, len(week))
 	for _, d := range week {
 		days = append(days, dayMenuDTO{Day: d.Day, Menu: toMenuDTO(d.Menu)})
+		menuIDs = append(menuIDs, d.Menu.ID)
 	}
+
+	if authed {
+		// 7件を1トランザクションでまとめて記録（6-C）。失敗しても提案は返す。
+		if err := h.history.RecordMany(ctx, userID, menuIDs, domain.SearchModeWeekly); err != nil {
+			slog.Warn("週間献立の履歴記録に失敗しました", "error", err)
+		}
+	}
+
 	return c.JSON(http.StatusOK, weeklyResponse{Week: days})
 }
 
@@ -273,8 +346,20 @@ func (h *MenuHandler) RerollDay(c echo.Context) error {
 		week = append(week, id)
 	}
 
-	// 履歴による除外はフェーズ6で結線する。
-	picked, err := h.svc.RerollDay(c.Request().Context(), f, week, req.Day, nil)
+	ctx := c.Request().Context()
+	userID, authed := UserIDFromContext(c)
+
+	// ログイン中は直近履歴も避ける。引き直しは確定前の絞り込み操作なので
+	// 履歴には記録しない（記録は suggest / suggest-weekly の確定時のみ）。
+	var recent []domain.MenuID
+	if authed {
+		if recent, err = h.history.RecentMenuIDs(ctx, userID); err != nil {
+			slog.Warn("直近履歴の取得に失敗しました", "error", err)
+			recent = nil
+		}
+	}
+
+	picked, err := h.svc.RerollDay(ctx, f, week, req.Day, recent)
 	if err != nil {
 		return err
 	}

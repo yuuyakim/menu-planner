@@ -23,8 +23,10 @@ type fakeHistoryStore struct {
 	listCalls      int
 	deleteCalls    int
 	deleteAllCalls int
+	recentCalls    int
 	lastHistoryID  domain.HistoryID
 	entries        []domain.HistoryEntry
+	recentIDs      []domain.MenuID
 	err            error
 }
 
@@ -52,6 +54,12 @@ func (s *fakeHistoryStore) List(_ context.Context, userID domain.UserID) ([]doma
 	return s.entries, s.err
 }
 
+func (s *fakeHistoryStore) RecentMenuIDs(_ context.Context, userID domain.UserID) ([]domain.MenuID, error) {
+	s.lastUserID = userID
+	s.recentCalls++
+	return s.recentIDs, s.err
+}
+
 func (s *fakeHistoryStore) Delete(_ context.Context, userID domain.UserID, historyID domain.HistoryID) error {
 	s.deleteCalls++
 	s.lastUserID = userID
@@ -73,7 +81,7 @@ func TestHistoryService_Record_PassesLimit15(t *testing.T) {
 
 	userID := domain.NewUserID()
 	menuID := domain.NewMenuID()
-	require.NoError(t, svc.Record(context.Background(), userID, menuID, domain.SearchModeSingle))
+	require.NoError(t, svc.Record(context.Background(), userID.String(), menuID, domain.SearchModeSingle))
 
 	require.Equal(t, 1, store.calls)
 	require.Equal(t, userID.String(), store.lastUserID.String())
@@ -90,7 +98,7 @@ func TestHistoryService_Record_PropagatesError(t *testing.T) {
 	store := &fakeHistoryStore{err: errors.New("DB爆発")}
 	svc := service.NewHistoryService(store)
 
-	err := svc.Record(context.Background(), domain.NewUserID(), domain.NewMenuID(), domain.SearchModeWeekly)
+	err := svc.Record(context.Background(), domain.NewUserID().String(), domain.NewMenuID(), domain.SearchModeWeekly)
 	require.Error(t, err)
 }
 
@@ -117,6 +125,32 @@ func TestHistoryService_List_MalformedUserID(t *testing.T) {
 	_, err := svc.List(context.Background(), "not-a-uuid")
 	require.ErrorIs(t, err, service.ErrUserNotFound)
 	require.Zero(t, store.listCalls)
+}
+
+func TestHistoryService_RecentMenuIDs_Delegates(t *testing.T) {
+	t.Parallel()
+
+	want := []domain.MenuID{domain.NewMenuID(), domain.NewMenuID()}
+	store := &fakeHistoryStore{recentIDs: want}
+	svc := service.NewHistoryService(store)
+
+	userID := domain.NewUserID()
+	got, err := svc.RecentMenuIDs(context.Background(), userID.String())
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, 1, store.recentCalls)
+	require.Equal(t, userID.String(), store.lastUserID.String())
+}
+
+func TestHistoryService_Record_MalformedUserID(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeHistoryStore{}
+	svc := service.NewHistoryService(store)
+
+	err := svc.Record(context.Background(), "not-a-uuid", domain.NewMenuID(), domain.SearchModeSingle)
+	require.ErrorIs(t, err, service.ErrUserNotFound)
+	require.Zero(t, store.calls)
 }
 
 func TestHistoryService_Delete_ParsesIDs(t *testing.T) {
@@ -164,7 +198,7 @@ func TestHistoryService_RecordMany_PassesAllAndLimit15(t *testing.T) {
 
 	userID := domain.NewUserID()
 	menuIDs := []domain.MenuID{domain.NewMenuID(), domain.NewMenuID(), domain.NewMenuID()}
-	require.NoError(t, svc.RecordMany(context.Background(), userID, menuIDs, domain.SearchModeWeekly))
+	require.NoError(t, svc.RecordMany(context.Background(), userID.String(), menuIDs, domain.SearchModeWeekly))
 
 	require.Equal(t, 1, store.manyCalls)
 	require.Len(t, store.lastMenuIDs, 3)
