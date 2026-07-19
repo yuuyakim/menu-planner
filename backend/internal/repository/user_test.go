@@ -69,6 +69,55 @@ func TestUserRepository_CreateWithPassword_DuplicateEmail(t *testing.T) {
 	require.Zero(t, count, "重複時はユーザーも作られないべき")
 }
 
+func TestUserRepository_FindPasswordCredential_Found(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	u := newUser(t, "taro@example.com")
+	require.NoError(t, repo.CreateWithPassword(ctx, u, "bcrypthash"))
+
+	cred, err := repo.FindPasswordCredential(ctx, u.Email)
+	require.NoError(t, err)
+	require.Equal(t, u.ID.String(), cred.User.ID.String())
+	require.Equal(t, "taro@example.com", cred.User.Email.String())
+	require.Equal(t, "taro", cred.User.DisplayName)
+	require.Equal(t, "bcrypthash", cred.PasswordHash)
+}
+
+func TestUserRepository_FindPasswordCredential_UnknownEmail(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	email, err := domain.NewEmail("nobody@example.com")
+	require.NoError(t, err)
+
+	_, err = repo.FindPasswordCredential(ctx, email)
+	require.ErrorIs(t, err, service.ErrCredentialNotFound)
+}
+
+func TestUserRepository_FindPasswordCredential_GoogleOnly(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	// Google 認証のみのユーザーを直接作る（パスワード identity を持たない）。
+	u := newUser(t, "google@example.com")
+	_, err := pool.Exec(ctx,
+		`INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)`,
+		u.ID.String(), u.Email.String(), u.DisplayName)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
+		`INSERT INTO auth_identities (id, user_id, provider, provider_uid)
+		 VALUES (gen_random_uuid(), $1, 'google', 'google-sub-1')`, u.ID.String())
+	require.NoError(t, err)
+
+	// パスワード認証は無いので見つからない扱い。
+	_, err = repo.FindPasswordCredential(ctx, u.Email)
+	require.ErrorIs(t, err, service.ErrCredentialNotFound)
+}
+
 func TestUserRepository_CreateWithPassword_Atomicity(t *testing.T) {
 	pool := newTestPool(t)
 	repo := repository.NewUserRepository(pool)

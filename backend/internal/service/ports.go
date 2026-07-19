@@ -74,6 +74,18 @@ type RecipeLinkCache interface {
 // service 側で定義し、repository はこれを返す。
 var ErrEmailTaken = errors.New("メールアドレスは既に登録されています")
 
+// ErrCredentialNotFound はメールに対応するパスワード認証が無いことを表す。
+// 「ユーザーが存在しない」場合と「存在するが Google 認証のみ」場合の
+// どちらもこれで表す。呼び出し側（Login）はこれとパスワード不一致を
+// 区別せず同じ結果に丸め、ユーザーの存在を推測されないようにする。
+var ErrCredentialNotFound = errors.New("パスワード認証が見つかりません")
+
+// PasswordCredential はパスワード照合に必要な、ユーザーとハッシュの組。
+type PasswordCredential struct {
+	User         domain.User
+	PasswordHash string
+}
+
 // UserRepository はユーザーと認証情報の永続化を抽象化する。
 // 実装は internal/repository にある。
 type UserRepository interface {
@@ -81,6 +93,11 @@ type UserRepository interface {
 	// 1トランザクションで作る。片方だけ残る状態を防ぐため必ず両方一括で作る。
 	// メールが既に使われている場合は ErrEmailTaken を返す。
 	CreateWithPassword(ctx context.Context, u domain.User, passwordHash string) error
+
+	// FindPasswordCredential はメールに対応するパスワード認証を返す。
+	// ユーザーが居ない、または Google 認証のみでパスワードを持たない場合は
+	// ErrCredentialNotFound を返す。
+	FindPasswordCredential(ctx context.Context, email domain.Email) (PasswordCredential, error)
 }
 
 // PasswordHasher はパスワードのハッシュ化と検証を抽象化する。
