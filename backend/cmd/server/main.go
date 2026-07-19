@@ -70,11 +70,6 @@ func run() error {
 	}
 	slog.Info("レシピ検索を設定しました", "provider", os.Getenv("SEARCH_API_PROVIDER"))
 
-	menuRepo := repository.NewMenuRepository(pool)
-	recipeCache := repository.NewRecipeLinkCache(pool)
-	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway, recipeCache)
-	menuHandler := handler.NewMenuHandler(menuSvc)
-
 	// JWT の秘密鍵が無いと誰でも通るサーバになりかねない。起動時に落とす。
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
@@ -99,6 +94,12 @@ func run() error {
 	historyRepo := repository.NewHistoryRepository(pool)
 	historySvc := service.NewHistoryService(historyRepo)
 	historyHandler := handler.NewHistoryHandler(historySvc, tokens)
+
+	menuRepo := repository.NewMenuRepository(pool)
+	recipeCache := repository.NewRecipeLinkCache(pool)
+	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway, recipeCache)
+	// 献立検索は履歴（RecentMenuIDs / Record）とトークン（OptionalAuth）を使う。
+	menuHandler := handler.NewMenuHandler(menuSvc, historySvc, tokens)
 
 	e := echo.New()
 	e.HideBanner = true

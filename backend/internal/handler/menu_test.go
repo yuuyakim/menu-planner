@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
 	"github.com/yuuyakim/menu-planner/backend/internal/repository"
@@ -23,6 +24,32 @@ import (
 // service.MenuService が handler の要求するインターフェースを満たすことを
 // コンパイル時に保証する。実行時ではなくビルド時に気付けるようにする。
 var _ handler.MenuUseCase = (*service.MenuService)(nil)
+var _ handler.MenuHistory = (*service.HistoryService)(nil)
+
+// menuTestTokens は menu ハンドラテスト用の JWT。これらのテストは Cookie を
+// 送らないため、OptionalAuth は常に「未認証」として素通りする。
+var menuTestTokens = mustJWT()
+
+func mustJWT() *auth.JWT {
+	tk, err := auth.NewJWT([]byte(authTestSecret))
+	if err != nil {
+		panic(err)
+	}
+	return tk
+}
+
+// noopMenuHistory は履歴連携を無効化するダミー。未認証テストでは呼ばれない。
+type noopMenuHistory struct{}
+
+func (noopMenuHistory) RecentMenuIDs(context.Context, string) ([]domain.MenuID, error) {
+	return nil, nil
+}
+func (noopMenuHistory) Record(context.Context, string, domain.MenuID, domain.SearchMode) error {
+	return nil
+}
+func (noopMenuHistory) RecordMany(context.Context, string, []domain.MenuID, domain.SearchMode) error {
+	return nil
+}
 
 // fakeMenuService は service.MenuService の代わりに定型の結果を返す。
 type fakeMenuService struct {
@@ -31,6 +58,9 @@ type fakeMenuService struct {
 	// lastFilter は最後に SuggestMenu に渡された条件。
 	lastFilter domain.MenuFilter
 	calls      int
+	// noMenuWhenExcluded が真なら、ExcludeIDs 付きの検索を ErrNoMenuFound にする。
+	// 履歴除外で枯渇→除外を外して再試行、というフォールバックの検証に使う。
+	noMenuWhenExcluded bool
 
 	// getMenu / getErr は GetMenu の返り値。Suggest 側と分けておき、
 	// 片方のテストがもう片方の設定に引きずられないようにする。
@@ -98,6 +128,9 @@ func (s *fakeMenuService) RecipeLinks(_ context.Context, id domain.MenuID) ([]do
 func (s *fakeMenuService) SuggestMenu(_ context.Context, f domain.MenuFilter) (*domain.Menu, error) {
 	s.calls++
 	s.lastFilter = f
+	if s.noMenuWhenExcluded && len(f.ExcludeIDs) > 0 {
+		return nil, service.ErrNoMenuFound
+	}
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -130,7 +163,7 @@ func doSuggest(t *testing.T, s *fakeMenuService, query string) *httptest.Respons
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
 
 	target := "/api/v1/menus/suggest"
 	if query != "" {
@@ -291,7 +324,7 @@ func doGet(t *testing.T, s *fakeMenuService, id string) *httptest.ResponseRecord
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/menus/"+id, nil))
@@ -423,7 +456,7 @@ func doGetRecipes(t *testing.T, s *fakeMenuService, id string) *httptest.Respons
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/menus/"+id+"/recipes", nil))
@@ -567,7 +600,7 @@ func doSuggestWeekly(t *testing.T, s *fakeMenuService, body string) *httptest.Re
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/suggest-weekly", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
@@ -699,7 +732,7 @@ func TestSuggestWeekly_ボディが空でも200(t *testing.T) {
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/menus/suggest-weekly", nil))
@@ -753,7 +786,7 @@ func TestSuggestWeekly_POST以外は受け付けない(t *testing.T) {
 			s := &fakeMenuService{week: testWeek()}
 			e := echo.New()
 			e.HTTPErrorHandler = handler.ErrorHandler()
-			handler.NewMenuHandler(s).RegisterRoutes(e)
+			handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
 
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, httptest.NewRequest(tt.method, "/api/v1/menus/suggest-weekly", nil))
@@ -770,7 +803,7 @@ func doRerollDay(t *testing.T, s *fakeMenuService, body string) *httptest.Respon
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/reroll-day", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)

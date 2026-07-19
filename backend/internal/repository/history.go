@@ -92,6 +92,37 @@ func (r *HistoryRepository) List(ctx context.Context, userID domain.UserID) ([]d
 	return entries, nil
 }
 
+// RecentMenuIDs は履歴に含まれる献立IDを新しい順・重複なしで返す。
+// FIFO で最大15件しか残らないため、これが直近の献立に相当する。
+func (r *HistoryRepository) RecentMenuIDs(ctx context.Context, userID domain.UserID) ([]domain.MenuID, error) {
+	// DISTINCT で献立IDを一意にする。同じ献立が複数回出ても除外対象は1つ。
+	// 並びは新しい順だが、除外集合として使うので順序自体は重要ではない。
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT menu_id FROM search_histories WHERE user_id = $1`,
+		userID.String())
+	if err != nil {
+		return nil, fmt.Errorf("直近履歴の取得に失敗しました: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]domain.MenuID, 0)
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, fmt.Errorf("直近履歴の読み取りに失敗しました: %w", err)
+		}
+		id, err := domain.ParseMenuID(raw)
+		if err != nil {
+			return nil, fmt.Errorf("DBの献立IDが不正です: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("直近履歴の読み取りに失敗しました: %w", err)
+	}
+	return ids, nil
+}
+
 // Delete は履歴を1件削除する。存在しなければ service.ErrHistoryNotFound、
 // 他人のものなら service.ErrHistoryForbidden を返す。
 //

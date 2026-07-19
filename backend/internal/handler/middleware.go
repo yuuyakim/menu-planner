@@ -34,8 +34,27 @@ func RequireAuth(tokens *auth.JWT) echo.MiddlewareFunc {
 	}
 }
 
-// UserIDFromContext は RequireAuth が載せた userID を取り出す。
-// ミドルウェアを通っていなければ ok=false。
+// OptionalAuth はアクセストークンがあれば検証して userID をコンテキストに載せるが、
+// 無くても・無効でも拒否せず先へ通す。
+//
+// 献立検索のように「未認証でも使えるが、ログイン中なら履歴を活かしたい」
+// エンドポイントに使う。RequireAuth との違いは、認証が無くても 401 にしないこと。
+func OptionalAuth(tokens *auth.JWT) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if cookie, err := c.Cookie(accessCookieName); err == nil {
+				// 無効なトークンは「未認証」として扱い、素通りさせる。
+				if claims, err := tokens.Verify(cookie.Value); err == nil {
+					c.Set(userIDContextKey, claims.UserID)
+				}
+			}
+			return next(c)
+		}
+	}
+}
+
+// UserIDFromContext は RequireAuth / OptionalAuth が載せた userID を取り出す。
+// 載っていなければ ok=false。
 func UserIDFromContext(c echo.Context) (string, bool) {
 	v, ok := c.Get(userIDContextKey).(string)
 	return v, ok && v != ""
