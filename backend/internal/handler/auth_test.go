@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -69,18 +70,41 @@ func newTestUser(t *testing.T, email string) domain.User {
 	return u
 }
 
+// authTestSecret はハンドラテスト用の JWT 秘密鍵。
+const authTestSecret = "handler-test-secret-please-ignore-1234"
+
+// newAuthApp は AuthHandler を登録した echo アプリと、そのトークン発行器を返す。
+func newAuthApp(t *testing.T, svc handler.AuthUseCase, opts ...auth.JWTOption) (*echo.Echo, *auth.JWT) {
+	t.Helper()
+	tokens, err := auth.NewJWT([]byte(authTestSecret), opts...)
+	require.NoError(t, err)
+
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewAuthHandler(svc, tokens).RegisterRoutes(e)
+	return e, tokens
+}
+
 // doSignUp はサインアップのリクエストを1本実行してレスポンスを返す。
 func doSignUp(t *testing.T, svc handler.AuthUseCase, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	e := echo.New()
-	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(svc).RegisterRoutes(e)
+	e, _ := newAuthApp(t, svc)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/signup", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	return rec
+}
+
+// findCookie はレスポンスの Set-Cookie から指定名の Cookie を探す。
+func findCookie(rec *httptest.ResponseRecorder, name string) *http.Cookie {
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name == name {
+			return ck
+		}
+	}
+	return nil
 }
 
 func TestSignUp_Created(t *testing.T) {
@@ -154,9 +178,7 @@ func TestSignUp_MalformedJSON(t *testing.T) {
 // doLogin はログインのリクエストを1本実行してレスポンスを返す。
 func doLogin(t *testing.T, svc handler.AuthUseCase, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	e := echo.New()
-	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(svc).RegisterRoutes(e)
+	e, _ := newAuthApp(t, svc)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
@@ -209,4 +231,143 @@ func TestLogin_MalformedJSON(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Zero(t, svc.loginCalls)
+}
+
+func TestLogin_SetsAuthCookies(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{loginUser: newTestUser(t, "taro@example.com")}
+	rec := doLogin(t, svc, `{"email":"taro@example.com","password":"supersecret"}`)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	access := findCookie(rec, "access_token")
+	require.NotNil(t, access, "アクセス Cookie が発行されるべき")
+	assert.NotEmpty(t, access.Value)
+	assert.True(t, access.HttpOnly, "HttpOnly であるべき")
+	assert.True(t, access.Secure, "Secure であるべき")
+	assert.Equal(t, http.SameSiteLaxMode, access.SameSite, "SameSite=Lax であるべき")
+	assert.Equal(t, "/", access.Path)
+	assert.Positive(t, access.MaxAge, "寿命が設定されるべき")
+
+	refresh := findCookie(rec, "refresh_token")
+	require.NotNil(t, refresh, "リフレッシュ Cookie が発行されるべき")
+	assert.True(t, refresh.HttpOnly)
+	assert.True(t, refresh.Secure)
+	assert.Equal(t, http.SameSiteLaxMode, refresh.SameSite)
+	// リフレッシュは /auth 配下にだけ送る。
+	assert.Equal(t, "/api/v1/auth", refresh.Path)
+	// 30日のほうがアクセス(15分)より寿命が長い。
+	assert.Greater(t, refresh.MaxAge, access.MaxAge)
+}
+
+func TestSignUp_SetsAuthCookies(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{user: newTestUser(t, "taro@example.com")}
+	rec := doSignUp(t, svc, `{"email":"taro@example.com","password":"supersecret"}`)
+	require.Equal(t, http.StatusCreated, rec.Code)
+
+	// サインアップでも自動ログインとして Cookie を発行する。
+	require.NotNil(t, findCookie(rec, "access_token"))
+	require.NotNil(t, findCookie(rec, "refresh_token"))
+}
+
+func TestRefresh_RenewsAccessCookie(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{}
+	e, tokens := newAuthApp(t, svc)
+
+	// 正当なリフレッシュトークンを Cookie に載せて送る。
+	refresh, err := tokens.IssueRefresh("user-123")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: refresh})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+
+	// 新しいアクセス Cookie が返り、その中身は user-123 のアクセストークン。
+	access := findCookie(rec, "access_token")
+	require.NotNil(t, access)
+	claims, err := tokens.Verify(access.Value)
+	require.NoError(t, err)
+	assert.Equal(t, "user-123", claims.UserID)
+}
+
+func TestRefresh_MissingCookieUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{}
+	e, _ := newAuthApp(t, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestRefresh_ExpiredTokenUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// 発行時刻を過去に固定してリフレッシュトークンを作る。
+	_, issuer := newAuthApp(t, svc, auth.WithNow(func() time.Time { return base }))
+	expired, err := issuer.IssueRefresh("user-123")
+	require.NoError(t, err)
+
+	// 検証側は30日より後の「今」で動かす。
+	e, _ := newAuthApp(t, svc, auth.WithNow(func() time.Time { return base.Add(31 * 24 * time.Hour) }))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: expired})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestRefresh_AccessTokenRejected(t *testing.T) {
+	t.Parallel()
+
+	// アクセストークンをリフレッシュ Cookie に載せても再発行できない（種別違い）。
+	svc := &fakeAuthService{}
+	e, tokens := newAuthApp(t, svc)
+	access, err := tokens.Issue("user-123")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: access})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestLogout_ClearsCookies(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{}
+	e, _ := newAuthApp(t, svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+
+	// 認証 Cookie が即時失効する（MaxAge<0）。
+	access := findCookie(rec, "access_token")
+	require.NotNil(t, access)
+	assert.Negative(t, access.MaxAge, "アクセス Cookie が失効するべき")
+	assert.Empty(t, access.Value)
+
+	refresh := findCookie(rec, "refresh_token")
+	require.NotNil(t, refresh)
+	assert.Negative(t, refresh.MaxAge, "リフレッシュ Cookie が失効するべき")
+	assert.Equal(t, "/api/v1/auth", refresh.Path)
 }
