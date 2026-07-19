@@ -56,6 +56,8 @@ var problemMapping = []struct {
 	{service.ErrInvalidCredentials, http.StatusUnauthorized, "invalid-credentials", "メールアドレスまたはパスワードが正しくありません"},
 	// トークンが無効（欠落・期限切れ・改竄・種別違い）。内訳は明かさず一律 401。
 	{auth.ErrTokenInvalid, http.StatusUnauthorized, "token-invalid", "認証が必要です"},
+	// 有効なトークンが指すユーザーが居ない＝セッション不正。再ログインを促す 401。
+	{service.ErrUserNotFound, http.StatusUnauthorized, "user-not-found", "認証が必要です"},
 	// リクエストは正しいが条件に合う献立が無い状態。構文は正しいので400ではなく422。
 	{service.ErrNoMenuFound, http.StatusUnprocessableEntity, "no-menu-found", "条件に合う献立が見つかりません"},
 	// 外部の検索APIの不調。自分の障害ではないので500ではなく502で上流起因だと示す。

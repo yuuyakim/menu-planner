@@ -38,6 +38,11 @@ type fakeAuthService struct {
 	lastLoginMail string
 	lastLoginPass string
 	loginCalls    int
+
+	currentUser   domain.User
+	currentErr    error
+	lastCurrentID string
+	currentCalls  int
 }
 
 func (s *fakeAuthService) SignUp(_ context.Context, email, password string) (domain.User, error) {
@@ -58,6 +63,15 @@ func (s *fakeAuthService) Login(_ context.Context, email, password string) (doma
 		return domain.User{}, s.loginErr
 	}
 	return s.loginUser, nil
+}
+
+func (s *fakeAuthService) CurrentUser(_ context.Context, userID string) (domain.User, error) {
+	s.lastCurrentID = userID
+	s.currentCalls++
+	if s.currentErr != nil {
+		return domain.User{}, s.currentErr
+	}
+	return s.currentUser, nil
 }
 
 // newTestUser はレスポンス検証用のユーザーを作る。
@@ -370,4 +384,74 @@ func TestLogout_ClearsCookies(t *testing.T) {
 	require.NotNil(t, refresh)
 	assert.Negative(t, refresh.MaxAge, "リフレッシュ Cookie が失効するべき")
 	assert.Equal(t, "/api/v1/auth", refresh.Path)
+}
+
+func TestMe_ReturnsCurrentUser(t *testing.T) {
+	t.Parallel()
+
+	user := newTestUser(t, "taro@example.com")
+	svc := &fakeAuthService{currentUser: user}
+	e, tokens := newAuthApp(t, svc)
+
+	// 有効なアクセストークンを Cookie に載せる。
+	access, err := tokens.Issue(user.ID.String())
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	// ミドルウェアが検証した userID が service に渡る。
+	assert.Equal(t, user.ID.String(), svc.lastCurrentID)
+	assert.Contains(t, rec.Body.String(), "taro@example.com")
+}
+
+func TestMe_NoCookieUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{}
+	e, _ := newAuthApp(t, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	// ミドルウェアで弾かれ、service は呼ばれない。
+	assert.Zero(t, svc.currentCalls)
+}
+
+func TestMe_InvalidTokenUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{}
+	e, _ := newAuthApp(t, svc)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: "garbage.token.value"})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Zero(t, svc.currentCalls)
+}
+
+func TestMe_RefreshTokenRejected(t *testing.T) {
+	t.Parallel()
+
+	// リフレッシュトークンをアクセス Cookie に載せても認証は通らない（種別違い）。
+	svc := &fakeAuthService{}
+	e, tokens := newAuthApp(t, svc)
+	refresh, err := tokens.IssueRefresh("user-123")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: refresh})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Zero(t, svc.currentCalls)
 }

@@ -461,13 +461,22 @@ API消費は生涯約120クエリで頭打ちになる。
 > `/auth/refresh` はアクセスCookieだけ差し替えて 204、`/auth/logout` は冪等で 204。
 > `main.go` は `JWT_SECRET` 未設定なら起動時エラー。
 
-### PR 5-G: 認証ミドルウェア `feat/auth-middleware`
+### PR 5-G: 認証ミドルウェア `feat/auth-middleware` ✅
 
-- [ ] 🔴 テスト: 認証必須エンドポイントに未認証で 401
-- [ ] 🔴 テスト: 有効なCookieでコンテキストにユーザーが入る
-- [ ] 🔴 テスト: 献立検索は未認証でも 200（認証不要の確認）
-- [ ] 🔴 テスト: `GET /auth/me` が現在のユーザーを返す
-- [ ] 🟢 ミドルウェアと `/auth/me` を実装
+- [x] 🔴 テスト: 認証必須エンドポイントに未認証で 401（Cookie欠落・不正トークン）
+- [x] 🔴 テスト: 有効なCookieでコンテキストにユーザーが入る（service に userID が渡る）
+- [x] 🔴 テスト: 献立検索は未認証でも 200（menu ルートを包まないことで担保）
+- [x] 🔴 テスト: `GET /auth/me` が現在のユーザーを返す
+- [x] 🔴 テスト: リフレッシュトークンをアクセス Cookie に載せても 401（種別違い）
+- [x] 🟢 ミドルウェア `RequireAuth` と `/auth/me` を実装
+- [x] 🔧 実機確認: 未認証 /auth/me→401 / ログイン→Cookie→200 /
+      献立検索は未認証でも200 / ログアウト後→401
+
+> `RequireAuth` はアクセス Cookie を検証し、userID を echo コンテキストに載せる。
+> 認証不要のエンドポイント（献立検索）は**包まないことで未認証でも 200 のまま**。
+> `/auth/me` はトークンの sub から DB を引いてユーザーを返す（`UserRepository.FindByID`
+> / `AuthService.CurrentUser`）。有効なトークンが指すユーザーが消えていたら 401
+> （`ErrUserNotFound` → 401）。フェーズ5の認証境界はここで完成（残りは 5-H/5-I の Google SSO）。
 
 ### PR 5-H: Google SSO の認可URL `feat/google-auth-url`
 

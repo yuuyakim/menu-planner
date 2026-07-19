@@ -69,6 +69,29 @@ func TestUserRepository_CreateWithPassword_DuplicateEmail(t *testing.T) {
 	require.Zero(t, count, "重複時はユーザーも作られないべき")
 }
 
+func TestUserRepository_FindByID_Found(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+	ctx := context.Background()
+
+	u := newUser(t, "taro@example.com")
+	require.NoError(t, repo.CreateWithPassword(ctx, u, "hash"))
+
+	got, err := repo.FindByID(ctx, u.ID)
+	require.NoError(t, err)
+	require.Equal(t, u.ID.String(), got.ID.String())
+	require.Equal(t, "taro@example.com", got.Email.String())
+	require.Equal(t, "taro", got.DisplayName)
+}
+
+func TestUserRepository_FindByID_NotFound(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+
+	_, err := repo.FindByID(context.Background(), domain.NewUserID())
+	require.ErrorIs(t, err, service.ErrUserNotFound)
+}
+
 func TestUserRepository_FindPasswordCredential_Found(t *testing.T) {
 	pool := newTestPool(t)
 	repo := repository.NewUserRepository(pool)
