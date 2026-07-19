@@ -542,16 +542,24 @@ API消費は生涯約120クエリで頭打ちになる。
 > menu_id の FK は CASCADE を付けない（献立マスタは固定で削除しない）。
 > FIFO（15件超の削除）は 6-B で。ここは1件INSERTのみ。
 
-### PR 6-B: FIFO 15件 `feat/history-fifo`
+### PR 6-B: FIFO 15件 `feat/history-fifo` ✅
 
 フェーズ6の核。単独のPRで集中的にテストする。
 
-- [ ] 🔴 テスト: 15件までは削除されない（境界値）
-- [ ] 🔴 テスト: **16件目の投入で最古が消え、ちょうど15件残る**
-- [ ] 🔴 テスト: FIFOはユーザー単位（他ユーザーの履歴が消えない）
-- [ ] 🔴 テスト: 21件を一度に入れても15件に収まる
-- [ ] 🔴 テスト: `searched_at` が同値でも順序が安定する（タイブレーク）
-- [ ] 🟢 `service.RecordHistory` を実装（アプリ層・トランザクション内）
+- [x] 🔴 テスト: 15件までは削除されない（境界値）
+- [x] 🔴 テスト: **16件目の投入で最古が消え、ちょうど15件残る**
+- [x] 🔴 テスト: FIFOはユーザー単位（他ユーザーの履歴が消えない）
+- [x] 🔴 テスト: 21件を一度に入れても15件に収まる
+- [x] 🔴 テスト: `searched_at` が同値でも順序が安定する（タイブレーク＝seq）
+- [x] 🟢 `service.RecordHistory` を実装（アプリ層・トランザクション内）
+- [x] 🔧 実機確認: migrate 000005 up/down/up、seq 列と3列インデックスを確認
+
+> **タイブレーク用に `seq`(bigint IDENTITY) 列を追加**（migration 000005）。
+> `searched_at` は now()=トランザクション時刻で、週間一括登録では7件が同値になる。
+> `ORDER BY searched_at DESC` だけでは同値の行の順序が定まらず「最新15件」が
+> 非決定的になるため、`searched_at DESC, seq DESC` で挿入順に確定する。
+> FIFO は repository が INSERT+DELETE を1トランザクションで（spec.md 4.3）。
+> 保持件数15は業務ルールとして service（`HistoryLimit`）が repository に渡す。
 
 ### PR 6-C: 週間献立の一括記録 `feat/history-bulk-record`
 
