@@ -74,6 +74,10 @@ type RecipeLinkCache interface {
 // service 側で定義し、repository はこれを返す。
 var ErrEmailTaken = errors.New("メールアドレスは既に登録されています")
 
+// ErrUserNotFound はIDに対応するユーザーが存在しないことを表す。
+// 有効なトークンが指すユーザーが消えている場合などに使う。
+var ErrUserNotFound = errors.New("ユーザーが見つかりません")
+
 // ErrCredentialNotFound はメールに対応するパスワード認証が無いことを表す。
 // 「ユーザーが存在しない」場合と「存在するが Google 認証のみ」場合の
 // どちらもこれで表す。呼び出し側（Login）はこれとパスワード不一致を
@@ -98,6 +102,9 @@ type UserRepository interface {
 	// ユーザーが居ない、または Google 認証のみでパスワードを持たない場合は
 	// ErrCredentialNotFound を返す。
 	FindPasswordCredential(ctx context.Context, email domain.Email) (PasswordCredential, error)
+
+	// FindByID はIDでユーザーを取得する。存在しない場合は ErrUserNotFound を返す。
+	FindByID(ctx context.Context, id domain.UserID) (domain.User, error)
 }
 
 // PasswordHasher はパスワードのハッシュ化と検証を抽象化する。

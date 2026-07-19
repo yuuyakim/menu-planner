@@ -38,6 +38,16 @@ func (r *fakeUserRepository) FindPasswordCredential(_ context.Context, email dom
 	return cred, nil
 }
 
+func (r *fakeUserRepository) FindByID(_ context.Context, id domain.UserID) (domain.User, error) {
+	// seedCredential で入れたユーザーを ID で引けるようにする。
+	for _, cred := range r.credentials {
+		if cred.User.ID.String() == id.String() {
+			return cred.User, nil
+		}
+	}
+	return domain.User{}, service.ErrUserNotFound
+}
+
 func (r *fakeUserRepository) CreateWithPassword(_ context.Context, u domain.User, hash string) error {
 	r.calls++
 	if r.err != nil {

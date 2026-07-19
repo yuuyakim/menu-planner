@@ -21,10 +21,16 @@ type UserLoginner interface {
 	Login(ctx context.Context, email, password string) (domain.User, error)
 }
 
+// CurrentUserGetter は現在のユーザーの取得を抽象化する。実装は service.AuthService。
+type CurrentUserGetter interface {
+	CurrentUser(ctx context.Context, userID string) (domain.User, error)
+}
+
 // AuthUseCase は認証APIが必要とする操作をまとめたもの。
 type AuthUseCase interface {
 	UserSignUpper
 	UserLoginner
+	CurrentUserGetter
 }
 
 // AuthHandler は認証APIの受け口。
@@ -46,6 +52,8 @@ func (h *AuthHandler) RegisterRoutes(e *echo.Echo) {
 	g.POST("/auth/login", h.Login)
 	g.POST("/auth/refresh", h.Refresh)
 	g.POST("/auth/logout", h.Logout)
+	// /auth/me は認証必須。RequireAuth を通ったリクエストだけ来る。
+	g.GET("/auth/me", h.Me, RequireAuth(h.tokens))
 }
 
 // signupRequest は POST /auth/signup のリクエスト（spec.md 5.2）。
@@ -154,6 +162,25 @@ func (h *AuthHandler) Refresh(c echo.Context) error {
 func (h *AuthHandler) Logout(c echo.Context) error {
 	clearSession(c)
 	return c.NoContent(http.StatusNoContent)
+}
+
+// Me は現在のユーザー情報を返す。
+//
+//	GET /api/v1/auth/me
+//
+// RequireAuth を前置しているので、ここに来る時点で認証済み。
+func (h *AuthHandler) Me(c echo.Context) error {
+	userID, ok := UserIDFromContext(c)
+	if !ok {
+		// ミドルウェアを通っていれば必ず入っている。保険として 401。
+		return auth.ErrTokenInvalid
+	}
+
+	user, err := h.svc.CurrentUser(c.Request().Context(), userID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user)})
 }
 
 func toUserDTO(u domain.User) userDTO {

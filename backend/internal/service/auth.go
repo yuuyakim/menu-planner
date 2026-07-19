@@ -95,3 +95,18 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (domain
 
 	return cred.User, nil
 }
+
+// CurrentUser はトークンの主体(userID)からユーザーを取得する。
+// 認証ミドルウェアが検証済みの userID を渡す前提。
+//
+// userID が壊れている・指すユーザーが消えている場合は ErrUserNotFound を返す。
+// どちらも「有効なセッションが無い」状態なので、呼び出し側は 401 に丸める。
+func (s *AuthService) CurrentUser(ctx context.Context, userID string) (domain.User, error) {
+	// sub は自分が署名した UUID のはずだが、壊れていてもパニックせず
+	// セッション不正として扱う。
+	id, err := domain.ParseUserID(userID)
+	if err != nil {
+		return domain.User{}, ErrUserNotFound
+	}
+	return s.users.FindByID(ctx, id)
+}
