@@ -95,7 +95,12 @@ func newTestPool(t *testing.T) *pgxpool.Pool {
 		// 付けないと "cannot truncate a table referenced in a foreign key
 		// constraint" で落ちる。参照側も一緒に消えるのは、どちらもテストの
 		// 後始末として消したい表なので都合が良い。
-		_, err := pool.Exec(context.Background(), "TRUNCATE menus CASCADE")
+		//
+		// users は menus と参照関係が無いため別途消す。消さないと
+		// メールの UNIQUE がテスト間で衝突する。auth_identities は
+		// users を参照するので CASCADE で一緒に消える。
+		_, err := pool.Exec(context.Background(),
+			"TRUNCATE menus, users CASCADE")
 		require.NoError(t, err)
 		pool.Close()
 	})
