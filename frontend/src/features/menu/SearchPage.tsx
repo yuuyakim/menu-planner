@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { suggestMenu } from './api'
 import { MenuCard } from './MenuCard'
+import { RecipeList } from './RecipeList'
 import { SearchForm, type MenuFilter } from './SearchForm'
 
 // SearchPage は献立検索の画面。
@@ -50,6 +51,12 @@ export function SearchPage() {
           >
             別の献立を見る
           </button>
+
+          <section className="space-y-3 pt-2">
+            <h2 className="font-bold">レシピ</h2>
+            {/* レシピの失敗はこの中で閉じる。献立の表示は道連れにしない。 */}
+            <RecipeList menuId={menu.id} />
+          </section>
         </div>
       )}
     </section>
