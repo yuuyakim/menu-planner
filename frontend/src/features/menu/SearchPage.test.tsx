@@ -202,4 +202,30 @@ describe('検索結果', () => {
     expect(screen.getByRole('button', { name: '別の献立を見る' })).toBeVisible()
     expect(screen.getByRole('button', { name: '再試行' })).toBeVisible()
   })
+
+  it('お気に入りの星は献立カードの中に置く', async () => {
+    const user = userEvent.setup()
+    respondWith(oyakodon)
+    server.use(
+      http.get('/api/v1/auth/me', () =>
+        HttpResponse.json({
+          user: {
+            id: '018f0000-0000-7000-8000-000000000009',
+            email: 'user@example.com',
+            displayName: 'ユーザー',
+          },
+        }),
+      ),
+      http.get('/api/v1/favorites', () => HttpResponse.json({ favorites: [] })),
+    )
+    renderWithProviders(<SearchPage />)
+
+    await user.click(search())
+    const card = await screen.findByRole('article')
+
+    // カードの外（下）ではなく中に置く。縦に積むとカードが高くなる。
+    expect(
+      within(card).getByRole('button', { name: 'お気に入りに追加' }),
+    ).toBeVisible()
+  })
 })
