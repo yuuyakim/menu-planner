@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router'
 
 import type { Menu } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
@@ -38,6 +40,18 @@ function StarIcon({ filled }: { filled: boolean }) {
 export function FavoriteButton({ menu }: { menu: Menu }) {
   const { user } = useCurrentUser()
   const queryClient = useQueryClient()
+  const location = useLocation()
+  const [promptingLogin, setPromptingLogin] = useState(false)
+
+  // Esc で閉じられるようにする。開いている間だけ待ち受ける。
+  useEffect(() => {
+    if (!promptingLogin) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPromptingLogin(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [promptingLogin])
 
   const { data: favorites } = useQuery({
     queryKey: favoritesQueryKey,
@@ -59,18 +73,29 @@ export function FavoriteButton({ menu }: { menu: Menu }) {
     },
   })
 
-  // お気に入りは本人のものだけを扱うため、未ログインでは出さない。
-  if (!user) return null
-
   const label = isFavorite ? 'お気に入り済み' : 'お気に入りに追加'
 
+  // 未ログインでも星は出す。隠すと機能の存在に気づけない。
+  // 押されたときに、何をすれば使えるのかをその場で伝える。
+  function onClick() {
+    if (!user) {
+      setPromptingLogin(true)
+      return
+    }
+    toggle.mutate()
+  }
+
   return (
-    // 星はカードの右端に置く。エラーは絶対配置で重ねて出し、
-    // 失敗したときだけカードの高さが変わる（＝並びがずれる）のを防ぐ。
-    <div className="relative shrink-0">
+    // 星はカードの右端に置く。エラーと案内は絶対配置で重ねて出し、
+    // それらが出たときだけカードの高さが変わる（＝並びがずれる）のを防ぐ。
+    //
+    // self-start が要る。flex の既定（stretch）だとこの箱がカードの高さまで
+    // 伸び、top-full の基準が箱の下端＝カード下端になってしまう。
+    // その結果、案内が星から離れた位置に出ていた。
+    <div className="relative shrink-0 self-start">
       <button
         type="button"
-        onClick={() => toggle.mutate()}
+        onClick={onClick}
         disabled={toggle.isPending}
         // 図形だけのボタンなので、名前は必ず属性で与える。
         aria-label={label}
@@ -86,6 +111,36 @@ export function FavoriteButton({ menu }: { menu: Menu }) {
       >
         <StarIcon filled={isFavorite} />
       </button>
+
+      {promptingLogin && (
+        <div
+          role="dialog"
+          aria-label="お気に入りにはログインが必要です"
+          className="absolute right-0 top-full z-20 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+        >
+          <p className="text-sm text-slate-700">
+            ログインすると、気に入った献立をお気に入りに登録できます。
+          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <Link
+              // ログイン後は今いる画面に戻す。お気に入りにしたかった献立を
+              // 探し直させない（戻り先は RequireAuth と同じ仕組み）。
+              to="/login"
+              state={{ from: location.pathname }}
+              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              ログイン / 新規登録
+            </Link>
+            <button
+              type="button"
+              onClick={() => setPromptingLogin(false)}
+              className="text-sm text-slate-600 underline"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
 
       {toggle.error && (
         <div className="absolute right-0 top-full z-10 mt-1 w-max max-w-64">
