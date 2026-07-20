@@ -3,13 +3,18 @@ import { render, type RenderOptions } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 
+import { queryDefaults } from '../app/queryDefaults'
+
 // createTestQueryClient はテスト用の QueryClient を作る。
-// リトライを切るのは、失敗を確かめるテストが既定の指数バックオフを
-// 待たされて遅くなる（かつタイムアウトする）のを防ぐため。
+//
+// 本番の既定（queryDefaults）を土台にする。ここだけ違う設定にすると、
+// キャッシュに起因する不具合がテストに映らなくなる。
+// 唯一変えるのはリトライで、失敗を確かめるテストが指数バックオフを
+// 待たされて遅くなる（かつ時間切れになる）のを防ぐため。
 export function createTestQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
-      queries: { retry: false },
+      queries: { ...queryDefaults, retry: false },
       mutations: { retry: false },
     },
   })
