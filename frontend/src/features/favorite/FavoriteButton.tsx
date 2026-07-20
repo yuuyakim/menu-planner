@@ -65,7 +65,9 @@ export function FavoriteButton({ menu }: { menu: Menu }) {
   const label = isFavorite ? 'お気に入り済み' : 'お気に入りに追加'
 
   return (
-    <div className="space-y-2">
+    // 星はカードの右端に置く。エラーは絶対配置で重ねて出し、
+    // 失敗したときだけカードの高さが変わる（＝並びがずれる）のを防ぐ。
+    <div className="relative shrink-0">
       <button
         type="button"
         onClick={() => toggle.mutate()}
@@ -85,7 +87,11 @@ export function FavoriteButton({ menu }: { menu: Menu }) {
         <StarIcon filled={isFavorite} />
       </button>
 
-      {toggle.error && <ErrorMessage error={toggle.error} />}
+      {toggle.error && (
+        <div className="absolute right-0 top-full z-10 mt-1 w-max max-w-64">
+          <ErrorMessage error={toggle.error} />
+        </div>
+      )}
     </div>
   )
 }
