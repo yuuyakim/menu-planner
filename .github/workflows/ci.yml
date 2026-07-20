@@ -88,6 +88,58 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 依存のインストール
+        working-directory: frontend
+        run: npm ci
+
+      # ブラウザ本体はキャッシュせず毎回入れる。数十秒で済み、
+      # バージョン不一致による分かりにくい失敗を避けられる。
+      - name: ブラウザのインストール
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # アプリ一式（DB・backend・frontend）を起動する。
+      # SEARCH_API_PROVIDER は compose の既定が stub なので外部APIは叩かない。
+      - name: アプリの起動
+        run: docker compose up -d --wait --wait-timeout 300
+
+      - name: マイグレーションと献立マスタの投入
+        run: |
+          docker compose run --rm backend go run ./cmd/migrate up
+          docker compose run --rm backend go run ./cmd/seed
+
+      - name: E2E
+        working-directory: frontend
+        run: npx playwright test
+
+      - name: 失敗時のレポート
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: 失敗時のログ出力
+        if: failure()
+        run: docker compose logs
+
+      - name: 後片付け
+        if: always()
+        run: docker compose down --volumes
+
   docker:
     name: Docker build
     runs-on: ubuntu-latest

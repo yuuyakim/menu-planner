@@ -8,6 +8,9 @@ export default defineConfig({
   test: {
     // ブラウザAPI(DOM/fetch)を使うため jsdom 上で動かす。
     environment: 'jsdom',
+    // 単体テストは src だけ。e2e/ は Playwright が実ブラウザで動かすもので、
+    // Vitest から実行すると @playwright/test の API が無くて落ちる。
+    include: ['src/**/*.test.{ts,tsx}'],
     // describe / it / expect を import なしでも使えるようにする。
     // 各テストは明示的に import しているが、globals 前提のライブラリ
     // （@testing-library/jest-dom）が動くために必要。
