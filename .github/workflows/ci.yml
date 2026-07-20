@@ -62,6 +62,14 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      # 生成物をコミットしているため、openapi.yaml だけ直して再生成し忘れると
+      # 型と仕様がずれる。再生成して差分が出たら落とす。
+      - name: API型が最新か確認
+        working-directory: frontend
+        run: |
+          npm run gen:api
+          git diff --exit-code src/api/schema.d.ts
+
       - name: 型チェック
         working-directory: frontend
         run: npx tsc --noEmit
