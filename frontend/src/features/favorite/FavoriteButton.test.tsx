@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
@@ -41,14 +41,105 @@ function respondFavorites(...favorites: FavoriteItem[]) {
 }
 
 describe('お気に入りボタン', () => {
-  it('未ログインなら表示しない', async () => {
+  it('未ログインでも星は表示する', async () => {
     // 既定のハンドラは未ログイン(401)。
+    // 隠すと機能の存在に気づけない。押したときに案内する。
     renderWithProviders(<FavoriteButton menu={menu} />)
 
-    // ログイン判定が済んでもボタンは出ない。
-    await waitFor(() =>
-      expect(screen.queryByRole('button')).not.toBeInTheDocument(),
+    expect(
+      await screen.findByRole('button', { name: 'お気に入りに追加' }),
+    ).toBeVisible()
+  })
+
+  it('未ログインで押すとログインを促し、登録はしない', async () => {
+    const user = userEvent.setup()
+    let called = false
+    server.use(
+      http.post('/api/v1/favorites', () => {
+        called = true
+        return HttpResponse.json({ menuId: menu.id }, { status: 201 })
+      }),
     )
+    renderWithProviders(<FavoriteButton menu={menu} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'お気に入りに追加' }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('ログイン')
+    // 401 を踏ませない。押した時点で分かっていることを問い合わせない。
+    expect(called).toBe(false)
+  })
+
+  it('案内からログイン画面へ行ける', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<FavoriteButton menu={menu} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'お気に入りに追加' }),
+    )
+
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByRole('link', { name: /ログイン/ })).toHaveAttribute(
+      'href',
+      '/login',
+    )
+  })
+
+  it('案内は閉じられる', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<FavoriteButton menu={menu} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'お気に入りに追加' }),
+    )
+    await screen.findByRole('dialog')
+
+    await user.click(screen.getByRole('button', { name: '閉じる' }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('案内は Esc でも閉じられる', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<FavoriteButton menu={menu} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'お気に入りに追加' }),
+    )
+    await screen.findByRole('dialog')
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+    )
+  })
+
+  it('ログイン中は案内を出さずに登録する', async () => {
+    const user = userEvent.setup()
+    loggedIn()
+    let favorites: FavoriteItem[] = []
+    server.use(
+      http.get('/api/v1/favorites', () => HttpResponse.json({ favorites })),
+      http.post('/api/v1/favorites', () => {
+        favorites = [favorite(menu)]
+        return HttpResponse.json({ menuId: menu.id }, { status: 201 })
+      }),
+    )
+    renderWithProviders(<FavoriteButton menu={menu} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'お気に入りに追加' }),
+    )
+
+    expect(
+      await screen.findByRole('button', { name: 'お気に入り済み' }),
+    ).toBeVisible()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('未登録なら「お気に入りに追加」を出す', async () => {
