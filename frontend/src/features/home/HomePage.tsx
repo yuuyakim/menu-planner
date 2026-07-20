@@ -48,7 +48,7 @@ export function HomePage() {
   return (
     <section className="space-y-8">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold">献立プランナー</h1>
+        <h1 className="text-2xl font-bold">献立くん</h1>
         {/* 判定が付くまでは、ログイン状態に依る文言を出さない。
             決めつけると認証済みの利用者に一瞬ログインを勧めてしまう。 */}
         {!isLoading &&
