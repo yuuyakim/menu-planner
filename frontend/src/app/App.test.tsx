@@ -2,8 +2,27 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
+import { http, HttpResponse } from 'msw'
+
 import { renderWithProviders } from '../test/render'
+import { server } from '../test/server'
 import { App } from './App'
+
+// 履歴とお気に入りは認証必須になった（8-I）。
+// ここで見たいのは遷移そのものなので、認証済みの状態にしておく。
+function loggedIn() {
+  server.use(
+    http.get('/api/v1/auth/me', () =>
+      HttpResponse.json({
+        user: {
+          id: '018f0000-0000-7000-8000-000000000001',
+          email: 'user@example.com',
+          displayName: 'ユーザー',
+        },
+      }),
+    ),
+  )
+}
 
 // ルーティングの骨組みの確認。各画面の中身は後続のPRで作る。
 describe('App', () => {
@@ -16,23 +35,25 @@ describe('App', () => {
 
   it('ヘッダのリンクで履歴へ遷移できる', async () => {
     const user = userEvent.setup()
+    loggedIn()
     renderWithProviders(<App />, { route: '/' })
 
     await user.click(screen.getByRole('link', { name: '履歴' }))
 
     expect(
-      screen.getByRole('heading', { level: 1, name: '検索履歴' }),
+      await screen.findByRole('heading', { level: 1, name: '検索履歴' }),
     ).toBeVisible()
   })
 
   it('ヘッダのリンクでお気に入りへ遷移できる', async () => {
     const user = userEvent.setup()
+    loggedIn()
     renderWithProviders(<App />, { route: '/' })
 
     await user.click(screen.getByRole('link', { name: 'お気に入り' }))
 
     expect(
-      screen.getByRole('heading', { level: 1, name: 'お気に入り' }),
+      await screen.findByRole('heading', { level: 1, name: 'お気に入り' }),
     ).toBeVisible()
   })
 
