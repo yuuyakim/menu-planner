@@ -70,9 +70,11 @@ jobs:
           npm run gen:api
           git diff --exit-code src/api/schema.d.ts
 
+      # tsconfig.json は files: [] のプロジェクト参照なので、--noEmit では
+      # 何も検査されない（実際にこの構成で型エラーを見逃した）。-b で参照先を辿る。
       - name: 型チェック
         working-directory: frontend
-        run: npx tsc --noEmit
+        run: npx tsc -b
 
       - name: Lint
         working-directory: frontend
