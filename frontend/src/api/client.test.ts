@@ -4,6 +4,22 @@ import { describe, expect, it } from 'vitest'
 import { ApiError, NetworkError, apiDelete, apiGet, apiPost } from './client'
 import { server } from '../test/server'
 
+// rejectedWith は「指定した型で失敗すること」を確かめ、その値を返す。
+// .catch((e) => e) だと unknown のままで status などを読めないため、
+// ここで型を絞ってから各テストが中身を検証する。
+async function rejectedWith<T>(
+  promise: Promise<unknown>,
+  ctor: new (...args: never[]) => T,
+): Promise<T> {
+  try {
+    await promise
+  } catch (e) {
+    if (e instanceof ctor) return e
+    throw e
+  }
+  throw new Error('失敗するはずが成功した')
+}
+
 // problem は RFC 7807 の応答を組み立てる。
 function problem(status: number, title: string, detail?: string) {
   return HttpResponse.json(
@@ -79,9 +95,11 @@ describe('APIクライアント', () => {
       ),
     )
 
-    const err = await apiPost('/favorites', { menuId: 'm1' }).catch((e) => e)
+    const err = await rejectedWith(
+      apiPost('/favorites', { menuId: 'm1' }),
+      ApiError,
+    )
 
-    expect(err).toBeInstanceOf(ApiError)
     expect(err.status).toBe(409)
     expect(err.title).toBe('この献立は既にお気に入りに登録されています')
     expect(err.detail).toBe('重複')
@@ -97,9 +115,8 @@ describe('APIクライアント', () => {
       ),
     )
 
-    const err = await apiGet('/menus/suggest').catch((e) => e)
+    const err = await rejectedWith(apiGet('/menus/suggest'), ApiError)
 
-    expect(err).toBeInstanceOf(ApiError)
     expect(err.status).toBe(502)
     // 本文を解釈できなくても、画面が出せる文言は必ず持たせる。
     expect(err.message).not.toBe('')
@@ -110,20 +127,18 @@ describe('APIクライアント', () => {
       http.get('/api/v1/auth/me', () => problem(401, '認証が必要です')),
     )
 
-    const err = await apiGet('/auth/me').catch((e) => e)
+    const err = await rejectedWith(apiGet('/auth/me'), ApiError)
 
-    expect(err).toBeInstanceOf(ApiError)
     expect(err.isUnauthorized).toBe(true)
   })
 
   it('ネットワークエラーは NetworkError になる', async () => {
     server.use(http.get('/api/v1/menus/suggest', () => HttpResponse.error()))
 
-    const err = await apiGet('/menus/suggest').catch((e) => e)
-
     // 通信自体が届かなかった場合はステータスが無い。
     // ApiError と混ぜると「401だからログインへ」のような分岐が壊れる。
-    expect(err).toBeInstanceOf(NetworkError)
+    const err = await rejectedWith(apiGet('/menus/suggest'), NetworkError)
+
     expect(err).not.toBeInstanceOf(ApiError)
     expect(err.message).not.toBe('')
   })

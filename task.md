@@ -758,6 +758,10 @@ API消費は生涯約120クエリで頭打ちになる。
 >
 > problem+json でない失敗（プロキシが返すHTMLなど）でも message は必ず埋める。
 > 画面に出す文言が空になる経路を作らないため。
+>
+> 🐛 CIの「型チェック」が実質無効だったことが発覚。`tsconfig.json` は
+> `files: []` のプロジェクト参照構成なので、`tsc --noEmit` は何も検査しない。
+> ビルド(`tsc -b`)だけが型エラーを検出していた。CI と Makefile を `tsc -b` に修正。
 
 ### PR 8-D: 検索フォーム `feat/ui-search-form`
 

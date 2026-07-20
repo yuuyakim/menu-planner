@@ -57,8 +57,9 @@ seed: ## 献立マスタを投入する
 test-backend: ## Goのテストを実行する
 	cd backend && go test ./... -cover
 
+# tsc --noEmit はプロジェクト参照構成では何も検査しない。-b で参照先を辿る。
 test-frontend: ## フロントエンドの型チェック・Lint・テストを実行する
-	cd frontend && npx tsc --noEmit
+	cd frontend && npx tsc -b
 	cd frontend && npm run lint
 	cd frontend && npm test
 
