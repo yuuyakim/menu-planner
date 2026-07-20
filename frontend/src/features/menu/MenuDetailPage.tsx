@@ -40,7 +40,7 @@ export function MenuDetailPage() {
           ← 戻る
         </button>
       ) : (
-        <Link to="/" className="text-sm text-slate-600 hover:text-slate-900">
+        <Link to="/search" className="text-sm text-slate-600 hover:text-slate-900">
           ← 献立を探す
         </Link>
       )}

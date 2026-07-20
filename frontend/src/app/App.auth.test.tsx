@@ -33,7 +33,7 @@ function loggedOut() {
 describe('未認証のとき', () => {
   it('検索画面は使える', async () => {
     loggedOut()
-    renderWithProviders(<App />, { route: '/' })
+    renderWithProviders(<App />, { route: '/search' })
 
     expect(
       await screen.findByRole('heading', { level: 1, name: '献立を探す' }),
