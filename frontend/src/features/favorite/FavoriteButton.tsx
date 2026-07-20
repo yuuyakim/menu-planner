@@ -86,9 +86,13 @@ export function FavoriteButton({ menu }: { menu: Menu }) {
   }
 
   return (
-    // 星はカードの右端に置く。エラーは絶対配置で重ねて出し、
-    // 失敗したときだけカードの高さが変わる（＝並びがずれる）のを防ぐ。
-    <div className="relative shrink-0">
+    // 星はカードの右端に置く。エラーと案内は絶対配置で重ねて出し、
+    // それらが出たときだけカードの高さが変わる（＝並びがずれる）のを防ぐ。
+    //
+    // self-start が要る。flex の既定（stretch）だとこの箱がカードの高さまで
+    // 伸び、top-full の基準が箱の下端＝カード下端になってしまう。
+    // その結果、案内が星から離れた位置に出ていた。
+    <div className="relative shrink-0 self-start">
       <button
         type="button"
         onClick={onClick}
