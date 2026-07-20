@@ -2,7 +2,7 @@
 # そのためレシピ内は ASCII のみ・1コマンド単位に保つこと（日本語はコメントに書く）。
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed
+.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed deps
 
 help: ## このヘルプを表示する
 	@echo "Usage: make <target>"
@@ -21,6 +21,7 @@ help: ## このヘルプを表示する
 	@echo "  test-frontend  run frontend checks"
 	@echo "  lint           run linters"
 	@echo "  build          build production images"
+	@echo "  deps           reinstall frontend deps in the container"
 	@echo "  clean          remove containers and volumes"
 
 up: ## コンテナを起動する
@@ -55,9 +56,10 @@ seed: ## 献立マスタを投入する
 test-backend: ## Goのテストを実行する
 	cd backend && go test ./... -cover
 
-test-frontend: ## フロントエンドの型チェックとLintを実行する
+test-frontend: ## フロントエンドの型チェック・Lint・テストを実行する
 	cd frontend && npx tsc --noEmit
 	cd frontend && npm run lint
+	cd frontend && npm test
 
 test: test-backend test-frontend ## 全テストを実行する
 
@@ -72,6 +74,12 @@ lint: ## Lintを実行する
 build: ## 本番イメージをビルドする
 	docker build -t menu-planner-backend:prod --target prod ./backend
 	docker build -t menu-planner-frontend:prod --target prod ./frontend
+
+# frontend の node_modules は匿名ボリュームなので、package.json を変えても
+# 再ビルドだけでは反映されない。-V で匿名ボリュームごと作り直す。
+deps: ## 依存を追加したあとコンテナの node_modules を入れ直す
+	docker compose build frontend
+	docker compose up -d -V frontend
 
 clean: ## コンテナとボリュームを削除する
 	docker compose down -v

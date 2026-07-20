@@ -699,12 +699,31 @@ API消費は生涯約120クエリで頭打ちになる。
 > `afterEach` で `resetHandlers` と `cleanup` を必ず走らせ、テスト間の依存を断つ。
 > これが効いていることをテスト自体でも確認している（上書き → 次のテストで元に戻る）。
 
-### PR 8-B: UI基盤 `feat/frontend-foundation`
+### PR 8-B: UI基盤 `feat/frontend-foundation` ✅
 
-- [ ] 🔧 Tailwind CSS を導入
-- [ ] 🔧 React Router を導入
-- [ ] 🔧 TanStack Query を導入
-- [ ] 🔧 OpenAPI スキーマから型を生成
+- [x] 🔧 Tailwind CSS を導入
+- [x] 🔧 React Router を導入
+- [x] 🔧 TanStack Query を導入
+- [x] 🔴 ルーティングと Query の疎通テスト
+- [x] 🔧 実機確認（dev server で / と /histories が 200）
+
+> **OpenAPI の型生成は 8-B2 に分けた。** `api/openapi.yaml` がまだ無く、
+> 全エンドポイントの仕様を書き起こす作業は分量も判断も別物のため。
+>
+> ルータは App の中に置かず、包む側（本番=BrowserRouter / テスト=MemoryRouter）を
+> 差し替えられるようにした。QueryClient はモジュールスコープに1つ持つ
+> （再描画のたびに作り直すとキャッシュが消えるため）。テストは
+> `createTestQueryClient` で毎回新しいインスタンスを使い、キャッシュを持ち越さない。
+>
+> 🐛 依存を追加すると dev コンテナが起動しなくなる問題に当たった。
+> node_modules が匿名ボリュームのため、イメージを再ビルドしても古いままになる。
+> `make deps`（`docker compose up -d -V`）を追加した。
+
+### PR 8-B2: OpenAPI から型を生成 `feat/api-types`
+
+- [ ] 🔧 `api/openapi.yaml` を起こす
+- [ ] 🔧 `openapi-typescript` で `src/api/schema.d.ts` を生成
+- [ ] 🔧 生成物が最新かをCIで確認する
 
 ### PR 8-C: APIクライアント `feat/api-client`
 
