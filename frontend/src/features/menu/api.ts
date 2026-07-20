@@ -1,5 +1,5 @@
 import { apiGet } from '../../api/client'
-import type { Menu } from '../../api/types'
+import type { Menu, Recipe } from '../../api/types'
 import type { MenuFilter } from './SearchForm'
 
 // toQuery は絞り込み条件をクエリ文字列にする。
@@ -17,4 +17,10 @@ function toQuery(filter: MenuFilter): string {
 export async function suggestMenu(filter: MenuFilter): Promise<Menu> {
   const res = await apiGet<{ menu: Menu }>(`/menus/suggest${toQuery(filter)}`)
   return res.menu
+}
+
+/** fetchRecipes は献立のレシピリンクを取得する。0件でも成功として空配列を返す。 */
+export async function fetchRecipes(menuId: string): Promise<Recipe[]> {
+  const res = await apiGet<{ recipes: Recipe[] }>(`/menus/${menuId}/recipes`)
+  return res.recipes
 }

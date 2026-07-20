@@ -111,7 +111,8 @@ describe('検索結果', () => {
 
     release()
     await screen.findByRole('article')
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    // レシピ欄も読み込み中に role=status を出すため、検索中の表示だけを見る。
+    expect(screen.queryByText('検索中…')).not.toBeInTheDocument()
   })
 
   it('422 は条件に合う献立が無いことを伝える', async () => {
@@ -171,5 +172,34 @@ describe('検索結果', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '条件に合う献立が見つかりません',
     )
+  })
+
+  it('レシピ取得が502でも献立の表示は消えない', async () => {
+    const user = userEvent.setup()
+    respondWith(oyakodon)
+    server.use(
+      http.get(`/api/v1/menus/${oyakodon.id}/recipes`, () =>
+        HttpResponse.json(
+          {
+            type: 'https://example.com/probs/x',
+            title: 'レシピの取得に失敗しました',
+            status: 502,
+          },
+          { status: 502, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    )
+    renderWithProviders(<SearchPage />)
+
+    await user.click(search())
+    expect(await screen.findByText('親子丼')).toBeVisible()
+
+    // レシピ欄だけが失敗し、献立とその引き直し導線は残る。
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'レシピの取得に失敗しました',
+    )
+    expect(screen.getByText('親子丼')).toBeVisible()
+    expect(screen.getByRole('button', { name: '別の献立を見る' })).toBeVisible()
+    expect(screen.getByRole('button', { name: '再試行' })).toBeVisible()
   })
 })
