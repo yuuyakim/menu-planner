@@ -685,12 +685,19 @@ API消費は生涯約120クエリで頭打ちになる。
 
 > 完了条件: Vitest + Playwright が緑
 
-### PR 8-A: テスト基盤 `feat/frontend-test-setup`
+### PR 8-A: テスト基盤 `feat/frontend-test-setup` ✅
 
-- [ ] 🔧 Vitest + Testing Library + MSW を導入
-- [ ] 🔧 CI に frontend のテストを追加
-- [ ] 🔴 サンプルテストが動くことの確認
-- [ ] 🟢 設定を実装
+- [x] 🔧 Vitest + Testing Library + MSW を導入
+- [x] 🔧 CI に frontend のテストを追加
+- [x] 🔴 サンプルテストが動くことの確認
+- [x] 🟢 設定を実装
+
+> MSW は `onUnhandledRequest: 'error'` で運用する。モックし忘れたAPI呼び出しが
+> 素通りして「なぜか通った」状態になるのを防ぐため、未定義のリクエストは失敗させる。
+> jsdom の URL を `http://localhost:5173` に固定するのは、`/api/...` の相対URLを
+> 解決するため（既定のままだと fetch が Invalid URL になる）。
+> `afterEach` で `resetHandlers` と `cleanup` を必ず走らせ、テスト間の依存を断つ。
+> これが効いていることをテスト自体でも確認している（上書き → 次のテストで元に戻る）。
 
 ### PR 8-B: UI基盤 `feat/frontend-foundation`
 
