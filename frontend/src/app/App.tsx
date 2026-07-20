@@ -4,11 +4,14 @@ import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { FavoritePage } from '../features/favorite/FavoritePage'
 import { HistoryPage } from '../features/history/HistoryPage'
+import { MenuDetailPage } from '../features/menu/MenuDetailPage'
 import { SearchPage } from '../features/menu/SearchPage'
+import { WeeklyPage } from '../features/menu/WeeklyPage'
 
 // navItems はヘッダに並べるリンク。増減はここだけで済ませる。
 const navItems = [
   { to: '/', label: '献立を探す' },
+  { to: '/weekly', label: '1週間の献立' },
   { to: '/histories', label: '履歴' },
   { to: '/favorites', label: 'お気に入り' },
 ] as const
@@ -47,6 +50,8 @@ export function App() {
       <main className="mx-auto max-w-3xl px-4 py-8">
         <Routes>
           <Route path="/" element={<SearchPage />} />
+          <Route path="/weekly" element={<WeeklyPage />} />
+          <Route path="/menus/:id" element={<MenuDetailPage />} />
           <Route path="/histories" element={<HistoryPage />} />
           <Route path="/favorites" element={<FavoritePage />} />
           <Route path="/login" element={<LoginPage />} />

@@ -71,12 +71,18 @@ type Props = {
   onSubmit: (filter: MenuFilter) => void
   /** 検索中はボタンを無効にして二重送信を防ぐ。 */
   isPending?: boolean
+  /** 送信ボタンの文言。週間献立では「1週間分を作る」になる。 */
+  submitLabel?: string
 }
 
 // SearchForm は検索条件を選んで送るフォーム。
 // 検索の実行そのものは持たず、条件を親に渡すだけにする
 // （結果の表示とAPI呼び出しは 8-E の SearchPage が持つ）。
-export function SearchForm({ onSubmit, isPending = false }: Props) {
+export function SearchForm({
+  onSubmit,
+  isPending = false,
+  submitLabel = '献立を探す',
+}: Props) {
   const [genre, setGenre] = useState<Genre | undefined>(undefined)
   const [difficulty, setDifficulty] = useState<Difficulty | undefined>(undefined)
 
@@ -106,7 +112,7 @@ export function SearchForm({ onSubmit, isPending = false }: Props) {
         disabled={isPending}
         className="rounded-lg bg-emerald-600 px-6 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
       >
-        {isPending ? '検索中…' : '献立を探す'}
+        {isPending ? '検索中…' : submitLabel}
       </button>
     </form>
   )
