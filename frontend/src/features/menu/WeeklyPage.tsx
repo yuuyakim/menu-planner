@@ -1,9 +1,10 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 
 import type { DayMenu } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { useSessionState } from '../../hooks/useSessionState'
+import { historiesQueryKey } from '../history/api'
 import { rerollDay, suggestWeekly } from './api'
 import { MenuCard } from './MenuCard'
 import { SearchForm, type MenuFilter } from './SearchForm'
@@ -38,11 +39,19 @@ export function WeeklyPage({ today = new Date() }: Props) {
   const [filter, setFilter] = useSessionState<MenuFilter>(filterKey, {})
   const [week, setWeek] = useSessionState<DayMenu[] | null>(weekKey, null)
 
+  const queryClient = useQueryClient()
+
   const create = useMutation({
     mutationFn: suggestWeekly,
-    onSuccess: setWeek,
+    onSuccess: (next) => {
+      setWeek(next)
+      // 週の確定はサーバ側で7件まとめて履歴に記録される（6-A）。
+      void queryClient.invalidateQueries({ queryKey: historiesQueryKey })
+    },
   })
 
+  // 引き直しは履歴に記録されない（確定した献立ではないため。4-F）。
+  // 記録されないので履歴の無効化もしない。
   const reroll = useMutation({
     mutationFn: (day: number) => rerollDay(day, week ?? [], filter),
     onSuccess: (menu, day) => {

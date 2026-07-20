@@ -1,7 +1,8 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { historiesQueryKey } from '../history/api'
 import { suggestMenu } from './api'
 import { MenuCard } from './MenuCard'
 import { RecipeList } from './RecipeList'
@@ -16,8 +17,15 @@ export function SearchPage() {
   // 引き直しに使うため、検索したときの条件を覚えておく。
   const [filter, setFilter] = useState<MenuFilter | null>(null)
 
+  const queryClient = useQueryClient()
+
   const { mutate, data: menu, isPending, error } = useMutation({
     mutationFn: suggestMenu,
+    onSuccess: () => {
+      // ログイン中の検索はサーバ側で履歴に記録される（4-F）。
+      // 無効化しないと、履歴画面が古いキャッシュのままになる。
+      void queryClient.invalidateQueries({ queryKey: historiesQueryKey })
+    },
   })
 
   function run(next: MenuFilter) {
