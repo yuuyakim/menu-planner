@@ -2,6 +2,8 @@ import { NavLink, Route, Routes } from 'react-router'
 
 import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
+import { RequireAuth } from '../features/auth/RequireAuth'
+import { AuthMenu } from '../features/auth/AuthMenu'
 import { FavoritePage } from '../features/favorite/FavoritePage'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
@@ -32,7 +34,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <nav className="mx-auto flex max-w-3xl gap-6 px-4 py-4">
+        <nav className="mx-auto flex max-w-3xl items-center gap-6 px-4 py-4">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -44,6 +46,7 @@ export function App() {
               {item.label}
             </NavLink>
           ))}
+          <AuthMenu />
         </nav>
       </header>
 
@@ -52,8 +55,24 @@ export function App() {
           <Route path="/" element={<SearchPage />} />
           <Route path="/weekly" element={<WeeklyPage />} />
           <Route path="/menus/:id" element={<MenuDetailPage />} />
-          <Route path="/histories" element={<HistoryPage />} />
-          <Route path="/favorites" element={<FavoritePage />} />
+          {/* 履歴とお気に入りは本人のものだけを扱うため認証必須。
+              検索と週間献立は未認証でも使える（spec.md 1.3）。 */}
+          <Route
+            path="/histories"
+            element={
+              <RequireAuth>
+                <HistoryPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/favorites"
+            element={
+              <RequireAuth>
+                <FavoritePage />
+              </RequireAuth>
+            }
+          />
           <Route path="/login" element={<LoginPage />} />
           {/* どれにも一致しないパスは404画面に落とす。 */}
           <Route path="*" element={<NotFoundPage />} />

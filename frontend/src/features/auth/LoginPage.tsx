@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useId, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 
 import type { User } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { googleLoginPath, login, signUp } from './api'
 import { validateCredentials } from './validate'
+import { meQueryKey } from './useCurrentUser'
 
 type Mode = 'login' | 'signup'
 
@@ -35,14 +36,18 @@ export function LoginPage() {
   const passwordId = useId()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const location = useLocation()
+
+  // 守られた画面から送られてきた場合は、そこへ戻す（RequireAuth が入れる）。
+  const from = (location.state as { from?: string } | null)?.from ?? '/'
 
   const submit = useMutation({
     mutationFn: (m: Mode) =>
       m === 'login' ? login({ email, password }) : signUp({ email, password }),
     onSuccess: (user: User) => {
       // 取得済みのユーザーをキャッシュに入れ、遷移先で問い合わせ直さない。
-      queryClient.setQueryData(['me'], user)
-      void navigate('/')
+      queryClient.setQueryData(meQueryKey, user)
+      void navigate(from, { replace: true })
     },
   })
 
