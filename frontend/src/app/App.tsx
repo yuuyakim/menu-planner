@@ -38,7 +38,7 @@ export function App() {
         <nav className="mx-auto flex max-w-3xl items-center gap-6 px-4 py-4">
           {/* ホームへの導線。どの画面からでも起点に戻れるようにする。 */}
           <Link to="/" className="font-bold text-slate-900">
-            献立プランナー
+            献立くん
           </Link>
           {navItems.map((item) => (
             <NavLink

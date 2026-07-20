@@ -29,7 +29,7 @@ describe('App', () => {
   it('/ はホーム画面を表示する', async () => {
     renderWithProviders(<App />, { route: '/' })
     expect(
-      await screen.findByRole('heading', { level: 1, name: /献立プランナー/ }),
+      await screen.findByRole('heading', { level: 1, name: /献立くん/ }),
     ).toBeVisible()
   })
 
