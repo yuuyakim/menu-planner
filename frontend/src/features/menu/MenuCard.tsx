@@ -3,6 +3,7 @@ import {
   genreLabels,
   type Menu,
 } from '../../api/types'
+import { FavoriteButton } from '../favorite/FavoriteButton'
 
 // MenuCard は献立1件の表示。検索結果・週間献立・履歴・お気に入りで共通に使う。
 export function MenuCard({ menu }: { menu: Menu }) {
@@ -18,6 +19,11 @@ export function MenuCard({ menu }: { menu: Menu }) {
         </span>
       </div>
       <p className="mt-3 text-slate-600">{menu.description}</p>
+      {/* 献立が出る場所ならどこでもお気に入りにできる。
+          未ログインのときは何も描画されない。 */}
+      <div className="mt-4">
+        <FavoriteButton menu={menu} />
+      </div>
     </article>
   )
 }
