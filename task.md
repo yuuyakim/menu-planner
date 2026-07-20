@@ -719,11 +719,28 @@ API消費は生涯約120クエリで頭打ちになる。
 > node_modules が匿名ボリュームのため、イメージを再ビルドしても古いままになる。
 > `make deps`（`docker compose up -d -V`）を追加した。
 
-### PR 8-B2: OpenAPI から型を生成 `feat/api-types`
+### PR 8-B2: OpenAPI から型を生成 `feat/api-types` ✅
 
-- [ ] 🔧 `api/openapi.yaml` を起こす
-- [ ] 🔧 `openapi-typescript` で `src/api/schema.d.ts` を生成
-- [ ] 🔧 生成物が最新かをCIで確認する
+- [x] 🔧 `api/openapi.yaml` を起こす（全19エンドポイント）
+- [x] 🔧 `openapi-typescript` で `src/api/schema.d.ts` を生成
+- [x] 🔧 生成物が最新かをCIで確認する（再生成して `git diff --exit-code`）
+- [x] 🔧 実機確認（意図的にyamlを変えて検知することを確認）
+
+> **yaml を手で書いて正とする方式にした。** spec.md 6.3 は「Goハンドラから生成」
+> と書いているが、7章のディレクトリ構成は `api/openapi.yaml` を単一の情報源と
+> している。前者は swaggo 等のアノテーションを全ハンドラに入れる大工事になるため、
+> 後者を採った。
+>
+> **ただし yaml と Go 実装のズレはこの仕組みでは防げない。** CIが守るのは
+> 「yaml と生成された型」の一致だけ。実レスポンスとの一致はフェーズ9の
+> 契約テストで担保する（下記に追加）。
+>
+> TypeScript 6 と openapi-typescript の peer 指定(`^5.x`)が衝突するため、
+> package.json の overrides で openapi-typescript の typescript をルートに寄せた。
+> `--legacy-peer-deps` は全依存に効いてしまうので使わない。
+>
+> enum は型としてしか生成されないため、選択肢の値は `src/api/types.ts` に
+> `Record<Genre, string>` で持つ。ジャンルが増減すれば型エラーになる。
 
 ### PR 8-C: APIクライアント `feat/api-client`
 
@@ -802,6 +819,15 @@ API消費は生涯約120クエリで頭打ちになる。
 ## フェーズ9: 仕上げ
 
 > 完了条件: E2E全通過
+
+### PR 9-0: 契約テスト `feat/contract-test`
+
+- [ ] 🔴 テスト: 実レスポンスが `api/openapi.yaml` に適合する（主要エンドポイント）
+- [ ] 🟢 handler のテストに OpenAPI 検証を挟む（kin-openapi 等）
+
+> 8-B2 でCIが守るのは「yaml と生成された型」の一致まで。yaml と Go 実装の
+> ズレはここで塞ぐ。これが無いと、仕様を直し忘れたまま実装だけ変わっても
+> フロントの型は古い仕様のまま通ってしまう。
 
 ### PR 9-A: レート制限 `feat/rate-limit`
 

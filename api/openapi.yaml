@@ -1,0 +1,724 @@
+openapi: 3.1.0
+
+# API仕様の単一の情報源（spec.md 7章）。
+# フロントの型はこのファイルから生成する（frontend: npm run gen:api）。
+# エンドポイントを足す・レスポンスを変えるときは、実装より先にここを直すこと。
+
+info:
+  title: menu-planner API
+  version: 1.0.0
+  description: |
+    献立提案アプリのREST API。
+
+    認証は HttpOnly Cookie（access_token / refresh_token）で行う。
+    エラーはすべて RFC 7807 の problem+json で返す。
+
+servers:
+  - url: /
+    description: フロントと同一オリジン（Vite dev server が /api を backend に転送する）
+
+tags:
+  - name: health
+  - name: menus
+  - name: auth
+  - name: histories
+  - name: favorites
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: 死活確認
+      security: []
+      responses:
+        '200':
+          description: 稼働中
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    examples: [ok]
+
+  /api/v1/menus/suggest:
+    get:
+      tags: [menus]
+      summary: 献立を1件提案する
+      description: |
+        ログイン中は直近履歴の献立を避け、提案結果を履歴に記録する。
+        履歴を避けた結果0件になる場合は、避けずに提案する（spec.md 2.2 ルール3）。
+        未認証でも利用できる。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/GenreQuery'
+        - $ref: '#/components/parameters/DifficultyQuery'
+      responses:
+        '200':
+          description: 提案された献立
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          description: 条件に合う献立が無い
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/v1/menus/suggest-weekly:
+    post:
+      tags: [menus]
+      summary: 1週間分（7日）の献立を提案する
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeeklyRequest'
+      responses:
+        '200':
+          description: 7日分の献立
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          description: 条件に合う献立が足りない
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/v1/menus/reroll-day:
+    post:
+      tags: [menus]
+      summary: 週間献立の指定日だけを引き直す
+      description: |
+        サーバは週の状態を持たない。現在の週の献立IDを呼び出し側が渡す。
+        引き直した結果は履歴に記録しない（確定した献立ではないため）。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RerollRequest'
+      responses:
+        '200':
+          description: 引き直した1日分の献立
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          description: 条件に合う献立が無い
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/v1/menus/{id}:
+    get:
+      tags: [menus]
+      summary: 献立の詳細を取得する
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/MenuIDPath'
+      responses:
+        '200':
+          description: 献立
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/menus/{id}/recipes:
+    get:
+      tags: [menus]
+      summary: 献立のレシピリンクを取得する
+      description: 外部の検索APIを使う。結果0件は障害ではないので 200 で空配列を返す。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/MenuIDPath'
+      responses:
+        '200':
+          description: レシピリンク（最大3件）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          description: 外部の検索APIから結果を得られなかった
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/v1/auth/signup:
+    post:
+      tags: [auth]
+      summary: メールとパスワードで登録する
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+      responses:
+        '201':
+          description: 登録したユーザー。認証Cookieを設定する。
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetAuthCookies'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: メールアドレスが登録済み
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: メールとパスワードでログインする
+      description: |
+        存在しないメールもパスワード違いも同じ 401 に丸める。
+        どちらであるかを返すと、登録済みメールを推測できてしまうため。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialsRequest'
+      responses:
+        '200':
+          description: ログインしたユーザー。認証Cookieを設定する。
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetAuthCookies'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: リフレッシュトークンでアクセストークンを再発行する
+      description: refresh_token Cookie を使う。このCookieは /api/v1/auth にのみ送られる。
+      security: []
+      responses:
+        '204':
+          description: 新しいアクセストークンをCookieに設定した
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetAuthCookies'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: ログアウトする
+      security: []
+      responses:
+        '204':
+          description: 認証Cookieを破棄した
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetAuthCookies'
+
+  /api/v1/auth/google:
+    get:
+      tags: [auth]
+      summary: Google認証を開始する
+      description: Googleの同意画面へリダイレクトする。state と PKCE verifier を Cookie に置く。
+      security: []
+      responses:
+        '302':
+          description: Googleの認可エンドポイントへのリダイレクト
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+
+  /api/v1/auth/google/callback:
+    get:
+      tags: [auth]
+      summary: Google認証のコールバック
+      description: |
+        state を定数時間で照合し、コードをトークンに交換する。
+        メール未確認のGoogleアカウントは受け付けない（他人のメールでの乗っ取りを防ぐ）。
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: フロントエンドへのリダイレクト。認証Cookieを設定する。
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+            Set-Cookie:
+              $ref: '#/components/headers/SetAuthCookies'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: 現在のユーザーを取得する
+      responses:
+        '200':
+          description: 現在のユーザー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/histories:
+    get:
+      tags: [histories]
+      summary: 検索履歴を新しい順に取得する
+      description: 保持されるのは最新15件まで（超過分は自動削除される）。
+      responses:
+        '200':
+          description: 検索履歴
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoriesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [histories]
+      summary: 検索履歴を全件削除する
+      description: 0件でも成功する（冪等）。
+      responses:
+        '204':
+          description: 削除した
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/histories/{id}:
+    delete:
+      tags: [histories]
+      summary: 検索履歴を1件削除する
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 履歴のID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 削除した
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: 他ユーザーの履歴
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/favorites:
+    get:
+      tags: [favorites]
+      summary: お気に入りを新しい順に取得する
+      description: 履歴と違い件数の上限が無く、自動削除もされない（spec.md 2.6）。
+      responses:
+        '200':
+          description: お気に入り
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [favorites]
+      summary: お気に入りに献立を追加する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [menuId]
+              properties:
+                menuId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: 追加した
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [menuId]
+                properties:
+                  menuId:
+                    type: string
+                    format: uuid
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 同じ献立が既に登録されている
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /api/v1/favorites/{menuId}:
+    delete:
+      tags: [favorites]
+      summary: お気に入りから献立を外す
+      description: |
+        自分の (ユーザー, 献立) の行だけを消すため、他人のお気に入りには到達できない。
+        自分が登録していない献立は 403 ではなく 404 を返す
+        （403 だと他人が何を登録しているかを漏らすため）。
+      parameters:
+        - name: menuId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 削除した
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    accessCookie:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: ログイン時に設定される HttpOnly Cookie。
+
+  parameters:
+    GenreQuery:
+      name: genre
+      in: query
+      required: false
+      description: 未指定と空文字はどちらも「絞り込まない」。
+      schema:
+        $ref: '#/components/schemas/Genre'
+    DifficultyQuery:
+      name: difficulty
+      in: query
+      required: false
+      description: 未指定と空文字はどちらも「絞り込まない」。
+      schema:
+        $ref: '#/components/schemas/Difficulty'
+    MenuIDPath:
+      name: id
+      in: path
+      required: true
+      description: 献立のID
+      schema:
+        type: string
+        format: uuid
+
+  headers:
+    SetAuthCookies:
+      description: |
+        access_token（15分・path=/）と refresh_token（30日・path=/api/v1/auth）。
+        いずれも HttpOnly / Secure / SameSite=Lax。
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: リクエストが不正
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: 認証が必要、または認証に失敗した
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: 対象が存在しない
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Genre:
+      type: string
+      enum: [japanese, western, chinese, other]
+    Difficulty:
+      type: string
+      enum: [easy, normal, elaborate]
+    SearchMode:
+      type: string
+      enum: [single, weekly]
+
+    Menu:
+      type: object
+      required: [id, name, genre, difficulty, description]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        genre:
+          $ref: '#/components/schemas/Genre'
+        difficulty:
+          $ref: '#/components/schemas/Difficulty'
+        description:
+          type: string
+
+    MenuResponse:
+      type: object
+      required: [menu]
+      properties:
+        menu:
+          $ref: '#/components/schemas/Menu'
+
+    WeeklyRequest:
+      type: object
+      properties:
+        genre:
+          oneOf:
+            - $ref: '#/components/schemas/Genre'
+            - type: 'null'
+        difficulty:
+          oneOf:
+            - $ref: '#/components/schemas/Difficulty'
+            - type: 'null'
+
+    DayMenu:
+      type: object
+      required: [day, menu]
+      properties:
+        day:
+          type: integer
+          minimum: 1
+          maximum: 7
+        menu:
+          $ref: '#/components/schemas/Menu'
+
+    WeeklyResponse:
+      type: object
+      required: [week]
+      properties:
+        week:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayMenu'
+          minItems: 7
+          maxItems: 7
+
+    RerollRequest:
+      type: object
+      required: [day, week]
+      properties:
+        day:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: 引き直す日。
+        week:
+          type: array
+          description: 現在の週の献立IDを day 順に並べたもの。
+          items:
+            type: string
+            format: uuid
+        genre:
+          oneOf:
+            - $ref: '#/components/schemas/Genre'
+            - type: 'null'
+        difficulty:
+          oneOf:
+            - $ref: '#/components/schemas/Difficulty'
+            - type: 'null'
+
+    Recipe:
+      type: object
+      required: [title, url, domain, snippet]
+      properties:
+        title:
+          type: string
+        url:
+          type: string
+          format: uri
+        domain:
+          type: string
+        snippet:
+          type: string
+
+    RecipesResponse:
+      type: object
+      required: [recipes]
+      properties:
+        recipes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recipe'
+          maxItems: 3
+
+    CredentialsRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          description: 8文字以上・72バイト以下。
+          minLength: 8
+
+    User:
+      type: object
+      required: [id, email, displayName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+
+    UserResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+
+    HistoryItem:
+      type: object
+      required: [id, menu, searchMode, searchedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        menu:
+          $ref: '#/components/schemas/Menu'
+        searchMode:
+          $ref: '#/components/schemas/SearchMode'
+        searchedAt:
+          type: string
+          format: date-time
+
+    HistoriesResponse:
+      type: object
+      required: [histories]
+      properties:
+        histories:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryItem'
+
+    FavoriteItem:
+      type: object
+      required: [menu, createdAt]
+      properties:
+        menu:
+          $ref: '#/components/schemas/Menu'
+        createdAt:
+          type: string
+          format: date-time
+
+    FavoritesResponse:
+      type: object
+      required: [favorites]
+      properties:
+        favorites:
+          type: array
+          items:
+            $ref: '#/components/schemas/FavoriteItem'
+
+    Problem:
+      type: object
+      description: RFC 7807 の Problem Details。
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: エラー種別を識別するURI。
+        title:
+          type: string
+          description: 人間が読める短い要約。同じ type なら同じ title。
+        status:
+          type: integer
+        detail:
+          type: string
+          description: この発生に固有の説明。
+
+# 明示的に security: [] を書いたもの以外は認証必須。
+security:
+  - accessCookie: []

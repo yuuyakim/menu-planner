@@ -2,7 +2,7 @@
 # そのためレシピ内は ASCII のみ・1コマンド単位に保つこと（日本語はコメントに書く）。
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed deps
+.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed deps gen-api
 
 help: ## このヘルプを表示する
 	@echo "Usage: make <target>"
@@ -22,6 +22,7 @@ help: ## このヘルプを表示する
 	@echo "  lint           run linters"
 	@echo "  build          build production images"
 	@echo "  deps           reinstall frontend deps in the container"
+	@echo "  gen-api        regenerate TS types from api/openapi.yaml"
 	@echo "  clean          remove containers and volumes"
 
 up: ## コンテナを起動する
@@ -74,6 +75,11 @@ lint: ## Lintを実行する
 build: ## 本番イメージをビルドする
 	docker build -t menu-planner-backend:prod --target prod ./backend
 	docker build -t menu-planner-frontend:prod --target prod ./frontend
+
+# api/openapi.yaml が API 仕様の正。変更したら必ず再生成してコミットする
+# （CI が再生成して差分が出たら落とす）。
+gen-api: ## OpenAPI から TS の型を再生成する
+	cd frontend && npm run gen:api
 
 # frontend の node_modules は匿名ボリュームなので、package.json を変えても
 # 再ビルドだけでは反映されない。-V で匿名ボリュームごと作り直す。
