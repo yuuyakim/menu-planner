@@ -1,7 +1,7 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { renderWithProviders } from '../test/render'
 import { server } from '../test/server'
@@ -170,5 +170,64 @@ describe('認証済みのとき', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'ログイン' }),
     ).toBeVisible()
+  })
+
+  it('ログアウトしたことを言葉で伝える', async () => {
+    loggedIn()
+    server.use(
+      http.post(
+        '/api/v1/auth/logout',
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+    )
+    // 検索画面はログイン有無で見た目が変わらない。
+    // ヘッダの表示だけでは「ログアウトできたのか」が分かりにくい。
+    renderWithProviders(<App />, { route: '/' })
+
+    const header = within(screen.getByRole('banner'))
+    await header.findByText('キムさん')
+
+    loggedOut()
+    const u = userEvent.setup()
+    await u.click(header.getByRole('button', { name: 'ログアウト' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'ログアウトしました',
+    )
+  })
+
+  it('ログアウトの知らせはしばらくして消える', async () => {
+    // shouldAdvanceTime を付けないと MSW の通信が偽タイマーで止まり、
+    // 応答が返らないままテストが時間切れになる。
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      loggedIn()
+      server.use(
+        http.post(
+          '/api/v1/auth/logout',
+          () => new HttpResponse(null, { status: 204 }),
+        ),
+      )
+      const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      renderWithProviders(<App />, { route: '/' })
+
+      const header = within(screen.getByRole('banner'))
+      await vi.waitFor(() => header.getByText('キムさん'))
+
+      loggedOut()
+      await u.click(header.getByRole('button', { name: 'ログアウト' }))
+      await vi.waitFor(() =>
+        expect(screen.getByRole('status')).toHaveTextContent('ログアウトしました'),
+      )
+
+      // 出しっぱなしにすると、次の操作のときに古い知らせが残って紛らわしい。
+      // タイマーで起きる状態更新なので act で包んで反映させる。
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000)
+      })
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
