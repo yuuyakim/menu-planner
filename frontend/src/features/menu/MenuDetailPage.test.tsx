@@ -51,7 +51,10 @@ describe('献立の詳細', () => {
 
     renderAt(menuId)
 
-    expect(await screen.findByText('親子丼')).toBeVisible()
+    // 何のページかが見出しから分かるよう、献立名を h1 にする。
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '親子丼' }),
+    ).toBeVisible()
     expect(await screen.findByRole('link', { name: /親子丼のレシピ/ })).toBeVisible()
   })
 

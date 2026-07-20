@@ -55,7 +55,7 @@ export function MenuDetailPage() {
 
       {menu && (
         <>
-          <MenuCard menu={menu} />
+          <MenuCard menu={menu} headingLevel={1} />
           <section className="space-y-3">
             <h2 className="font-bold">レシピ</h2>
             <RecipeList menuId={menu.id} />

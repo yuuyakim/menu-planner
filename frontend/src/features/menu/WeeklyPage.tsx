@@ -91,9 +91,12 @@ export function WeeklyPage({ today = new Date() }: Props) {
         <ul className="space-y-4">
           {week.map((d) => (
             <li key={d.day} aria-label={dayLabel(d.day, today)}>
-              <h2 className="mb-2 font-medium text-slate-700">
+              {/* 見出し(h2)にはしない。この中の MenuCard が献立名を h2 で
+                  持つため、同じ項目に h2 が2つ並んで階層が読めなくなる。
+                  日付は li の aria-label が読み上げる。 */}
+              <p className="mb-2 font-medium text-slate-700">
                 {dayLabel(d.day, today)}
-              </h2>
+              </p>
               <MenuCard menu={d.menu} />
               <div className="mt-2 flex gap-3">
                 <button

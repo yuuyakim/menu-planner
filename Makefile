@@ -2,7 +2,7 @@
 # そのためレシピ内は ASCII のみ・1コマンド単位に保つこと（日本語はコメントに書く）。
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed deps gen-api
+.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed deps gen-api test-e2e
 
 help: ## このヘルプを表示する
 	@echo "Usage: make <target>"
@@ -19,6 +19,7 @@ help: ## このヘルプを表示する
 	@echo "  test           run all tests"
 	@echo "  test-backend   run Go tests"
 	@echo "  test-frontend  run frontend checks"
+	@echo "  test-e2e       run Playwright E2E (needs make up + seed)"
 	@echo "  lint           run linters"
 	@echo "  build          build production images"
 	@echo "  deps           reinstall frontend deps in the container"
@@ -62,6 +63,11 @@ test-frontend: ## フロントエンドの型チェック・Lint・テストを�
 	cd frontend && npx tsc -b
 	cd frontend && npm run lint
 	cd frontend && npm test
+
+# 起動中のアプリに対して実行する。事前に make up と make seed が必要。
+# 初回は npx playwright install chromium でブラウザを入れること。
+test-e2e: ## E2E(Playwright)を実行する
+	cd frontend && npx playwright test
 
 test: test-backend test-frontend ## 全テストを実行する
 
