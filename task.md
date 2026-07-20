@@ -638,13 +638,23 @@ API消費は生涯約120クエリで頭打ちになる。
 > menu_id の FK は CASCADE を付けない（献立マスタは固定）。user_id は CASCADE。
 > INDEX (user_id, created_at DESC) は一覧表示の主経路。重複追加の 409 は 7-B。
 
-### PR 7-B: お気に入りの追加 `feat/api-add-favorite`
+### PR 7-B: お気に入りの追加 `feat/api-add-favorite` ✅
 
-- [ ] 🔴 テスト: 追加できる
-- [ ] 🔴 テスト: **同一献立の重複追加で 409**
-- [ ] 🔴 テスト: 存在しない献立で 404
-- [ ] 🔴 テスト: 未認証で 401
-- [ ] 🟢 `POST /favorites` を実装
+- [x] 🔴 テスト: 追加できる
+- [x] 🔴 テスト: **同一献立の重複追加で 409**
+- [x] 🔴 テスト: 存在しない献立で 404
+- [x] 🔴 テスト: 未認証で 401
+- [x] 🔴 テスト: 不正な献立IDで 400 / 壊れたボディで 400
+- [x] 🟢 `POST /favorites` を実装
+- [x] 🔧 実機確認（201 / 409 / 404 / 401 / 400）
+
+> 重複と存在しない献立はどちらも DB の制約に判定させ、SQLSTATE と制約名で
+> 振り分ける（23505 + favorites_user_menu_uniq → 409、23503 +
+> favorites_menu_id_fkey → 404）。事前に SELECT で確かめる方式は確認と INSERT の
+> 間に他リクエストが割り込むとすり抜けるため採らない。制約名まで見るのは
+> user_id 側の外部キー違反と取り違えないため。
+> レスポンスはお気に入り自体のIDを出さず menuId だけ返す。削除も
+> `DELETE /favorites/:menuId` で献立IDを使う（7-C）ため、利用側に不要。
 
 ### PR 7-C: お気に入りの一覧と削除 `feat/api-list-delete-favorite`
 

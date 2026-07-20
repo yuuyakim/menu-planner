@@ -95,6 +95,10 @@ func run() error {
 	historySvc := service.NewHistoryService(historyRepo)
 	historyHandler := handler.NewHistoryHandler(historySvc, tokens)
 
+	favoriteRepo := repository.NewFavoriteRepository(pool)
+	favoriteSvc := service.NewFavoriteService(favoriteRepo)
+	favoriteHandler := handler.NewFavoriteHandler(favoriteSvc, tokens)
+
 	menuRepo := repository.NewMenuRepository(pool)
 	recipeCache := repository.NewRecipeLinkCache(pool)
 	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway, recipeCache)
@@ -120,6 +124,7 @@ func run() error {
 	menuHandler.RegisterRoutes(e)
 	authHandler.RegisterRoutes(e)
 	historyHandler.RegisterRoutes(e)
+	favoriteHandler.RegisterRoutes(e)
 
 	addr := ":" + env("PORT", "8080")
 
