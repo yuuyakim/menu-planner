@@ -196,4 +196,89 @@ describe('週間献立', () => {
       '条件に合う献立が足りません',
     )
   })
+
+  it('画面を離れて戻ってきても作った週が残る', async () => {
+    const user = userEvent.setup()
+    respondWeekly()
+    const first = renderWithProviders(<WeeklyPage today={monday} />)
+
+    await user.click(create())
+    await screen.findAllByRole('listitem')
+
+    // 詳細画面へ遷移して戻る＝この画面はアンマウントされ、作り直される。
+    first.unmount()
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    // 「1週間分を作る」を押し直さなくても、作った週がそのまま出ている。
+    expect(await screen.findByText('献立1')).toBeVisible()
+    expect(screen.getAllByRole('listitem')).toHaveLength(7)
+  })
+
+  it('引き直した結果も画面を離れて戻ると残る', async () => {
+    const user = userEvent.setup()
+    respondWeekly()
+    const first = renderWithProviders(<WeeklyPage today={monday} />)
+    await user.click(create())
+    await screen.findAllByRole('listitem')
+
+    respondReroll({ ...menu(9), name: '差し替え後' })
+    await user.click(dayItem(3).getByRole('button', { name: '引き直す' }))
+    await waitFor(() => expect(screen.getByText('差し替え後')).toBeVisible())
+
+    first.unmount()
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    expect(await screen.findByText('差し替え後')).toBeVisible()
+    expect(screen.queryByText('献立3')).not.toBeInTheDocument()
+  })
+
+  it('作り直せば新しい週に置き換わる', async () => {
+    const user = userEvent.setup()
+    respondWeekly()
+    const first = renderWithProviders(<WeeklyPage today={monday} />)
+    await user.click(create())
+    await screen.findAllByRole('listitem')
+    first.unmount()
+
+    server.use(
+      http.post('/api/v1/menus/suggest-weekly', () =>
+        HttpResponse.json({
+          week: Array.from({ length: 7 }, (_, i) => ({
+            day: i + 1,
+            menu: { ...menu(i + 1), name: `新献立${i + 1}` },
+          })),
+        }),
+      ),
+    )
+    renderWithProviders(<WeeklyPage today={monday} />)
+    await screen.findByText('献立1')
+
+    await user.click(create())
+
+    expect(await screen.findByText('新献立1')).toBeVisible()
+    expect(screen.queryByText('献立1')).not.toBeInTheDocument()
+  })
+
+  it('引き直しは復帰後の週に対しても正しい状態を送る', async () => {
+    const user = userEvent.setup()
+    respondWeekly()
+    const first = renderWithProviders(<WeeklyPage today={monday} />)
+    await user.click(create())
+    await screen.findAllByRole('listitem')
+    first.unmount()
+
+    renderWithProviders(<WeeklyPage today={monday} />)
+    await screen.findByText('献立1')
+
+    const bodies = respondReroll({ ...menu(9), name: '復帰後の差し替え' })
+    await user.click(dayItem(5).getByRole('button', { name: '引き直す' }))
+
+    await waitFor(() =>
+      expect(screen.getByText('復帰後の差し替え')).toBeVisible(),
+    )
+    // 復帰した週の献立IDが送られる（絞り込み条件も復帰している必要がある）。
+    expect(bodies[0].day).toBe(5)
+    expect(bodies[0].week).toHaveLength(7)
+    expect(bodies[0].week?.[0]).toBe(menu(1).id)
+  })
 })

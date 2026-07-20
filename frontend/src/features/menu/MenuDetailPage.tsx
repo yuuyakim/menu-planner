@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { fetchMenu } from './api'
@@ -10,6 +10,12 @@ import { RecipeList } from './RecipeList'
 // 週間献立・履歴・お気に入りからの遷移先。
 export function MenuDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // この画面に至る履歴があるかどうか。URLを直接開いた場合は 'default' になる。
+  // 履歴が無いのに戻ると、アプリの外へ出てしまう。
+  const canGoBack = location.key !== 'default'
 
   const {
     data: menu,
@@ -24,9 +30,20 @@ export function MenuDetailPage() {
 
   return (
     <section className="space-y-6">
-      <Link to="/" className="text-sm text-slate-600 hover:text-slate-900">
-        ← 献立を探す
-      </Link>
+      {/* 戻り先を '/' に固定すると、週間献立から来ても検索画面に着いてしまう。 */}
+      {canGoBack ? (
+        <button
+          type="button"
+          onClick={() => void navigate(-1)}
+          className="text-sm text-slate-600 hover:text-slate-900"
+        >
+          ← 戻る
+        </button>
+      ) : (
+        <Link to="/" className="text-sm text-slate-600 hover:text-slate-900">
+          ← 献立を探す
+        </Link>
+      )}
 
       {isPending && (
         <p role="status" className="text-slate-600">

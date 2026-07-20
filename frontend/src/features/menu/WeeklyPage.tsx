@@ -1,14 +1,19 @@
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
 import { Link } from 'react-router'
 
 import type { DayMenu } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { useSessionState } from '../../hooks/useSessionState'
 import { rerollDay, suggestWeekly } from './api'
 import { MenuCard } from './MenuCard'
 import { SearchForm, type MenuFilter } from './SearchForm'
 
 const weekdays = ['日', '月', '火', '水', '木', '金', '土'] as const
+
+// 作った週は画面遷移をまたいで保つ（レシピを見て戻ると消えていた不具合）。
+// サーバは週の状態を持たない（spec.md 5.1）ため、保持はクライアントの責務。
+const weekKey = 'weekly.week'
+const filterKey = 'weekly.filter'
 
 // dayLabel は「何日目か」を日付つきの見出しにする。
 //
@@ -29,8 +34,9 @@ type Props = {
 
 // WeeklyPage は1週間分の献立を作り、日ごとに引き直せる画面。
 export function WeeklyPage({ today = new Date() }: Props) {
-  const [filter, setFilter] = useState<MenuFilter>({})
-  const [week, setWeek] = useState<DayMenu[] | null>(null)
+  // 引き直しには週と絞り込み条件の両方が要るので、どちらも保持する。
+  const [filter, setFilter] = useSessionState<MenuFilter>(filterKey, {})
+  const [week, setWeek] = useSessionState<DayMenu[] | null>(weekKey, null)
 
   const create = useMutation({
     mutationFn: suggestWeekly,

@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { Route, Routes } from 'react-router'
@@ -72,6 +73,57 @@ describe('献立の詳細', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '献立が見つかりません',
+    )
+  })
+
+  it('戻る導線は来た画面に戻る', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get(`/api/v1/menus/${menuId}`, () =>
+        HttpResponse.json({ menu: oyakodon }),
+      ),
+      http.get(`/api/v1/menus/${menuId}/recipes`, () =>
+        HttpResponse.json({ recipes: [] }),
+      ),
+    )
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/weekly" element={<h1>1週間の献立</h1>} />
+        <Route path="/menus/:id" element={<MenuDetailPage />} />
+      </Routes>,
+      { history: ['/weekly', `/menus/${menuId}`] },
+    )
+
+    await screen.findByText('親子丼')
+    await user.click(screen.getByRole('button', { name: /戻る/ }))
+
+    // 週間献立から来たら週間献立へ。検索画面へ固定で飛ばさない。
+    expect(
+      await screen.findByRole('heading', { name: '1週間の献立' }),
+    ).toBeVisible()
+  })
+
+  it('直接開いたときは検索画面への導線を出す', async () => {
+    server.use(
+      http.get(`/api/v1/menus/${menuId}`, () =>
+        HttpResponse.json({ menu: oyakodon }),
+      ),
+      http.get(`/api/v1/menus/${menuId}/recipes`, () =>
+        HttpResponse.json({ recipes: [] }),
+      ),
+    )
+
+    renderAt(menuId)
+
+    await screen.findByText('親子丼')
+    // 戻る先の履歴が無いので、戻るボタンではなくリンクを出す。
+    expect(
+      screen.queryByRole('button', { name: /戻る/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /献立を探す/ })).toHaveAttribute(
+      'href',
+      '/',
     )
   })
 })
