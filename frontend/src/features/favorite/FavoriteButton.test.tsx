@@ -151,4 +151,38 @@ describe('お気に入りボタン', () => {
       screen.getByRole('button', { name: 'お気に入りに追加' }),
     ).toBeVisible()
   })
+
+  it('文字ではなく星で表し、状態は aria-pressed で伝える', async () => {
+    loggedIn()
+    respondFavorites(favorite(menu))
+    renderWithProviders(<FavoriteButton menu={menu} />)
+
+    const button = await screen.findByRole('button', { name: 'お気に入り済み' })
+    // 見た目は星だけ。読み上げと自動テストのために名前は必ず持たせる。
+    expect(button).toHaveAccessibleName('お気に入り済み')
+    expect(button).toHaveTextContent('')
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('未登録の星は塗らない', async () => {
+    loggedIn()
+    respondFavorites()
+    renderWithProviders(<FavoriteButton menu={menu} />)
+
+    const button = await screen.findByRole('button', {
+      name: 'お気に入りに追加',
+    })
+    expect(button).toHaveAttribute('aria-pressed', 'false')
+    // 塗りの有無で ON/OFF を表す。
+    expect(button.querySelector('svg')).toHaveAttribute('fill', 'none')
+  })
+
+  it('登録済みの星は塗る', async () => {
+    loggedIn()
+    respondFavorites(favorite(menu))
+    renderWithProviders(<FavoriteButton menu={menu} />)
+
+    const button = await screen.findByRole('button', { name: 'お気に入り済み' })
+    expect(button.querySelector('svg')).toHaveAttribute('fill', 'currentColor')
+  })
 })
