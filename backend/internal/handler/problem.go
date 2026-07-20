@@ -55,6 +55,8 @@ var problemMapping = []struct {
 	{auth.ErrPasswordTooLong, http.StatusBadRequest, "password-too-long", "パスワードが長すぎます"},
 	// メールの重複は「今の状態と競合する」ので 409。
 	{service.ErrEmailTaken, http.StatusConflict, "email-taken", "メールアドレスは既に登録されています"},
+	// お気に入りの重複も同様に 409。既にある状態との競合であって入力の誤りではない。
+	{service.ErrFavoriteExists, http.StatusConflict, "favorite-exists", "この献立は既にお気に入りに登録されています"},
 	// 認証失敗。存在しないメールもパスワード違いも同じ 401 に丸める。
 	{service.ErrInvalidCredentials, http.StatusUnauthorized, "invalid-credentials", "メールアドレスまたはパスワードが正しくありません"},
 	// トークンが無効（欠落・期限切れ・改竄・種別違い）。内訳は明かさず一律 401。
