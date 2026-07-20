@@ -13,6 +13,9 @@ afterEach(() => {
   // テストごとに上書きしたハンドラとDOMを戻し、テスト間の依存を断つ。
   server.resetHandlers()
   cleanup()
+  // 画面が sessionStorage に保存した状態も消す。
+  // 残すと、あるテストが作った週が次のテストに現れる。
+  sessionStorage.clear()
 })
 
 afterAll(() => server.close())

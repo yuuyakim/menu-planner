@@ -18,19 +18,27 @@ export function createTestQueryClient(): QueryClient {
 type Options = Omit<RenderOptions, 'wrapper'> & {
   /** 描画時のパス。既定は '/'。 */
   route?: string
+  /**
+   * 履歴を積んだ状態で描画する。戻る操作を検証したいときに使う。
+   * 指定すると route は無視され、最後の要素が現在地になる。
+   */
+  history?: string[]
 }
 
 // renderWithProviders は本番と同じプロバイダで包んで描画する。
 // ルータは MemoryRouter を使い、テストごとに履歴を独立させる。
 // QueryClient もテストごとに作り直し、キャッシュを持ち越さない。
 export function renderWithProviders(ui: ReactElement, options: Options = {}) {
-  const { route = '/', ...renderOptions } = options
+  const { route = '/', history, ...renderOptions } = options
+  const entries = history ?? [route]
   const queryClient = createTestQueryClient()
 
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+        <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
+          {children}
+        </MemoryRouter>
       </QueryClientProvider>
     )
   }

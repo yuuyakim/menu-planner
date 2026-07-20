@@ -1,5 +1,5 @@
-import { apiGet } from '../../api/client'
-import type { Menu, Recipe } from '../../api/types'
+import { apiGet, apiPost } from '../../api/client'
+import type { DayMenu, Menu, Recipe } from '../../api/types'
 import type { MenuFilter } from './SearchForm'
 
 // toQuery は絞り込み条件をクエリ文字列にする。
@@ -23,4 +23,37 @@ export async function suggestMenu(filter: MenuFilter): Promise<Menu> {
 export async function fetchRecipes(menuId: string): Promise<Recipe[]> {
   const res = await apiGet<{ recipes: Recipe[] }>(`/menus/${menuId}/recipes`)
   return res.recipes
+}
+
+/** suggestWeekly は1週間分（7日）の献立を生成する。 */
+export async function suggestWeekly(filter: MenuFilter): Promise<DayMenu[]> {
+  const res = await apiPost<{ week: DayMenu[] }>('/menus/suggest-weekly', {
+    genre: filter.genre,
+    difficulty: filter.difficulty,
+  })
+  return res.week
+}
+
+/**
+ * rerollDay は週間献立の指定日だけを引き直す。
+ * サーバは週の状態を持たないため、現在の週の献立IDを送る必要がある。
+ */
+export async function rerollDay(
+  day: number,
+  week: DayMenu[],
+  filter: MenuFilter,
+): Promise<Menu> {
+  const res = await apiPost<{ menu: Menu }>('/menus/reroll-day', {
+    day,
+    week: week.map((d) => d.menu.id),
+    genre: filter.genre,
+    difficulty: filter.difficulty,
+  })
+  return res.menu
+}
+
+/** fetchMenu は献立を1件取得する。 */
+export async function fetchMenu(menuId: string): Promise<Menu> {
+  const res = await apiGet<{ menu: Menu }>(`/menus/${menuId}`)
+  return res.menu
 }
