@@ -12,14 +12,30 @@ import (
 
 // fakeFavoriteStore は FavoriteStore を代用する。
 type fakeFavoriteStore struct {
-	lastUserID domain.UserID
-	lastMenuID domain.MenuID
-	addCalls   int
-	err        error
+	lastUserID  domain.UserID
+	lastMenuID  domain.MenuID
+	addCalls    int
+	listCalls   int
+	deleteCalls int
+	favorites   []domain.Favorite
+	err         error
 }
 
 func (s *fakeFavoriteStore) Add(_ context.Context, userID domain.UserID, menuID domain.MenuID) error {
 	s.addCalls++
+	s.lastUserID = userID
+	s.lastMenuID = menuID
+	return s.err
+}
+
+func (s *fakeFavoriteStore) List(_ context.Context, userID domain.UserID) ([]domain.Favorite, error) {
+	s.listCalls++
+	s.lastUserID = userID
+	return s.favorites, s.err
+}
+
+func (s *fakeFavoriteStore) Delete(_ context.Context, userID domain.UserID, menuID domain.MenuID) error {
+	s.deleteCalls++
 	s.lastUserID = userID
 	s.lastMenuID = menuID
 	return s.err
@@ -72,4 +88,66 @@ func TestFavoriteService_Add_PropagatesStoreError(t *testing.T) {
 
 	err := svc.Add(context.Background(), domain.NewUserID().String(), domain.NewMenuID().String())
 	require.ErrorIs(t, err, service.ErrFavoriteExists)
+}
+
+func TestFavoriteService_List_Delegates(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeFavoriteStore{favorites: []domain.Favorite{{}, {}}}
+	svc := service.NewFavoriteService(store)
+
+	userID := domain.NewUserID()
+	got, err := svc.List(context.Background(), userID.String())
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, 1, store.listCalls)
+	require.Equal(t, userID.String(), store.lastUserID.String())
+}
+
+func TestFavoriteService_List_MalformedUserID(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeFavoriteStore{}
+	svc := service.NewFavoriteService(store)
+
+	_, err := svc.List(context.Background(), "not-a-uuid")
+	require.ErrorIs(t, err, service.ErrUserNotFound)
+	require.Zero(t, store.listCalls)
+}
+
+func TestFavoriteService_Delete_Delegates(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeFavoriteStore{}
+	svc := service.NewFavoriteService(store)
+
+	userID := domain.NewUserID()
+	menuID := domain.NewMenuID()
+	require.NoError(t, svc.Delete(context.Background(), userID.String(), menuID.String()))
+
+	require.Equal(t, 1, store.deleteCalls)
+	require.Equal(t, userID.String(), store.lastUserID.String())
+	require.Equal(t, menuID.String(), store.lastMenuID.String())
+}
+
+func TestFavoriteService_Delete_MalformedMenuID(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeFavoriteStore{}
+	svc := service.NewFavoriteService(store)
+
+	err := svc.Delete(context.Background(), domain.NewUserID().String(), "not-a-uuid")
+	require.ErrorIs(t, err, domain.ErrInvalidMenuID)
+	require.Zero(t, store.deleteCalls)
+}
+
+func TestFavoriteService_Delete_MalformedUserID(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeFavoriteStore{}
+	svc := service.NewFavoriteService(store)
+
+	err := svc.Delete(context.Background(), "not-a-uuid", domain.NewMenuID().String())
+	require.ErrorIs(t, err, service.ErrUserNotFound)
+	require.Zero(t, store.deleteCalls)
 }

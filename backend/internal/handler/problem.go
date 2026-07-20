@@ -47,6 +47,9 @@ var problemMapping = []struct {
 	{domain.ErrInvalidMenu, http.StatusBadRequest, "invalid-menu", "不正な献立です"},
 	{repository.ErrMenuNotFound, http.StatusNotFound, "menu-not-found", "献立が見つかりません"},
 	{service.ErrHistoryNotFound, http.StatusNotFound, "history-not-found", "履歴が見つかりません"},
+	// 自分のお気に入りに無い献立の削除。他人のものを消そうとした場合もここに来る
+	// （所有者を明かす 403 は他人の登録内容を漏らすため返さない）。
+	{service.ErrFavoriteNotFound, http.StatusNotFound, "favorite-not-found", "お気に入りが見つかりません"},
 	{service.ErrHistoryForbidden, http.StatusForbidden, "history-forbidden", "この履歴を操作する権限がありません"},
 	{service.ErrInvalidDay, http.StatusBadRequest, "invalid-day", "不正な日の指定です"},
 	{service.ErrInvalidWeek, http.StatusBadRequest, "invalid-week", "不正な週間献立です"},
