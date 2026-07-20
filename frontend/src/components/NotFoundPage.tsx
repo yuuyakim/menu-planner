@@ -9,7 +9,7 @@ export function NotFoundPage() {
         URLが変わったか、削除された可能性があります。
       </p>
       <Link to="/" className="mt-4 inline-block text-emerald-700 underline">
-        献立を探す
+        ホームへ
       </Link>
     </section>
   )

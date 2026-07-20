@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
@@ -26,10 +26,30 @@ function loggedIn() {
 
 // ルーティングの骨組みの確認。各画面の中身は後続のPRで作る。
 describe('App', () => {
-  it('/ で検索画面を表示する', () => {
+  it('/ はホーム画面を表示する', async () => {
     renderWithProviders(<App />, { route: '/' })
     expect(
+      await screen.findByRole('heading', { level: 1, name: /献立プランナー/ }),
+    ).toBeVisible()
+  })
+
+  it('/search で検索画面を表示する', () => {
+    renderWithProviders(<App />, { route: '/search' })
+    expect(
       screen.getByRole('heading', { level: 1, name: '献立を探す' }),
+    ).toBeVisible()
+  })
+
+  it('ホームから検索画面へ遷移できる', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<App />, { route: '/' })
+
+    // ヘッダとホーム本文の両方に導線があるため、本文側を選ぶ。
+    const main = within(screen.getByRole('main'))
+    await user.click(await main.findByRole('link', { name: /献立を探す/ }))
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '献立を探す' }),
     ).toBeVisible()
   })
 

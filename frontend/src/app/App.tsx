@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from 'react-router'
+import { Link, NavLink, Route, Routes } from 'react-router'
 
 import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
@@ -6,13 +6,14 @@ import { RequireAuth } from '../features/auth/RequireAuth'
 import { AuthMenu } from '../features/auth/AuthMenu'
 import { FavoritePage } from '../features/favorite/FavoritePage'
 import { HistoryPage } from '../features/history/HistoryPage'
+import { HomePage } from '../features/home/HomePage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
 import { SearchPage } from '../features/menu/SearchPage'
 import { WeeklyPage } from '../features/menu/WeeklyPage'
 
 // navItems はヘッダに並べるリンク。増減はここだけで済ませる。
 const navItems = [
-  { to: '/', label: '献立を探す' },
+  { to: '/search', label: '献立を探す' },
   { to: '/weekly', label: '1週間の献立' },
   { to: '/histories', label: '履歴' },
   { to: '/favorites', label: 'お気に入り' },
@@ -35,12 +36,14 @@ export function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <nav className="mx-auto flex max-w-3xl items-center gap-6 px-4 py-4">
+          {/* ホームへの導線。どの画面からでも起点に戻れるようにする。 */}
+          <Link to="/" className="font-bold text-slate-900">
+            献立プランナー
+          </Link>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
-              // '/' は前方一致だと全ページに一致してしまうため完全一致にする。
-              end={item.to === '/'}
               className={linkClass}
             >
               {item.label}
@@ -52,7 +55,8 @@ export function App() {
 
       <main className="mx-auto max-w-3xl px-4 py-8">
         <Routes>
-          <Route path="/" element={<SearchPage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/weekly" element={<WeeklyPage />} />
           <Route path="/menus/:id" element={<MenuDetailPage />} />
           {/* 履歴とお気に入りは本人のものだけを扱うため認証必須。

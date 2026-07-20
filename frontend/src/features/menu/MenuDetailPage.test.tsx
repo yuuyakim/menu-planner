@@ -123,7 +123,7 @@ describe('献立の詳細', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /献立を探す/ })).toHaveAttribute(
       'href',
-      '/',
+      '/search',
     )
   })
 })
