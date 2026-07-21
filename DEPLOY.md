@@ -53,7 +53,13 @@ flowchart LR
 | `GOOGLE_REDIRECT_URL` | localhost | **`https://<pages>/api/v1/auth/google/callback`**（同一オリジン経由） |
 | `AUTH_RATE_LIMIT_PER_MIN` | `0`（無制限） | `10`（spec値） |
 | `SEARCH_RATE_LIMIT_PER_MIN` | `0`（無制限） | `60`（spec値） |
+| `TRUSTED_PROXY_SECRET` | 未設定 | **Pages と共有する秘密**（`openssl rand -base64 32`） |
 | `PORT` | `8080` | Cloud Run が注入（`8080`） |
+
+> **`TRUSTED_PROXY_SECRET` は Cloud Run と Cloudflare Pages の両方に同じ値**を設定する。
+> backend はこの秘密が一致したリクエストの `X-Forwarded-For` だけを実クライアントIPとして
+> 信頼する。backend のURLは公開されており直接叩けるため、これが無いとIPを詐称するだけで
+> レート制限を回避できてしまう。未設定なら転送ヘッダを信頼せず接続元IPを使う（安全側）。
 
 ## 手順
 
@@ -78,8 +84,10 @@ flowchart LR
 ### 3. frontend（Cloudflare Pages ＋ /api プロキシ）
 1. Cloudflare Pages プロジェクトを作成し、リポジトリを連携。
    - **ルートディレクトリ: `frontend`**／ビルドコマンド: `npm run build`／出力ディレクトリ: `dist`
-2. **環境変数 `BACKEND_ORIGIN` に Cloud Run のURL**を設定（末尾スラッシュ無し）。
-   例: `https://menu-planner-backend-537778290491.asia-northeast1.run.app`
+2. **環境変数を設定**（Cloudflare Pages は Production と Preview で別枠なので Production 側に入れる）:
+   - `BACKEND_ORIGIN` … Cloud Run のURL（末尾スラッシュ無し）
+     例: `https://menu-planner-backend-537778290491.asia-northeast1.run.app`
+   - `TRUSTED_PROXY_SECRET` … Cloud Run に設定したものと**同じ値**
    - `/api/*` を backend に転送する Pages Function は `frontend/functions/api/[[path]].ts` に実装済み（10-B）。
    - この Function が `CF-Connecting-IP` を `X-Forwarded-For` として前送りするため、backend 側でIP単位のレート制限が効く。
 3. デプロイ後の URL（`https://menu-planner.pages.dev`）を控える。

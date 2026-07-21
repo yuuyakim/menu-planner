@@ -108,6 +108,38 @@ describe('proxyApiRequest', () => {
     expect(res.headers.get('set-cookie')).toBe('access_token=xyz; HttpOnly')
   })
 
+  it('共有シークレットを X-Proxy-Secret として送る（転送IPを信頼させるため）', async () => {
+    const fetchSpy = stubFetch()
+    const req = new Request('https://pages.example/api/v1/menus/suggest')
+
+    await proxyApiRequest(req, backend, '203.0.113.7', 'shhh')
+
+    const headers = new Headers(fetchSpy.mock.calls[0][1]!.headers)
+    expect(headers.get('x-proxy-secret')).toBe('shhh')
+  })
+
+  it('シークレット未設定なら X-Proxy-Secret を送らない', async () => {
+    const fetchSpy = stubFetch()
+    const req = new Request('https://pages.example/api/v1/menus/suggest')
+
+    await proxyApiRequest(req, backend, '203.0.113.7')
+
+    const headers = new Headers(fetchSpy.mock.calls[0][1]!.headers)
+    expect(headers.get('x-proxy-secret')).toBeNull()
+  })
+
+  it('クライアントが送ってきた X-Proxy-Secret は握り潰す（詐称防止）', async () => {
+    const fetchSpy = stubFetch()
+    const req = new Request('https://pages.example/api/v1/menus/suggest', {
+      headers: { 'x-proxy-secret': 'attacker-guess' },
+    })
+
+    await proxyApiRequest(req, backend, '203.0.113.7')
+
+    const headers = new Headers(fetchSpy.mock.calls[0][1]!.headers)
+    expect(headers.get('x-proxy-secret')).toBeNull()
+  })
+
   it('backend のURL末尾スラッシュを二重にしない', async () => {
     const fetchSpy = stubFetch()
     const req = new Request('https://pages.example/api/v1/menus/suggest')

@@ -13,6 +13,7 @@ export async function proxyApiRequest(
   request: Request,
   backendOrigin: string,
   clientIp: string | null,
+  proxySecret?: string,
 ): Promise<Response> {
   const url = new URL(request.url)
   // 末尾スラッシュの有無で `//api/...` にならないようにする。
@@ -32,6 +33,16 @@ export async function proxyApiRequest(
   if (clientIp) {
     headers.set('X-Forwarded-For', clientIp)
     headers.set('X-Real-IP', clientIp)
+  }
+
+  // 共有シークレット。backend はこれが一致したときだけ上の転送IPを信頼する。
+  // backend のURLは公開されているため、これが無いと誰でもIPを詐称して
+  // レート制限を回避できてしまう。
+  //
+  // クライアントが自分で付けてきた値は必ず捨ててから設定する（詐称防止）。
+  headers.delete('X-Proxy-Secret')
+  if (proxySecret) {
+    headers.set('X-Proxy-Secret', proxySecret)
   }
 
   const init: RequestInit = {
