@@ -1149,6 +1149,41 @@ API消費は生涯約120クエリで頭打ちになる。
 
 ---
 
+## フェーズ10: 本番デプロイ（ハイブリッド）
+
+> 構成: Cloudflare Pages（フロント＋/apiプロキシ＝同一オリジン）＋ Cloud Run（Goコンテナ）＋ Neon（Postgres）。
+> 手順の詳細は [`DEPLOY.md`](./DEPLOY.md)。backendホストの既定は Cloud Run（Fly.io に差し替え可）。
+
+#### 10-A: デプロイ手順書 `docs/deploy-runbook`
+
+- [x] 🔧 DEPLOY.md（構成図・アカウント・環境変数マトリクス・手順・ロールバック）
+- [x] 🔧 task.md にフェーズ10の枠を追加
+
+#### 10-B: Pages の /api プロキシ `feat/pages-api-proxy`
+
+- [ ] 🔧 Pages Function で `/api/*` を backend(`BACKEND_ORIGIN`) に転送
+- [ ] 🔧 `CF-Connecting-IP` を `X-Forwarded-For` として前送り（実IPをbackendへ）
+- [ ] 🔴 テスト: メソッド・ヘッダ・本文・Cookie を透過し、実IPヘッダを付ける
+
+#### 10-C: 実IPでのレート制限 `feat/trust-proxy-real-ip`
+
+- [ ] 🔴 テスト: 信頼した前段からの `X-Forwarded-For` の実クライアントIPで判定する
+- [ ] 🔴 テスト: 信頼しない直リクエストのIP偽装ヘッダは無視する
+- [ ] 🟢 echo の `IPExtractor` を設定（信頼するホップ数を明示）
+- [ ] 🔧 本番のレート制限値（認証10 / 検索60）を Cloud Run 環境に設定
+
+#### 10-D: 本番ハードニング `feat/prod-hardening`
+
+- [ ] 🔧 本番 CORS（同一オリジンなら実質不要／`FRONTEND_ORIGIN` の確認）
+- [ ] 🔧 Cookie の Secure が本番で効くこと（localhost 例外の確認）
+- [ ] 🔧 Google OAuth の本番リダイレクトURL（Pages経由）を通しで確認
+
+#### 10-E（任意）: 自動デプロイ `ci/deploy`
+
+- [ ] 🔧 main マージで backend(Cloud Run)・frontend(Pages) を自動デプロイ
+
+---
+
 ## 積み残し / 将来対応
 
 spec.md 1.2 で MVP 対象外としたもの。
@@ -1158,4 +1193,4 @@ spec.md 1.2 で MVP 対象外としたもの。
 - [ ] 朝食・昼食の献立（現在は夕食のみ）
 - [ ] 献立のユーザー投稿
 - [ ] 栄養価計算
-- [ ] 本番デプロイ（Neon / Cloud Run / Cloudflare Pages）※spec.md 12章
+- [x] ~~本番デプロイ（Neon / Cloud Run / Cloudflare Pages）※spec.md 12章~~ → フェーズ10 として着手
