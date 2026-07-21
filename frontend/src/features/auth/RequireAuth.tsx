@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
 
+import { MascotStatus } from '../../components/MascotStatus'
 import { useCurrentUser } from './useCurrentUser'
 
 // RequireAuth は認証済みのときだけ子を表示する。
@@ -13,11 +14,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   // 判定が付くまでは何も決めない。ここでログイン画面に飛ばすと、
   // 認証済みの利用者にも一瞬ログイン画面が見えてしまう。
   if (isLoading) {
-    return (
-      <p role="status" className="text-slate-600">
-        読み込み中…
-      </p>
-    )
+    return <MascotStatus>読み込み中…</MascotStatus>
   }
 
   if (!user) {

@@ -13,13 +13,17 @@ function toMessage(error: unknown): string {
 
 // ErrorMessage は失敗を利用者に伝える。
 // role=alert にして、画面を見ていなくても伝わるようにする。
+//
+// ここにマスコットは出さない。こんたてんは待ち時間・空・404 のような
+// 「何も壊れていない場面」に出す約束にしている。失敗に絵を添えると、
+// うまくいかなかったことを軽く扱っているように見える。
 export function ErrorMessage({ error }: { error: unknown }) {
   const isUnauthorized = error instanceof ApiError && error.isUnauthorized
 
   return (
     <p
       role="alert"
-      className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900"
+      className="rounded-2xl border border-kon-peach bg-kon-peach/25 px-4 py-3 text-kon-ink"
     >
       {toMessage(error)}
       {isUnauthorized && '（ログインし直してください）'}

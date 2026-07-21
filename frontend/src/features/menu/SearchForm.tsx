@@ -40,12 +40,12 @@ function RadioGroup<T extends string>({
 
   return (
     <fieldset>
-      <legend className="mb-2 font-medium">{legend}</legend>
+      <legend className="mb-2 font-medium text-kon-ink">{legend}</legend>
       <div className="flex flex-wrap gap-2">
         {[[allValue, 'すべて'] as const, ...options].map(([value, label]) => (
           <label
             key={value}
-            className="cursor-pointer rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm has-checked:border-emerald-600 has-checked:bg-emerald-50 has-checked:text-emerald-800"
+            className="cursor-pointer rounded-full border border-kon-leaf-soft bg-white px-4 py-1.5 text-sm text-kon-ink/80 transition-colors hover:bg-kon-cream has-checked:border-kon-leaf has-checked:bg-kon-leaf/20 has-checked:font-medium has-checked:text-kon-ink"
           >
             <input
               type="radio"
@@ -110,7 +110,8 @@ export function SearchForm({
       <button
         type="submit"
         disabled={isPending}
-        className="rounded-lg bg-emerald-600 px-6 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+        // 無効時に白文字のままだと淡い緑に埋もれて読めない。文字色も落とす。
+        className="rounded-full bg-kon-leaf px-6 py-2.5 font-medium text-white transition-colors hover:brightness-95 disabled:cursor-not-allowed disabled:bg-kon-leaf-soft disabled:text-kon-ink/70"
       >
         {isPending ? '検索中…' : submitLabel}
       </button>
