@@ -23,6 +23,27 @@ const copy = {
   },
 } as const
 
+// redirectedErrorText は backend から `/login?error=...` で戻されたときの文言。
+//
+// Googleログインのようにブラウザが直接APIへ遷移する経路では、失敗しても
+// fetch のエラーとして扱えない。backend が生の JSON を見せる代わりに
+// ここへ戻してくるので（Issue #81）、種別に応じた案内に翻訳する。
+function redirectedErrorText(kind: string | null): string | undefined {
+  if (!kind) return undefined
+  switch (kind) {
+    case 'rate-limited':
+      return 'アクセスが集中しています。しばらく待ってからもう一度お試しください。'
+    case 'google-auth-failed':
+      return 'Googleでのログインに失敗しました。お手数ですが、もう一度お試しください。'
+    case 'token-invalid':
+    case 'user-not-found':
+      return 'ログインの有効期限が切れました。もう一度ログインしてください。'
+    default:
+      // 想定外の種別でも黙らない。何か起きたことだけは必ず伝える。
+      return 'ログインの処理中に問題が発生しました。もう一度お試しください。'
+  }
+}
+
 // LoginPage はログインと新規登録を1画面で扱う。
 // 入力項目が同じなので画面を分けず、切り替えで済ませる。
 export function LoginPage() {
@@ -40,6 +61,14 @@ export function LoginPage() {
 
   // 守られた画面から送られてきた場合は、そこへ戻す（RequireAuth が入れる）。
   const from = (location.state as { from?: string } | null)?.from ?? '/'
+
+  // backend が画面遷移のエラーで戻してきた理由（Issue #81）。
+  const redirected = redirectedErrorText(
+    new URLSearchParams(location.search).get('error'),
+  )
+
+  // 入力の誤りを優先する。利用者が今まさに直せるのはそちらのため。
+  const notice = invalid ?? redirected
 
   const submit = useMutation({
     mutationFn: (m: Mode) =>
@@ -111,12 +140,12 @@ export function LoginPage() {
 
         {/* 入力の誤りとサーバのエラーは同じ場所に出す。出所が違っても、
             利用者が知りたいのは「次に何をすればよいか」だけ。 */}
-        {invalid ? (
+        {notice ? (
           <p
             role="alert"
             className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900"
           >
-            {invalid}
+            {notice}
           </p>
         ) : (
           submit.error && <ErrorMessage error={submit.error} />
