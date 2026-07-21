@@ -148,4 +148,14 @@ INSERT INTO menus (id, name, name_kana, genre, difficulty, description) VALUES
 (gen_random_uuid(), 'ボルシチ',      'ぼるしち',          'other', 'elaborate', 'ビーツと牛肉をじっくり煮込む'),
 (gen_random_uuid(), 'ラムのロースト',  'らむのろーすと',     'other', 'elaborate', 'ハーブをまとわせて塊肉を焼き上げる'),
 (gen_random_uuid(), 'セビーチェ',     'せびーちぇ',        'other', 'elaborate', '魚介を柑橘で締めるペルーの前菜。鮮度が命')
-ON CONFLICT (name) DO NOTHING;
+-- **upsert にする。** DO NOTHING（挿入のみ）だと、説明文やカナを直しても
+-- 既にシード済みのDB（本番など）には永久に反映されない。
+-- このファイルを「あるべき状態」の定義として扱い、再実行で追いつかせる。
+--
+-- ただし**名前の変更だけはこれでは直らない**（name がキーのため、旧行が残って
+-- 新行が増える）。名前を変えるときはマイグレーションで対応すること。
+ON CONFLICT (name) DO UPDATE SET
+    name_kana   = EXCLUDED.name_kana,
+    genre       = EXCLUDED.genre,
+    difficulty  = EXCLUDED.difficulty,
+    description = EXCLUDED.description;
