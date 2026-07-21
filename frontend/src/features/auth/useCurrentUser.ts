@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError } from '../../api/client'
 import type { User } from '../../api/types'
+import { clearSessionState } from '../../hooks/useSessionState'
 import { fetchMe, logout } from './api'
 
 /** meQueryKey は現在のユーザーのキャッシュキー。ログイン成功時にも使う。 */
@@ -56,6 +57,10 @@ export function useLogout() {
       // 取り直さないため、守られた画面でログアウトすると「読み込み中…」の
       // まま固まってしまう。resetQueries は初期化したうえで再取得する。
       void queryClient.resetQueries()
+
+      // 週間献立は sessionStorage に持つため、クエリキャッシュとは別に捨てる。
+      // これが無いと別アカウントでも前の週間献立が見えたままになる（Issue #83）。
+      clearSessionState()
     },
   })
 }

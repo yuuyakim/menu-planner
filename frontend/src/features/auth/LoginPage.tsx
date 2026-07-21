@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router'
 
 import type { User } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { clearSessionState } from '../../hooks/useSessionState'
 import { googleLoginPath, login, signUp } from './api'
 import { validateCredentials } from './validate'
 import { meQueryKey } from './useCurrentUser'
@@ -83,6 +84,8 @@ export function LoginPage() {
       // 「取り直されず読み込み中のまま固まる」問題が起きない。
       // 余計な取り直しも走らせずに済む（ログアウト側は事情が違うので resetQueries）。
       queryClient.clear()
+      // 週間献立は sessionStorage に持つため別途捨てる（Issue #83）。
+      clearSessionState()
       // 取得済みのユーザーをキャッシュに入れ、遷移先で問い合わせ直さない。
       queryClient.setQueryData(meQueryKey, user)
       void navigate(from, { replace: true })
