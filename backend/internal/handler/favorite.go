@@ -32,10 +32,14 @@ func NewFavoriteHandler(svc FavoriteUseCase, tokens *auth.JWT) *FavoriteHandler 
 // RegisterRoutes はお気に入りAPIのルーティングを登録する。
 // お気に入りは本人のものだけを扱うため、すべて認証必須。
 func (h *FavoriteHandler) RegisterRoutes(e *echo.Echo) {
-	g := e.Group(APIBasePath, RequireAuth(h.tokens))
-	g.GET("/favorites", h.List)
-	g.POST("/favorites", h.Add)
-	g.DELETE("/favorites/:menuId", h.Delete)
+	g := e.Group(APIBasePath)
+	// RequireAuth はグループ全体ではなくルート個別に付ける。グループに付けると
+	// /api/v1 配下の未定義パスにも走ってしまい、404 であるべきものが 401 になる
+	// （Issue #73）。menu.go も同じ理由でルート個別に付けている。
+	requireAuth := RequireAuth(h.tokens)
+	g.GET("/favorites", h.List, requireAuth)
+	g.POST("/favorites", h.Add, requireAuth)
+	g.DELETE("/favorites/:menuId", h.Delete, requireAuth)
 }
 
 // addFavoriteRequest は POST /favorites のリクエストボディ。
