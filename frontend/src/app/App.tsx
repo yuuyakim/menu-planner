@@ -1,5 +1,6 @@
-import { Link, NavLink, Route, Routes } from 'react-router'
+import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
 
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RequireAuth } from '../features/auth/RequireAuth'
@@ -32,6 +33,10 @@ function linkClass({ isActive }: { isActive: boolean }): string {
 // ルータ自体はここでは持たない。本番は BrowserRouter（main.tsx）、
 // テストは MemoryRouter と包む側を変えられるようにするため。
 export function App() {
+  // ページ描画中にエラーが起きても、境界を現在地でキーづけしておくと
+  // 別画面へ移った時点で境界が作り直され、自動で通常表示に戻る。
+  const location = useLocation()
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
@@ -54,33 +59,36 @@ export function App() {
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-8">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/weekly" element={<WeeklyPage />} />
-          <Route path="/menus/:id" element={<MenuDetailPage />} />
-          {/* 履歴とお気に入りは本人のものだけを扱うため認証必須。
-              検索と週間献立は未認証でも使える（spec.md 1.3）。 */}
-          <Route
-            path="/histories"
-            element={
-              <RequireAuth>
-                <HistoryPage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/favorites"
-            element={
-              <RequireAuth>
-                <FavoritePage />
-              </RequireAuth>
-            }
-          />
-          <Route path="/login" element={<LoginPage />} />
-          {/* どれにも一致しないパスは404画面に落とす。 */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        {/* ページ本文だけを境界で包む。ヘッダは残し、他画面へ移れるようにする。 */}
+        <ErrorBoundary key={location.pathname}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/weekly" element={<WeeklyPage />} />
+            <Route path="/menus/:id" element={<MenuDetailPage />} />
+            {/* 履歴とお気に入りは本人のものだけを扱うため認証必須。
+                検索と週間献立は未認証でも使える（spec.md 1.3）。 */}
+            <Route
+              path="/histories"
+              element={
+                <RequireAuth>
+                  <HistoryPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/favorites"
+              element={
+                <RequireAuth>
+                  <FavoritePage />
+                </RequireAuth>
+              }
+            />
+            <Route path="/login" element={<LoginPage />} />
+            {/* どれにも一致しないパスは404画面に落とす。 */}
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   )

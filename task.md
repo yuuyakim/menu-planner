@@ -1118,9 +1118,19 @@ API消費は生涯約120クエリで頭打ちになる。
 - [x] 🔴 テスト: プリフライト(OPTIONS)も同じ判定
 - [x] 🟢 CORS 設定を `handler.CORS(origin)` に抽出（main.go はこれを使う）
 
-#### 9-C-2: フロントのエラーバウンダリ `feat/frontend-error-boundary`
+#### 9-C-2: フロントのエラーバウンダリ `feat/frontend-error-boundary` ✅
 
-- [ ] 🔧 フロントのエラーバウンダリ
+- [x] 🔴 テスト: エラーが無ければ子をそのまま描画
+- [x] 🔴 テスト: 子が描画時に throw したらフォールバック（role=alert）を表示
+- [x] 🔴 テスト: フォールバックに再読み込み導線がある
+- [x] 🔴 テスト: `fallback` prop を渡すとそれを表示
+- [x] 🟢 `ErrorBoundary`（クラス）を実装。描画時エラーを捕捉し console.error に残す
+- [x] 🔧 App の `<main>` を境界で包む。ヘッダは残し、`location.pathname` をキーに
+      して別画面へ移ると自動で通常表示へ復帰する
+
+> **error boundary はクラスでしか書けない**（描画中エラーは Hooks で捕捉不可）。
+> **本文だけを包む**のは、ヘッダを残して他画面へ逃がすため。`key={pathname}` により
+> ナビゲーションで境界が作り直され、エラー状態が自然にリセットされる。
 
 #### 9-C-3: 仕上げドキュメント `docs/readme-finalize`
 
