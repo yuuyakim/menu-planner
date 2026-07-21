@@ -173,6 +173,54 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /api/v1/menus/{id}/ingredients:
+    get:
+      tags: [menus]
+      summary: 献立に必要な食材を取得する
+      description: |
+        調味料は含まない（spec.md 14.4）。分量も持たない（14.2）。
+        代表的な食材の例であり、実際の材料はレシピ元で確認する前提。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/MenuIDPath'
+      responses:
+        '200':
+          description: 食材の一覧（カテゴリ順→カナ順）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngredientsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/shopping-list:
+    post:
+      tags: [menus]
+      summary: 複数の献立から買い物リストを作る
+      description: |
+        週間献立はサーバに保存していないため、献立IDをリクエストで受け取る。
+        同じ食材が複数の献立に出たら1件にまとめ、usedIn にその献立を並べる。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShoppingListRequest'
+      responses:
+        '200':
+          description: 買い物リスト（カテゴリ順→カナ順）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShoppingListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/v1/auth/signup:
     post:
       tags: [auth]
@@ -625,6 +673,77 @@ components:
           items:
             $ref: '#/components/schemas/Recipe'
           maxItems: 3
+
+    Ingredient:
+      type: object
+      required: [id, name, nameKana, category]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: 玉ねぎ
+        nameKana:
+          type: string
+          description: 一覧の並び順に使う
+          example: たまねぎ
+        category:
+          type: string
+          description: 調味料の分類は持たない（spec.md 14.4）
+          enum: [vegetable, meat, seafood, dairy_egg, staple, other]
+
+    IngredientsResponse:
+      type: object
+      required: [ingredients]
+      properties:
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ingredient'
+
+    ShoppingListRequest:
+      type: object
+      required: [menuIds]
+      properties:
+        menuIds:
+          type: array
+          description: 1〜7件。重複は1件として扱う
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 7
+
+    ShoppingItem:
+      type: object
+      required: [ingredient, usedIn]
+      properties:
+        ingredient:
+          $ref: '#/components/schemas/Ingredient'
+        usedIn:
+          type: array
+          description: |
+            その食材を使う献立。分量を持たない設計の補償として、
+            何のために買うかを利用者が判断できるようにする。
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+
+    ShoppingListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShoppingItem'
 
     CredentialsRequest:
       type: object
