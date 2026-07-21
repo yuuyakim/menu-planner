@@ -5,6 +5,7 @@ import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotStatus } from '../../components/MascotStatus'
 import { historiesQueryKey } from '../history/api'
 import { suggestMenu } from './api'
+import { IngredientList } from './IngredientList'
 import { MenuCard } from './MenuCard'
 import { RecipeList } from './RecipeList'
 import { SearchForm, type MenuFilter } from './SearchForm'
@@ -55,6 +56,10 @@ export function SearchPage() {
           >
             別の献立を見る
           </button>
+
+          {/* 「何を買えばいいか」は結果を見た直後に知りたい。
+              献立詳細まで行かないと分からないのでは遠い。 */}
+          <IngredientList menuId={menu.id} />
 
           <section className="space-y-3 pt-2">
             <h2 className="font-bold text-kon-ink">レシピ</h2>

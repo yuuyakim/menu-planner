@@ -5,6 +5,12 @@ import { http, HttpResponse } from 'msw'
 export const handlers = [
   http.get('/api/v1/health', () => HttpResponse.json({ status: 'ok' })),
 
+  // 食材は献立を出す画面すべて（検索・詳細）が引く。既定を置かないと
+  // 個々のテストが未処理リクエストで落ちる。中身を見たいテストは use で上書きする。
+  http.get('/api/v1/menus/:id/ingredients', () =>
+    HttpResponse.json({ ingredients: [] }),
+  ),
+
   // ログイン状態はヘッダが全画面で問い合わせる。既定は「未ログイン」。
   // 認証が要るテストは server.use() で 200 に差し替える。
   http.get('/api/v1/auth/me', () =>
