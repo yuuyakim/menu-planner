@@ -83,8 +83,8 @@ func NewMenuHandler(s MenuUseCase, history MenuHistory, tokens *auth.JWT) *MenuH
 // 付けると echo の method-not-allowed 判定が変わり、未対応メソッドが 405 ではなく
 // 404 になってしまうため（param ルート /menus/:id との兼ね合い）。未認証でも 200 の
 // まま使え、ログイン中なら userID をコンテキストから取れる（履歴の除外・記録に使う）。
-func (h *MenuHandler) RegisterRoutes(e *echo.Echo) {
-	g := e.Group(APIBasePath)
+func (h *MenuHandler) RegisterRoutes(e *echo.Echo, mw ...echo.MiddlewareFunc) {
+	g := e.Group(APIBasePath, mw...)
 	optional := OptionalAuth(h.tokens)
 	// /menus/suggest は /menus/:id と同じ階層にあるが、echo は静的なパスを
 	// パラメータより優先して照合するため、:id に飲み込まれることはない。

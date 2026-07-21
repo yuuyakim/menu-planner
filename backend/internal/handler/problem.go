@@ -72,6 +72,8 @@ var problemMapping = []struct {
 	{service.ErrNoMenuFound, http.StatusUnprocessableEntity, "no-menu-found", "条件に合う献立が見つかりません"},
 	// 外部の検索APIの不調。自分の障害ではないので500ではなく502で上流起因だと示す。
 	{service.ErrRecipeSearchFailed, http.StatusBadGateway, "recipe-search-failed", "レシピの取得に失敗しました"},
+	// レート制限超過。時間をおけば回復するので 429（Retry-After は middleware が付ける）。
+	{ErrRateLimited, http.StatusTooManyRequests, "rate-limited", "リクエストが多すぎます"},
 }
 
 // ErrorHandler は echo のカスタムエラーハンドラを返す。
