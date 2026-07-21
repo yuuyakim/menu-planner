@@ -1149,8 +1149,11 @@ API消費は生涯約120クエリで頭打ちになる。
 
 ---
 
-## フェーズ10: 本番デプロイ（ハイブリッド）
+## フェーズ10: 本番デプロイ（ハイブリッド）✅
 
+> **2026-07-21 本番公開。全機能が本番で稼働中**（メール/パスワード認証・Google SSO・
+> Brave 実キーでのレシピ取得・レート制限まで検証済み。結果は DEPLOY.md に記録）。
+>
 > 構成: Cloudflare Pages（フロント＋/apiプロキシ＝同一オリジン）＋ Cloud Run（Goコンテナ）＋ Neon（Postgres）。
 > 手順の詳細は [`DEPLOY.md`](./DEPLOY.md)。backendホストの既定は Cloud Run（Fly.io に差し替え可）。
 
@@ -1192,15 +1195,28 @@ API消費は生涯約120クエリで頭打ちになる。
 > 前段だけが知る秘密で「自分のプロキシ経由」を確かめる方式にした。
 > 比較は定数時間（`crypto/subtle`）。秘密未設定時は転送ヘッダを一切信頼しない。
 
-#### 10-D: 本番ハードニング `feat/prod-hardening`
+#### 10-D: 本番ハードニング `feat/prod-hardening` ✅
 
-- [ ] 🔧 本番 CORS（同一オリジンなら実質不要／`FRONTEND_ORIGIN` の確認）
-- [ ] 🔧 Cookie の Secure が本番で効くこと（localhost 例外の確認）
-- [ ] 🔧 Google OAuth の本番リダイレクトURL（Pages経由）を通しで確認
+- [x] 🔧 本番 CORS（同一オリジン構成のためブラウザは実質使わない。`FRONTEND_ORIGIN` のみ許可を確認）
+- [x] 🔧 Cookie の Secure が本番で効くこと → `session.go` で `HttpOnly`＋`Secure`＋`SameSite=Lax` 固定。
+      本番HTTPSで有効、localhost はブラウザ例外で開発も動く。**変更不要**
+- [x] 🔧 Google OAuth の本番リダイレクトURL（Pages経由）を確認 → `/api/v1/auth/google` が
+      302 で accounts.google.com へ。同一オリジンのプロキシ経由でOAuth開始が通る
+- [x] 🟢 `FRONTEND_ORIGIN` 未設定時に起動警告を出す
+- [x] 🔧 本番の実測値と稼働確認の結果を DEPLOY.md に記録
 
-#### 10-E（任意）: 自動デプロイ `ci/deploy`
+> **`FRONTEND_ORIGIN` は CORS だけでなく Google ログイン完了後の戻り先**でもある
+> （`google.go`）。未設定だと既定の localhost に飛び、「認証は成功するのに
+> 利用者が localhost へ飛ばされる」という気付きにくい壊れ方をする。
+> 外形からは検知できないため、既定値で起動したことを警告に残すようにした。
 
-- [ ] 🔧 main マージで backend(Cloud Run)・frontend(Pages) を自動デプロイ
+#### 10-E（任意）: 自動デプロイ ✅
+
+- [x] 🔧 main マージで backend(Cloud Run)・frontend(Pages) を自動デプロイ
+      → **GitHub Actions は不要だった**。Cloud Run の継続的デプロイ（Cloud Build）と
+        Cloudflare Pages の Git 連携で実現済み。#75/#76 のマージ後、約2分半で
+        backend が自動再デプロイされることを実測（未定義パスが 401→404 に切り替わった）。
+        Pages は PR ごとにプレビュービルドも走る。
 
 ---
 

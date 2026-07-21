@@ -88,9 +88,21 @@ func run() error {
 		os.Getenv("GOOGLE_REDIRECT_URL"),
 	)
 
+	// FRONTEND_ORIGIN は CORS の許可オリジンであると同時に、Google ログイン完了後に
+	// 利用者を戻す先でもある。本番で未設定のまま起動すると「認証は成功するのに
+	// localhost へ飛ばされる」という気付きにくい壊れ方をするため、
+	// 既定値で起動したことを警告に残す。
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "http://localhost:5173"
+		slog.Warn("FRONTEND_ORIGIN が未設定のため既定値を使います。"+
+			"本番ではGoogleログイン後の戻り先とCORSの許可オリジンが不正になります",
+			"fallback", frontendOrigin)
+	}
+
 	userRepo := repository.NewUserRepository(pool)
 	authSvc := service.NewAuthService(userRepo, auth.Hasher{})
-	authHandler := handler.NewAuthHandler(authSvc, tokens, googleOAuth, env("FRONTEND_ORIGIN", "http://localhost:5173"))
+	authHandler := handler.NewAuthHandler(authSvc, tokens, googleOAuth, frontendOrigin)
 
 	historyRepo := repository.NewHistoryRepository(pool)
 	historySvc := service.NewHistoryService(historyRepo)
@@ -123,7 +135,7 @@ func run() error {
 	// RequestID の後に置く。request_id を全ログに伝播させ、1リクエスト1行の
 	// アクセスログを出す。本文・機微なヘッダ・クエリは記録しない。
 	e.Use(handler.RequestLogging(slog.Default()))
-	e.Use(handler.CORS(env("FRONTEND_ORIGIN", "http://localhost:5173")))
+	e.Use(handler.CORS(frontendOrigin))
 
 	// レート制限は IP 単位（spec.md 11章）。認証は総当たりを防ぐため 10req/min と
 	// 厳しめ、検索は通常利用で詰まらないよう 60req/min。他系統は spec で未指定のため課さない。

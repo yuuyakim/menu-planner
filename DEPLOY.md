@@ -112,6 +112,33 @@ flowchart LR
 | 10-D `feat/prod-hardening` | 本番の CORS / Cookie(Secure) / Google リダイレクトの確認・調整 |
 | 10-E（任意）`ci/deploy` | main マージで backend(Cloud Run)・frontend(Pages) を自動デプロイ |
 
+## 本番構成（2026-07-21 稼働開始）
+
+| 要素 | 実際の値 |
+| --- | --- |
+| frontend | Cloudflare Pages（ルート `frontend` / 出力 `dist`、Functions で `/api` を中継） |
+| backend | Cloud Run `asia-northeast1`、`min-instances=0` / **`max-instances=2`**（課金の上限） |
+| DB | Neon `ap-southeast-1`（Cloud Run は東京のため、DBクエリごとにリージョン間の往復が乗る） |
+| レシピ検索 | Brave 実キー |
+| 認証 | メール/パスワード ＋ Google SSO |
+
+### 稼働確認の結果
+
+| 検証 | 結果 |
+| --- | --- |
+| `/api` 同一オリジンプロキシ | JSON応答 ✅ |
+| サインアップ→Cookie維持→認証必須API | 201 → 200 → 200 ✅ |
+| 未定義パス | 404 ✅ |
+| レート制限（検索 60/min） | 12回連続 200 ✅ |
+| レート制限（認証 10/min） | 上限で 429 ✅ |
+| **IP偽装によるレート制限回避** | **無効化を実証** ✅（毎回違う `X-Forwarded-For` を送っても通算10回で 429） |
+| Brave 実キー | cookpad / kurashiru / キッコーマン が3件（約1.1秒） ✅ |
+| Google ログイン開始 | 302 → accounts.google.com ✅ |
+
+> **設定の順番に注意**: `TRUSTED_PROXY_SECRET` を Pages と Cloud Run の**両方に設定してから**
+> レート制限を有効化すること。先に制限だけ入れると backend が全リクエストを
+> 「Cloud Run 入口の単一アドレス」とみなし、全ユーザーが同じ枠を共有して即ブロックされる。
+
 ## ロールバック / 注意
 - backend は Cloud Run のリビジョンで即ロールバック可能。
 - Neon はブランチ/バックアップ機能あり。マイグレーションは `go run ./cmd/migrate down` で1つ戻せる。
