@@ -1132,12 +1132,18 @@ API消費は生涯約120クエリで頭打ちになる。
 > **本文だけを包む**のは、ヘッダを残して他画面へ逃がすため。`key={pathname}` により
 > ナビゲーションで境界が作り直され、エラー状態が自然にリセットされる。
 
-#### 9-C-3: 仕上げドキュメント `docs/readme-finalize`
+#### 9-C-3: 仕上げドキュメント `docs/readme-finalize` ✅
 
 - [x] 🔧 404画面（`NotFoundPage` + `path="*"`。PR 8系で実装済み）
-- [ ] 🔧 README（起動手順、環境変数、アーキテクチャ図）
-- [ ] 🔧 `recipe_link_caches` の要否を判断 ※spec.md 13章 未決事項3
-- [ ] 🔧 応答時間の計測（検索 p95 200ms以内）
+- [x] 🔧 README（概要・技術スタック・アーキテクチャ図(mermaid)・起動手順・環境変数・開発・構成・性能）
+- [x] 🔧 `.env.example` にレート制限の env を追記（9-A で追加した分が未記載だった）
+- [x] 🔧 `recipe_link_caches` の要否を判断
+      → **spec.md 13.2 で導入決定済み（2026-07-17）**。献立120件固定のため生涯約120クエリで
+        頭打ちになり、外部API消費を抑えられる。判断は済んでおり README にも結論を明記した。
+- [x] 🔧 応答時間の計測（検索 p95 200ms以内）
+      → **達成**。docker compose（stub・シード済み）で backend へ逐次 curl した実測:
+        `GET /menus/suggest` p95 **3.0ms**、`GET /menus/:id` p95 3.0ms、
+        `POST /menus/suggest-weekly` p95 3.6ms。いずれもDBのみで完結し目標200msを大きく下回る。
 
 ---
 
