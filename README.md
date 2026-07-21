@@ -3,6 +3,9 @@
 ジャンル×難易度で夕食の献立を提案し、レシピサイトへのリンクを3件開ける Web アプリ。
 週間献立の提案、検索履歴、お気に入り、メール/パスワード・Google の認証に対応する。
 
+**本番: https://menu-planner-6cj.pages.dev**
+（Cloudflare Pages ＋ Cloud Run ＋ Neon。構成と手順は [`DEPLOY.md`](./DEPLOY.md)）
+
 仕様の正は [`spec.md`](./spec.md)。実装の進め方は [`task.md`](./task.md)。
 
 ## 技術スタック
