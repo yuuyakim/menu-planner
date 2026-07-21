@@ -1309,13 +1309,21 @@ Aのお気に入りが表示されたままになる（履歴も同じ）。
 - [x] 🔧 spec.md 2.7 / 4.1・4.2 / 5.5 / 10章 / 14章 を追加
 - [x] 🔧 task.md にフェーズ11のPR分割
 
-#### 11-B: 食材のドメインとスキーマ `feat/ingredient-schema`
+#### 11-B: 食材のドメインとスキーマ `feat/ingredient-schema` ✅
 
-- [ ] 🔴 テスト: `domain.Ingredient` の検証（名前・カナが空なら不正、カテゴリの妥当性）
-- [ ] 🔴 テスト: カテゴリの並び順（野菜→肉→魚介→卵乳→主食→調味料→その他）
-- [ ] 🟢 `domain.Ingredient` / `IngredientCategory` を実装
-- [ ] 🔧 マイグレーション `ingredients` / `menu_ingredients`
-- [ ] 🔴 統合テスト: 制約（UNIQUE・空文字・不正カテゴリ・CASCADE・RESTRICT）
+- [x] 🔴 テスト: `domain.Ingredient` の検証（ID未設定・名前/カナが空白のみ・名前が長すぎ・不正カテゴリ）
+- [x] 🔴 テスト: カテゴリの並び順（野菜→肉→魚介→卵乳→主食→その他）
+- [x] 🔴 テスト: `seasoning` は拒否される（14.4 をドメインでも守る）
+- [x] 🔴 テスト: `IngredientID` はゼロ値UUIDを受け付けない（MenuID と同じ方針）
+- [x] 🟢 `domain.Ingredient` / `IngredientCategory` / `IngredientID` を実装
+- [x] 🔧 マイグレーション `000007_create_ingredients`
+- [x] 🔴 統合テスト: CHECK（不正カテゴリ・`seasoning`・空白名/カナ）・名前UNIQUE・
+      複合主キーの重複拒否・献立削除でCASCADE・使用中食材はRESTRICTで消せない
+
+> **`seasoning` はDBのCHECK制約でも弾く。** アプリ側だけの防御だと、手で流すSQLや
+> シード修正で誤って入り込む。14.4 の判断をスキーマにも刻む。
+> **`ON DELETE RESTRICT`** は、使われている食材を消せてしまうと献立から食材が
+> 黙って欠落するため。献立側は `CASCADE`（献立を消せば紐付けも不要）。
 
 #### 11-C: 食材シードデータ `feat/ingredient-seed`
 
