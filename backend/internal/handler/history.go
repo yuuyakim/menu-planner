@@ -32,11 +32,15 @@ func NewHistoryHandler(svc HistoryUseCase, tokens *auth.JWT) *HistoryHandler {
 // RegisterRoutes は履歴APIのルーティングを登録する。
 // 履歴は本人のものだけを扱うため、すべて認証必須。
 func (h *HistoryHandler) RegisterRoutes(e *echo.Echo) {
-	g := e.Group(APIBasePath, RequireAuth(h.tokens))
-	g.GET("/histories", h.List)
+	g := e.Group(APIBasePath)
+	// RequireAuth はグループ全体ではなくルート個別に付ける。グループに付けると
+	// /api/v1 配下の未定義パスにも走ってしまい、404 であるべきものが 401 になる
+	// （Issue #73）。menu.go も同じ理由でルート個別に付けている。
+	requireAuth := RequireAuth(h.tokens)
+	g.GET("/histories", h.List, requireAuth)
 	// 静的な /histories は :id より優先されるので飲み込まれない。
-	g.DELETE("/histories", h.DeleteAll)
-	g.DELETE("/histories/:id", h.Delete)
+	g.DELETE("/histories", h.DeleteAll, requireAuth)
+	g.DELETE("/histories/:id", h.Delete, requireAuth)
 }
 
 // historyItemDTO は履歴1件のAPI表現。
