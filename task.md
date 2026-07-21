@@ -1159,11 +1159,19 @@ API消費は生涯約120クエリで頭打ちになる。
 - [x] 🔧 DEPLOY.md（構成図・アカウント・環境変数マトリクス・手順・ロールバック）
 - [x] 🔧 task.md にフェーズ10の枠を追加
 
-#### 10-B: Pages の /api プロキシ `feat/pages-api-proxy`
+#### 10-B: Pages の /api プロキシ `feat/pages-api-proxy` ✅
 
-- [ ] 🔧 Pages Function で `/api/*` を backend(`BACKEND_ORIGIN`) に転送
-- [ ] 🔧 `CF-Connecting-IP` を `X-Forwarded-For` として前送り（実IPをbackendへ）
-- [ ] 🔴 テスト: メソッド・ヘッダ・本文・Cookie を透過し、実IPヘッダを付ける
+- [x] 🔧 Pages Function（`functions/api/[[path]].ts`）で `/api/*` を backend(`BACKEND_ORIGIN`) に転送
+- [x] 🔧 `CF-Connecting-IP` を `X-Forwarded-For` / `X-Real-IP` として前送り（実IPをbackendへ）
+- [x] 🔴 テスト: パス・クエリ保持／実IP付与／Host非転送／Cookie透過／POST本文／
+      redirect=manual／応答(Set-Cookie)透過／末尾スラッシュ正規化（8本）
+- [x] 🟢 中核ロジックを `src/server/apiProxy.ts` の純関数に切り出し
+
+> **`Host` を転送しない**のが要点。Cloud Run は Host でサービスを判別するため、
+> フロントの Host を送ると宛先を見失って 404 になる。削除して fetch に組み立てさせる。
+> **redirect は `manual`**。Google SSO の 302 をプロキシが追うとログインが完了しない。
+> ロジックを `src/` の純関数に置いたのは、`vitest` の対象が `src/**` に限られ、
+> `tsc -b` の検査対象も `src` のため。`functions/` は薄いグルーに留める。
 
 #### 10-C: 実IPでのレート制限 `feat/trust-proxy-real-ip`
 
