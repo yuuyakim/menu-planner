@@ -86,6 +86,26 @@ describe('ホーム画面', () => {
     )
   })
 
+  it('こんたてんが声をかけてくる', async () => {
+    renderWithProviders(<HomePage />)
+
+    // 吹き出しの文言は画像に焼き込まず本文として置く。
+    // 翻訳・読み上げ・拡大のどれもテキストの方が素直に効く。
+    expect(
+      await screen.findByText('今日のごはん、一緒に考えよっ！'),
+    ).toBeVisible()
+  })
+
+  it('マスコットは装飾として扱い、読み上げの邪魔をしない', async () => {
+    renderWithProviders(<HomePage />)
+
+    await screen.findByRole('link', { name: /献立を探す/ })
+
+    // 入口リンクの読み上げ名は「献立を探す」＋説明であってほしい。
+    // 画像に alt を付けるとそこへキャラクターの説明が割り込む。
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
+  })
+
   it('ログイン中は要ログインの断りを出さない', async () => {
     loggedIn()
     renderWithProviders(<HomePage />)

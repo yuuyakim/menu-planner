@@ -5,4 +5,15 @@
 @theme {
   --font-sans:
     system-ui, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', Meiryo, sans-serif;
+
+  /* マスコット「こんたてん」のキャラクターシートから採色した配色。
+     色名はキャラクターの部位に由来させ、用途名（primary など）にはしない。
+     用途は画面ごとに変わるが、由来は変わらないため。 */
+  --color-kon-leaf: #abbc69; /* 葉っぱの芽。主役の緑 */
+  --color-kon-leaf-soft: #d0dda5; /* 淡い緑。境界や下地 */
+  --color-kon-cream: #fef5e1; /* 背景のクリーム */
+  --color-kon-peach: #f8c4a8; /* ほお。やわらかい強調 */
+  --color-kon-gold: #fecf6e; /* 吹き出しの黄。注目 */
+  --color-kon-wood: #d8b385; /* おたまの木。落ち着いた添え色 */
+  --color-kon-ink: #724e2d; /* 輪郭の茶。本文の文字色 */
 }
