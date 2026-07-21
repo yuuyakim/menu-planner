@@ -91,8 +91,15 @@ describe('ホーム画面', () => {
 
     // 吹き出しの文言は画像に焼き込まず本文として置く。
     // 翻訳・読み上げ・拡大のどれもテキストの方が素直に効く。
+    //
+    // 文言は折り返し位置を制御するため文節ごとの span に分かれている。
+    // 既定の照合は要素の直下テキストしか見ないので、段落全体の textContent で照合する。
     expect(
-      await screen.findByText('今日のごはん、一緒に考えよっ！'),
+      await screen.findByText(
+        (_, el) =>
+          el?.tagName === 'P' &&
+          el.textContent === '今日のごはん、一緒に考えよっ！',
+      ),
     ).toBeVisible()
   })
 

@@ -70,10 +70,12 @@ export function HomePage() {
           <div className="min-w-0 flex-1 space-y-3">
             {/* 吹き出しの文言は画像に焼き込まず本文で持つ。
                 翻訳・読み上げ・文字の拡大が素直に効く。 */}
-            {/* text-balance で行数が同じまま行長を揃える。
-                これが無いと狭い画面で「考えよ／っ！」と割れる。 */}
-            <p className="relative w-fit text-balance rounded-2xl border border-kon-leaf-soft bg-white px-4 py-2 text-sm font-medium text-kon-ink sm:text-base">
-              今日のごはん、一緒に考えよっ！
+            {/* 和文は文字単位で折り返せてしまい、狭い画面で「一／緒」のように
+                語の途中で割れる。文節を inline-block で括ると、その中では
+                改行されず、区切りでだけ折り返る。 */}
+            <p className="relative w-fit rounded-2xl border border-kon-leaf-soft bg-white px-4 py-2 text-sm font-medium text-kon-ink sm:text-base">
+              <span className="inline-block">今日のごはん、</span>
+              <span className="inline-block">一緒に考えよっ！</span>
               <span
                 aria-hidden="true"
                 className="absolute -left-[7px] bottom-3 size-3 rotate-45 border-b border-l border-kon-leaf-soft bg-white"

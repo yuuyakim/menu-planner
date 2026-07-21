@@ -35,12 +35,15 @@ export function AuthMenu() {
         {notice && (
           <span
             role="status"
-            className="rounded-full bg-emerald-50 px-3 py-1 text-sm text-emerald-800"
+            className="rounded-full bg-kon-leaf/20 px-3 py-1 text-sm text-kon-ink"
           >
             ログアウトしました
           </span>
         )}
-        <Link to="/login" className="text-slate-600 hover:text-slate-900">
+        <Link
+          to="/login"
+          className="whitespace-nowrap text-sm text-kon-ink/70 hover:text-kon-ink"
+        >
           ログイン
         </Link>
       </span>
@@ -49,12 +52,12 @@ export function AuthMenu() {
 
   return (
     <span className="ml-auto flex items-center gap-3">
-      <span className="text-sm text-slate-700">{user.displayName}</span>
+      <span className="text-sm text-kon-ink/80">{user.displayName}</span>
       <button
         type="button"
         onClick={() => logout.mutate(undefined, { onSettled: () => setNotice(true) })}
         disabled={logout.isPending}
-        className="text-sm text-slate-600 underline hover:text-slate-900 disabled:text-slate-400"
+        className="whitespace-nowrap text-sm text-kon-ink/70 underline decoration-kon-leaf underline-offset-2 hover:text-kon-ink disabled:text-kon-ink/40"
       >
         ログアウト
       </button>
