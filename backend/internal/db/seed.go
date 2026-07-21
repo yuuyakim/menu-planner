@@ -22,20 +22,53 @@ func SeedSQL() (string, error) {
 	return seeds.MenusSQL, nil
 }
 
-// Seed は献立マスタを投入する。
+// seedStep は投入する1つのSQLと、ログに出す名前。
+type seedStep struct {
+	name string
+	sql  string
+}
+
+// seedSteps は投入順。**この順序に意味がある。**
+// 紐付けは menus / ingredients を名前で結合するため、両方が入った後でなければ
+// 0件になって黙って欠落する。
+func seedSteps() []seedStep {
+	return []seedStep{
+		{"献立マスタ", seeds.MenusSQL},
+		{"食材マスタ", seeds.IngredientsSQL},
+		{"献立と食材の紐付け", seeds.MenuIngredientsSQL},
+	}
+}
+
+// Seed は献立マスタ・食材マスタ・その紐付けを投入する。
 // ON CONFLICT DO NOTHING により、再実行しても重複しない（冪等）。
+//
+// 返すのは投入した行数の合計。途中で失敗したら全体を巻き戻す
+// （献立だけ入って食材が入っていない中途半端な状態を残さない）。
 func Seed(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
-	sql, err := SeedSQL()
+	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("シードのトランザクション開始に失敗しました: %w", err)
+	}
+	defer func() {
+		// コミット済みなら Rollback は無害に失敗する。
+		_ = tx.Rollback(ctx)
+	}()
+
+	var total int64
+	for _, step := range seedSteps() {
+		if step.sql == "" {
+			return 0, fmt.Errorf("%w: %s", ErrEmptySeed, step.name)
+		}
+		tag, err := tx.Exec(ctx, step.sql)
+		if err != nil {
+			return 0, fmt.Errorf("%sの投入に失敗しました: %w", step.name, err)
+		}
+		slog.Info("シードを投入しました", "対象", step.name, "inserted", tag.RowsAffected())
+		total += tag.RowsAffected()
 	}
 
-	tag, err := pool.Exec(ctx, sql)
-	if err != nil {
-		return 0, fmt.Errorf("献立マスタの投入に失敗しました: %w", err)
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("シードのコミットに失敗しました: %w", err)
 	}
-
-	inserted := tag.RowsAffected()
-	slog.Info("献立マスタを投入しました", "inserted", inserted)
-	return inserted, nil
+	return total, nil
 }
