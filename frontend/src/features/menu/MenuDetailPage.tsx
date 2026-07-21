@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotStatus } from '../../components/MascotStatus'
 import { fetchMenu } from './api'
+import { IngredientList } from './IngredientList'
 import { MenuCard } from './MenuCard'
 import { RecipeList } from './RecipeList'
 
@@ -55,7 +56,8 @@ export function MenuDetailPage() {
           <MenuCard menu={menu} headingLevel={1} />
           <section className="space-y-3">
             <h2 className="font-bold text-kon-ink">レシピ</h2>
-            <RecipeList menuId={menu.id} />
+            <IngredientList menuId={menu.id} />
+          <RecipeList menuId={menu.id} />
           </section>
         </>
       )}

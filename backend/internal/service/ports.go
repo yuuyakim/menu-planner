@@ -34,6 +34,27 @@ type MenuRepository interface {
 	FindByFilter(ctx context.Context, f domain.MenuFilter) ([]domain.Menu, error)
 }
 
+// MenuIngredient は「どの献立に、どの食材を使うか」1件分の対応。
+//
+// 買い物リストでは同じ食材が複数の献立に出るため、食材だけでなく
+// **どの献立で使うかも必要**になる（spec.md 5.5 の usedIn）。
+type MenuIngredient struct {
+	MenuID     domain.MenuID
+	Ingredient domain.Ingredient
+}
+
+// IngredientRepository は献立に紐づく食材へのアクセスを抽象化する。
+// 実装は internal/repository にある。
+type IngredientRepository interface {
+	// FindByMenuIDs は指定した献立に使う食材を、献立との対応つきで返す。
+	//
+	// 1件ずつ引くと献立の数だけ問い合わせが飛ぶため、まとめて引く。
+	// 存在しない献立IDは黙って除く（件数の判断は呼び出し側の仕事）。
+	// 並びは食材のカナ順。カテゴリ順への並べ替えは domain の知識なので
+	// service 側で行う（SQLに CASE を書かない）。
+	FindByMenuIDs(ctx context.Context, ids []domain.MenuID) ([]MenuIngredient, error)
+}
+
 // RecipeSearchGateway はレシピ掲載ページの検索を抽象化する。
 // 実装は internal/gateway にあり、検索API(Brave / Google CSE)と
 // APIキー不要のスタブを差し替えられる。

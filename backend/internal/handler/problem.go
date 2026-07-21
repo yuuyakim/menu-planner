@@ -53,6 +53,11 @@ var problemMapping = []struct {
 	{service.ErrFavoriteNotFound, http.StatusNotFound, "favorite-not-found", "お気に入りが見つかりません"},
 	{service.ErrHistoryForbidden, http.StatusForbidden, "history-forbidden", "この履歴を操作する権限がありません"},
 	{service.ErrInvalidDay, http.StatusBadRequest, "invalid-day", "不正な日の指定です"},
+	// 買い物リストの献立指定が0件、または上限（7件）超過。
+	{service.ErrInvalidMenuIDs, http.StatusBadRequest, "invalid-menu-ids", "献立の指定が不正です"},
+	// 指定された献立の中に存在しないものがある。黙って除くと
+	// 「頼んだ献立の食材が抜けたリスト」を渡すことになるため 404 で知らせる。
+	{service.ErrMenuNotFoundInList, http.StatusNotFound, "menu-not-found", "指定された献立が見つかりません"},
 	{service.ErrInvalidWeek, http.StatusBadRequest, "invalid-week", "不正な週間献立です"},
 	{domain.ErrInvalidEmail, http.StatusBadRequest, "invalid-email", "不正なメールアドレスです"},
 	{auth.ErrPasswordTooShort, http.StatusBadRequest, "password-too-short", "パスワードが短すぎます"},

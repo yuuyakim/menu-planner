@@ -282,3 +282,22 @@ describe('週間献立', () => {
     expect(bodies[0].week?.[0]).toBe(menu(1).id)
   })
 })
+
+describe('買い物リストへの導線（11-G）', () => {
+  it('週間献立を作ると買い物リストへのリンクが出る', async () => {
+    const user = userEvent.setup()
+    respondWeekly()
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    // 作る前は出さない。まだ買うものが決まっていないため。
+    expect(
+      screen.queryByRole('link', { name: '買い物リストを見る' }),
+    ).not.toBeInTheDocument()
+
+    await user.click(create())
+
+    expect(
+      await screen.findByRole('link', { name: '買い物リストを見る' }),
+    ).toBeVisible()
+  })
+})

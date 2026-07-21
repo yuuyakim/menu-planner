@@ -89,7 +89,15 @@ export function WeeklyPage({ today = new Date() }: Props) {
       {error && <ErrorMessage error={error} />}
 
       {week && (
-        <ul className="space-y-4">
+        <>
+          {/* 献立が決まってはじめて買うものが決まる。作る前は出さない。 */}
+          <Link
+            to="/shopping-list"
+            className="inline-block rounded-full bg-kon-leaf px-5 py-2 font-medium text-white hover:bg-kon-leaf/90"
+          >
+            買い物リストを見る
+          </Link>
+          <ul className="space-y-4">
           {week.map((d) => (
             <li key={d.day} aria-label={dayLabel(d.day, today)}>
               {/* 見出し(h2)にはしない。この中の MenuCard が献立名を h2 で
@@ -118,6 +126,7 @@ export function WeeklyPage({ today = new Date() }: Props) {
             </li>
           ))}
         </ul>
+        </>
       )}
     </section>
   )

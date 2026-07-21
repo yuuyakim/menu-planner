@@ -112,11 +112,18 @@ func run() error {
 	favoriteSvc := service.NewFavoriteService(favoriteRepo)
 	favoriteHandler := handler.NewFavoriteHandler(favoriteSvc, tokens)
 
+	ingredientRepo := repository.NewIngredientRepository(pool)
+
 	menuRepo := repository.NewMenuRepository(pool)
 	recipeCache := repository.NewRecipeLinkCache(pool)
 	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway, recipeCache)
 	// 献立検索は履歴（RecentMenuIDs / Record）とトークン（OptionalAuth）を使う。
 	menuHandler := handler.NewMenuHandler(menuSvc, historySvc, tokens)
+
+	// 買い物リストと食材は同じ service が担う（どちらも献立×食材を扱うため）。
+	shoppingSvc := service.NewShoppingListService(menuRepo, ingredientRepo)
+	shoppingHandler := handler.NewShoppingListHandler(shoppingSvc)
+	ingredientHandler := handler.NewIngredientHandler(shoppingSvc)
 
 	e := echo.New()
 	e.HideBanner = true
@@ -149,6 +156,9 @@ func run() error {
 	health := handler.NewHealthHandler()
 	e.GET("/health", health.Health)
 	menuHandler.RegisterRoutes(e, searchLimit)
+	// 食材・買い物リストは検索系と同じ扱い（未認証で使え、検索の上限を適用）。
+	ingredientHandler.RegisterRoutes(e, searchLimit)
+	shoppingHandler.RegisterRoutes(e, searchLimit)
 	authHandler.RegisterRoutes(e, authLimit)
 	historyHandler.RegisterRoutes(e)
 	favoriteHandler.RegisterRoutes(e)

@@ -255,3 +255,31 @@ describe('検索結果', () => {
     ).toBeVisible()
   })
 })
+
+describe('必要な食材の表示（11-H で判明した抜け）', () => {
+  it('提案された献立の食材が検索画面にも出る', async () => {
+    // 検索はアプリの中核で、「何を買えばいいか」は結果を見た直後に知りたい。
+    // 献立詳細まで行かないと分からないのでは遠い。
+    const user = userEvent.setup()
+    respondWith(oyakodon)
+    server.use(
+      http.get('/api/v1/menus/:id/ingredients', () =>
+        HttpResponse.json({
+          ingredients: [
+            {
+              id: 'i1',
+              name: '玉ねぎ',
+              nameKana: 'たまねぎ',
+              category: 'vegetable',
+            },
+          ],
+        }),
+      ),
+    )
+    renderWithProviders(<SearchPage />)
+
+    await user.click(search())
+
+    expect(await screen.findByText('玉ねぎ')).toBeVisible()
+  })
+})
