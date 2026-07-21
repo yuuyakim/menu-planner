@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 	"time"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
+	"github.com/yuuyakim/menu-planner/backend/internal/logctx"
 )
 
 // ErrNoMenuFound は条件に合う献立が1件も無いことを表す。
@@ -496,7 +496,7 @@ func (s *MenuService) RecipeLinks(ctx context.Context, id domain.MenuID) ([]doma
 	if err := s.recipeCache.Save(ctx, id, links, s.now()); err != nil {
 		// キャッシュは高速化の手段であって、保存できないことは
 		// 検索結果を捨てる理由にならない。
-		slog.Warn("レシピのキャッシュを保存できませんでした",
+		logctx.From(ctx).Warn("レシピのキャッシュを保存できませんでした",
 			"menu_id", id, "menu_name", menu.Name, "error", err)
 	}
 	return links, nil
@@ -512,7 +512,7 @@ func (s *MenuService) cachedLinks(ctx context.Context, id domain.MenuID) ([]doma
 	case errors.Is(err, ErrRecipeCacheMiss):
 		return nil, false
 	case err != nil:
-		slog.Warn("レシピのキャッシュを読めませんでした。検索APIに問い合わせます",
+		logctx.From(ctx).Warn("レシピのキャッシュを読めませんでした。検索APIに問い合わせます",
 			"menu_id", id, "error", err)
 		return nil, false
 	}

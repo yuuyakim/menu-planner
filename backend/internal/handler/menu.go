@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -133,7 +132,7 @@ func (h *MenuHandler) Suggest(c echo.Context) error {
 	if authed {
 		if recent, err := h.history.RecentMenuIDs(ctx, userID); err != nil {
 			// 履歴の取得失敗で提案を止めない。除外なしで続ける。
-			slog.Warn("直近履歴の取得に失敗しました", "error", err)
+			LoggerFrom(c).Warn("直近履歴の取得に失敗しました", "error", err)
 		} else {
 			f.ExcludeIDs = append(f.ExcludeIDs, recent...)
 		}
@@ -152,7 +151,7 @@ func (h *MenuHandler) Suggest(c echo.Context) error {
 	if authed {
 		// 記録の失敗で提案を失敗させない。ログだけ残す。
 		if err := h.history.Record(ctx, userID, menu.ID, domain.SearchModeSingle); err != nil {
-			slog.Warn("履歴の記録に失敗しました", "error", err)
+			LoggerFrom(c).Warn("履歴の記録に失敗しました", "error", err)
 		}
 	}
 
@@ -240,7 +239,7 @@ func (h *MenuHandler) SuggestWeekly(c echo.Context) error {
 	var recent []domain.MenuID
 	if authed {
 		if recent, err = h.history.RecentMenuIDs(ctx, userID); err != nil {
-			slog.Warn("直近履歴の取得に失敗しました", "error", err)
+			LoggerFrom(c).Warn("直近履歴の取得に失敗しました", "error", err)
 			recent = nil
 		}
 	}
@@ -260,7 +259,7 @@ func (h *MenuHandler) SuggestWeekly(c echo.Context) error {
 	if authed {
 		// 7件を1トランザクションでまとめて記録（6-C）。失敗しても提案は返す。
 		if err := h.history.RecordMany(ctx, userID, menuIDs, domain.SearchModeWeekly); err != nil {
-			slog.Warn("週間献立の履歴記録に失敗しました", "error", err)
+			LoggerFrom(c).Warn("週間献立の履歴記録に失敗しました", "error", err)
 		}
 	}
 
@@ -354,7 +353,7 @@ func (h *MenuHandler) RerollDay(c echo.Context) error {
 	var recent []domain.MenuID
 	if authed {
 		if recent, err = h.history.RecentMenuIDs(ctx, userID); err != nil {
-			slog.Warn("直近履歴の取得に失敗しました", "error", err)
+			LoggerFrom(c).Warn("直近履歴の取得に失敗しました", "error", err)
 			recent = nil
 		}
 	}
