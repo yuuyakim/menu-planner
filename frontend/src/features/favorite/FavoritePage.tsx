@@ -4,6 +4,8 @@ import { Link } from 'react-router'
 import type { FavoriteItem } from '../../api/types'
 import { difficultyLabels, genreLabels } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { MascotEmpty } from '../../components/MascotEmpty'
+import { MascotStatus } from '../../components/MascotStatus'
 import { favoritesQueryKey, fetchFavorites, removeFavorite } from './api'
 
 // FavoritePage はお気に入りの一覧と削除。
@@ -29,22 +31,18 @@ export function FavoritePage() {
 
   return (
     <section className="space-y-6">
-      <h1 className="text-2xl font-bold">お気に入り</h1>
+      <h1 className="text-2xl font-bold text-kon-ink">お気に入り</h1>
 
-      {isPending && (
-        <p role="status" className="text-slate-600">
-          読み込み中…
-        </p>
-      )}
+      {isPending && <MascotStatus>読み込み中…</MascotStatus>}
 
       {error && <ErrorMessage error={error} />}
       {/* 削除の失敗で一覧を消さない。他の献立はそのまま操作できる。 */}
       {remove.error && <ErrorMessage error={remove.error} />}
 
       {favorites?.length === 0 && (
-        <p className="text-slate-600">
+        <MascotEmpty image="/mascot/face-happy.png">
           まだお気に入りがありません。気に入った献立を登録しておくと、ここから探せます。
-        </p>
+        </MascotEmpty>
       )}
 
       {favorites && favorites.length > 0 && (
@@ -76,22 +74,22 @@ function FavoriteRow({ favorite, onRemove, isRemoving }: RowProps) {
     // aria-label に献立名を入れ、行を名前で特定できるようにする。
     <li
       aria-label={menu.name}
-      className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4"
+      className="flex items-center gap-4 rounded-2xl border border-kon-leaf-soft bg-white p-4"
     >
       <div className="min-w-0 flex-1">
-        <p className="font-medium">{menu.name}</p>
-        <p className="mt-1 flex gap-2 text-sm text-slate-500">
-          <span className="rounded-full bg-slate-100 px-2 py-0.5">
+        <p className="font-medium text-kon-ink">{menu.name}</p>
+        <p className="mt-1 flex gap-2 text-sm text-kon-ink/60">
+          <span className="rounded-full bg-kon-cream px-2 py-0.5">
             {genreLabels[menu.genre]}
           </span>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5">
+          <span className="rounded-full bg-kon-cream px-2 py-0.5">
             {difficultyLabels[menu.difficulty]}
           </span>
         </p>
       </div>
       <Link
         to={`/menus/${menu.id}`}
-        className="shrink-0 text-sm font-medium text-emerald-700 hover:underline"
+        className="shrink-0 text-sm font-medium text-kon-ink underline decoration-kon-leaf decoration-2 underline-offset-2"
       >
         レシピを見る
       </Link>
@@ -99,7 +97,7 @@ function FavoriteRow({ favorite, onRemove, isRemoving }: RowProps) {
         type="button"
         onClick={onRemove}
         disabled={isRemoving}
-        className="shrink-0 text-sm text-slate-500 hover:text-slate-900 disabled:text-slate-300"
+        className="shrink-0 text-sm text-kon-ink/60 hover:text-kon-ink disabled:text-kon-ink/30"
       >
         外す
       </button>

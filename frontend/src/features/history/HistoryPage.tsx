@@ -4,6 +4,8 @@ import { Link } from 'react-router'
 
 import type { HistoryItem, SearchMode } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { MascotEmpty } from '../../components/MascotEmpty'
+import { MascotStatus } from '../../components/MascotStatus'
 import {
   deleteAllHistories,
   deleteHistory,
@@ -64,12 +66,12 @@ export function HistoryPage() {
   return (
     <section className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">検索履歴</h1>
+        <h1 className="text-2xl font-bold text-kon-ink">検索履歴</h1>
         {histories && histories.length > 0 && !confirmingClear && (
           <button
             type="button"
             onClick={() => setConfirmingClear(true)}
-            className="text-sm text-slate-600 underline hover:text-slate-900"
+            className="text-sm text-kon-ink/70 underline decoration-kon-leaf underline-offset-2 hover:text-kon-ink"
           >
             すべて削除
           </button>
@@ -78,40 +80,34 @@ export function HistoryPage() {
 
       {/* 取り返しがつかない操作なので、押した直後には消さない。 */}
       {confirmingClear && (
-        <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
-          <span className="text-amber-900">履歴をすべて削除しますか？</span>
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-kon-gold bg-kon-gold/20 px-4 py-3">
+          <span className="text-kon-ink">履歴をすべて削除しますか？</span>
           <button
             type="button"
             onClick={() => removeAll.mutate()}
             disabled={removeAll.isPending}
-            className="rounded-lg bg-amber-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-amber-800 disabled:bg-slate-300"
+            className="rounded-full bg-kon-wood px-4 py-1.5 text-sm font-medium text-white transition-colors hover:brightness-95 disabled:bg-kon-leaf-soft disabled:text-kon-ink/70"
           >
             削除する
           </button>
           <button
             type="button"
             onClick={() => setConfirmingClear(false)}
-            className="text-sm text-amber-900 underline"
+            className="text-sm text-kon-ink/70 underline"
           >
             やめる
           </button>
         </div>
       )}
 
-      {isPending && (
-        <p role="status" className="text-slate-600">
-          読み込み中…
-        </p>
-      )}
+      {isPending && <MascotStatus>読み込み中…</MascotStatus>}
 
       {error && <ErrorMessage error={error} />}
       {/* 削除の失敗で一覧を消さない。他の履歴はそのまま操作できる。 */}
       {deleteError && <ErrorMessage error={deleteError} />}
 
       {histories?.length === 0 && (
-        <p className="text-slate-600">
-          まだ履歴がありません。献立を探すと、ここに残ります。
-        </p>
+        <MascotEmpty>まだ履歴がありません。献立を探すと、ここに残ります。</MascotEmpty>
       )}
 
       {histories && histories.length > 0 && (
@@ -141,12 +137,12 @@ function HistoryRow({ history, onDelete, isDeleting }: RowProps) {
     // aria-label に献立名を入れ、行を名前で特定できるようにする。
     <li
       aria-label={history.menu.name}
-      className="flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-4"
+      className="flex items-center gap-4 rounded-2xl border border-kon-leaf-soft bg-white p-4"
     >
       <div className="min-w-0 flex-1">
-        <p className="font-medium">{history.menu.name}</p>
-        <p className="mt-1 flex gap-2 text-sm text-slate-500">
-          <span className="rounded-full bg-slate-100 px-2 py-0.5">
+        <p className="font-medium text-kon-ink">{history.menu.name}</p>
+        <p className="mt-1 flex gap-2 text-sm text-kon-ink/60">
+          <span className="rounded-full bg-kon-cream px-2 py-0.5">
             {searchModeLabels[history.searchMode]}
           </span>
           <span>{formatSearchedAt(history.searchedAt)}</span>
@@ -154,7 +150,7 @@ function HistoryRow({ history, onDelete, isDeleting }: RowProps) {
       </div>
       <Link
         to={`/menus/${history.menu.id}`}
-        className="shrink-0 text-sm font-medium text-emerald-700 hover:underline"
+        className="shrink-0 text-sm font-medium text-kon-ink underline decoration-kon-leaf decoration-2 underline-offset-2"
       >
         レシピを見る
       </Link>
@@ -162,7 +158,7 @@ function HistoryRow({ history, onDelete, isDeleting }: RowProps) {
         type="button"
         onClick={onDelete}
         disabled={isDeleting}
-        className="shrink-0 text-sm text-slate-500 hover:text-slate-900 disabled:text-slate-300"
+        className="shrink-0 text-sm text-kon-ink/60 hover:text-kon-ink disabled:text-kon-ink/30"
       >
         削除
       </button>
