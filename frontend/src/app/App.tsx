@@ -10,6 +10,7 @@ import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
 import { SearchPage } from '../features/menu/SearchPage'
+import { ShoppingListPage } from '../features/menu/ShoppingListPage'
 import { WeeklyPage } from '../features/menu/WeeklyPage'
 
 // navItems はヘッダに並べるリンク。増減はここだけで済ませる。
@@ -81,6 +82,8 @@ export function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/weekly" element={<WeeklyPage />} />
+            {/* 買い物リストは週間献立から作る。未認証でも使える（spec.md 2.7）。 */}
+            <Route path="/shopping-list" element={<ShoppingListPage />} />
             <Route path="/menus/:id" element={<MenuDetailPage />} />
             {/* 履歴とお気に入りは本人のものだけを扱うため認証必須。
                 検索と週間献立は未認証でも使える（spec.md 1.3）。 */}
