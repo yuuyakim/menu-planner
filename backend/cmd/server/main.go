@@ -110,6 +110,11 @@ func run() error {
 	e.HideBanner = true
 	e.HidePort = true
 
+	// 本番はプロキシ（Cloudflare Pages の Function）の背後に立つ。共有シークレットが
+	// 一致したリクエストの X-Forwarded-For だけを信頼して実クライアントIPを取り出す。
+	// 未設定なら接続元をそのまま使う（＝転送ヘッダを信用しない安全側）。
+	e.IPExtractor = handler.TrustedProxyIPExtractor(os.Getenv("TRUSTED_PROXY_SECRET"))
+
 	// 全てのエラーレスポンスを RFC 7807 形式に統一する
 	e.HTTPErrorHandler = handler.ErrorHandler()
 
