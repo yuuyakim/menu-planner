@@ -143,6 +143,107 @@ describe('APIクライアント', () => {
     expect(err.message).not.toBe('')
   })
 
+  // アクセストークンは15分で切れるが、リフレッシュトークンは30日有効。
+  // 401 を受けたら黙って再発行を試み、利用者がログインし直さずに済むようにする。
+  describe('401 を受けたときのセッション再発行', () => {
+    it('再発行に成功したら元のリクエストをやり直して結果を返す', async () => {
+      let expired = true
+      server.use(
+        http.get('/api/v1/auth/me', () => {
+          if (expired) return problem(401, '認証が必要です')
+          return HttpResponse.json({ user: { id: 'u1' } })
+        }),
+        http.post('/api/v1/auth/refresh', () => {
+          expired = false
+          return new HttpResponse(null, { status: 204 })
+        }),
+      )
+
+      const data = await apiGet<{ user: { id: string } }>('/auth/me')
+
+      expect(data.user.id).toBe('u1')
+    })
+
+    it('再発行にも失敗したら 401 のままにする', async () => {
+      server.use(
+        http.get('/api/v1/auth/me', () => problem(401, '認証が必要です')),
+        http.post('/api/v1/auth/refresh', () => problem(401, '認証が必要です')),
+      )
+
+      const err = await rejectedWith(apiGet('/auth/me'), ApiError)
+
+      expect(err.status).toBe(401)
+    })
+
+    it('やり直しは一度だけ（再発行後も 401 なら諦める）', async () => {
+      let calls = 0
+      server.use(
+        http.get('/api/v1/auth/me', () => {
+          calls += 1
+          return problem(401, '認証が必要です')
+        }),
+        http.post(
+          '/api/v1/auth/refresh',
+          () => new HttpResponse(null, { status: 204 }),
+        ),
+      )
+
+      await rejectedWith(apiGet('/auth/me'), ApiError)
+
+      // 初回とやり直しの2回で打ち切る。無限に往復させない。
+      expect(calls).toBe(2)
+    })
+
+    it('同時に 401 になっても再発行は1回にまとめる', async () => {
+      let refreshes = 0
+      let expired = true
+      server.use(
+        http.get('/api/v1/histories', () => {
+          if (expired) return problem(401, '認証が必要です')
+          return HttpResponse.json({ histories: [] })
+        }),
+        http.get('/api/v1/favorites', () => {
+          if (expired) return problem(401, '認証が必要です')
+          return HttpResponse.json({ favorites: [] })
+        }),
+        http.post('/api/v1/auth/refresh', () => {
+          refreshes += 1
+          expired = false
+          return new HttpResponse(null, { status: 204 })
+        }),
+      )
+
+      await Promise.all([apiGet('/histories'), apiGet('/favorites')])
+
+      // 画面が複数のAPIを並べて呼ぶのは普通なので、まとめないと
+      // 同じ再発行が同時に何本も飛ぶ。
+      expect(refreshes).toBe(1)
+    })
+
+    it('ログイン自体の 401 では再発行しない', async () => {
+      let refreshes = 0
+      server.use(
+        http.post('/api/v1/auth/login', () =>
+          problem(401, 'メールアドレスまたはパスワードが違います'),
+        ),
+        http.post('/api/v1/auth/refresh', () => {
+          refreshes += 1
+          return new HttpResponse(null, { status: 204 })
+        }),
+      )
+
+      const err = await rejectedWith(
+        apiPost('/auth/login', { email: 'a@example.com', password: 'x' }),
+        ApiError,
+      )
+
+      // 資格情報の誤りに再発行を試みても無意味で、
+      // 再発行が成功する状況では往復が止まらなくなる。
+      expect(err.status).toBe(401)
+      expect(refreshes).toBe(0)
+    })
+  })
+
   it('本文が壊れた 200 もエラーになる', async () => {
     server.use(
       http.get('/api/v1/menus/suggest', () =>

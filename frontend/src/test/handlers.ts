@@ -17,4 +17,18 @@ export const handlers = [
       { status: 401, headers: { 'Content-Type': 'application/problem+json' } },
     ),
   ),
+
+  // 401 を受けたクライアントはセッションの再発行を試みる。
+  // 既定は「未ログイン」に揃えて失敗させる。これが無いと再発行の試行が
+  // 未定義リクエストとして通信エラー扱いになり、本番の挙動とズレる。
+  http.post('/api/v1/auth/refresh', () =>
+    HttpResponse.json(
+      {
+        type: 'https://menu-planner.example.com/probs/token-invalid',
+        title: '認証が必要です',
+        status: 401,
+      },
+      { status: 401, headers: { 'Content-Type': 'application/problem+json' } },
+    ),
+  ),
 ]

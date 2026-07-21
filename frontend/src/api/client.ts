@@ -56,9 +56,48 @@ async function parseProblem(res: Response): Promise<Partial<Problem> | undefined
   return undefined
 }
 
+// セッションを再発行しないパス。
+//
+// これらで 401 が返るのは資格情報そのものが通らなかったということなので、
+// 再発行しても結果は変わらない。とくに /auth/refresh を除いておかないと、
+// 失敗した再発行がまた再発行を呼んで往復が止まらなくなる。
+const noRefreshPaths = ['/auth/login', '/auth/signup', '/auth/refresh']
+
+// 進行中の再発行。同時に 401 になった複数のリクエストが
+// それぞれ再発行を投げないよう、1本の Promise を共有する。
+let refreshing: Promise<boolean> | null = null
+
+// refreshSession はリフレッシュCookieでアクセストークンの再発行を試み、
+// 成否を返す。失敗は呼び出し側が元の 401 を返すための情報でしかないので、
+// 例外にはしない。
+function refreshSession(): Promise<boolean> {
+  refreshing ??= (async () => {
+    try {
+      const res = await fetch(`${basePath}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      return res.ok
+    } catch {
+      return false
+    } finally {
+      // 次に 401 が来たときは改めて試せるようにする。
+      refreshing = null
+    }
+  })()
+  return refreshing
+}
+
 // request は全リクエストの共通処理。
 // path は '/menus/suggest' のようにベースパスを除いたもの。
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+//
+// retry は 401 でセッションを再発行してやり直す余地が残っているかを表す。
+// やり直しは一度だけで、そこでも 401 なら諦めて呼び出し側に返す。
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  retry = true,
+): Promise<T> {
   let res: Response
   try {
     res = await fetch(`${basePath}${path}`, {
@@ -69,6 +108,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   } catch {
     // fetch が reject するのは通信自体が成立しなかったとき。
     throw new NetworkError()
+  }
+
+  // アクセストークンは15分で切れるが、リフレッシュトークンは30日有効。
+  // 期限切れは利用者にとってログアウトではないので、黙って再発行してやり直す。
+  if (res.status === 401 && retry && !noRefreshPaths.includes(path)) {
+    if (await refreshSession()) {
+      return request<T>(path, init, false)
+    }
   }
 
   if (!res.ok) {
