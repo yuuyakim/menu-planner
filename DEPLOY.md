@@ -77,9 +77,13 @@ flowchart LR
 
 ### 3. frontend（Cloudflare Pages ＋ /api プロキシ）
 1. Cloudflare Pages プロジェクトを作成し、リポジトリを連携。
-   - ビルドコマンド: `npm run build`（`frontend`）／出力: `frontend/dist`
-2. `/api/*` を backend に転送する Pages Function を置く（**PR 10-B で追加**）。backend の URL は Pages の環境変数 `BACKEND_ORIGIN` で渡す。
+   - **ルートディレクトリ: `frontend`**／ビルドコマンド: `npm run build`／出力ディレクトリ: `dist`
+2. **環境変数 `BACKEND_ORIGIN` に Cloud Run のURL**を設定（末尾スラッシュ無し）。
+   例: `https://menu-planner-backend-537778290491.asia-northeast1.run.app`
+   - `/api/*` を backend に転送する Pages Function は `frontend/functions/api/[[path]].ts` に実装済み（10-B）。
+   - この Function が `CF-Connecting-IP` を `X-Forwarded-For` として前送りするため、backend 側でIP単位のレート制限が効く。
 3. デプロイ後の URL（`https://menu-planner.pages.dev`）を控える。
+4. 疎通確認: `curl https://<pages>/api/v1/menus/suggest` が献立のJSONを返す（＝同一オリジンでAPIが通っている）。
 
 ### 4. 認証（Google OAuth）
 1. Google Cloud Console でOAuthクライアントを作成/更新。
