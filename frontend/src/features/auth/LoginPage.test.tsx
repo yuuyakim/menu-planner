@@ -205,3 +205,38 @@ describe('新規登録', () => {
     )
   })
 })
+
+describe('画面遷移でエラーになって戻されたとき（Issue #81）', () => {
+  // backend がブラウザの画面遷移のエラーを /login?error=... に飛ばしてくる。
+  // 生のJSONを見せない代わりに、ここで利用者向けの文言を出す。
+  function renderLoginWithError(kind: string) {
+    return renderWithProviders(
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+      </Routes>,
+      { route: `/login?error=${kind}` },
+    )
+  }
+
+  it('レート制限なら、時間をおくよう案内する', () => {
+    renderLoginWithError('rate-limited')
+    const alert = screen.getByRole('alert')
+    expect(alert).toBeVisible()
+    expect(alert.textContent).toMatch(/しばらく/)
+  })
+
+  it('Google認証の失敗なら、その旨を伝える', () => {
+    renderLoginWithError('google-auth-failed')
+    expect(screen.getByRole('alert').textContent).toMatch(/Google/)
+  })
+
+  it('未知の種別でも、何か問題が起きたことは伝える', () => {
+    renderLoginWithError('something-unexpected')
+    expect(screen.getByRole('alert')).toBeVisible()
+  })
+
+  it('error が無ければ何も出さない', () => {
+    renderLogin()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})

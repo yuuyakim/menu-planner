@@ -3,6 +3,8 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -86,6 +88,23 @@ func ErrorHandler() echo.HTTPErrorHandler {
 
 		p := toProblem(err)
 
+		// ブラウザのトップレベル遷移（Googleログインの開始やコールバック）で
+		// エラーになった場合、problem+json をそのまま返すと利用者の画面に
+		// 生のJSONが表示されてしまう（Issue #81）。ログイン画面へ戻し、
+		// 理由をクエリで渡してフロントに文言を出させる。
+		//
+		// フロントと backend は同一オリジンで配信されるため、相対パスで返せば
+		// ブラウザがフロントのオリジンに解決する。ここでフロントのURLを
+		// 知る必要が無い。
+		if prefersHTML(c.Request()) {
+			kind := strings.TrimPrefix(p.Type, problemBaseURI)
+			target := "/login?error=" + url.QueryEscape(kind)
+			if err := c.Redirect(http.StatusFound, target); err != nil {
+				LoggerFrom(c).Error("エラー時のリダイレクトに失敗しました", "error", err)
+			}
+			return
+		}
+
 		if p.Status >= http.StatusInternalServerError {
 			// 500系は原因を調べられるようログにだけ残し、レスポンスには含めない
 			LoggerFrom(c).Error("サーバエラー",
@@ -100,6 +119,16 @@ func ErrorHandler() echo.HTTPErrorHandler {
 			LoggerFrom(c).Error("エラーレスポンスの書き込みに失敗しました", "error", err)
 		}
 	}
+}
+
+// prefersHTML はリクエストがブラウザの画面遷移かを判定する。
+//
+// ブラウザはトップレベル遷移で `Accept: text/html,...` を送る。一方
+// アプリ内の fetch は既定で `*/*` を送るため、これで両者を分けられる。
+// 「HTMLを受け取れる相手か」で判断するので、判定を外しても
+// APIクライアント側は従来どおり problem+json を受け取る。
+func prefersHTML(req *http.Request) bool {
+	return strings.Contains(req.Header.Get(echo.HeaderAccept), "text/html")
 }
 
 // toProblem はエラーを Problem に変換する。
