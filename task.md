@@ -1103,11 +1103,28 @@ API消費は生涯約120クエリで頭打ちになる。
 > handler に置くと service（problem.go 経由で handler が service に依存）から参照できない。
 > エラー時の status は ErrorHandler 確定前なので `toProblem(err).Status` で先取りして記録する。
 
-### PR 9-C: 仕上げ `feat/hardening`
+### PR 9-C: 仕上げ
 
-- [ ] 🔧 CORS が `FRONTEND_ORIGIN` のみ許可することの確認
+> 項目の毛色が異なるため「1振る舞い=1PR」に沿って複数PRに分割する。
+> - 9-C-1 `feat/cors-restrict-origin`: CORS 検証（backend TDD）
+> - 9-C-2 `feat/frontend-error-boundary`: エラーバウンダリ（frontend TDD）
+> - 9-C-3 `docs/readme-finalize`: README・キャッシュ要否の判断記録・応答時間計測
+
+#### 9-C-1: CORS 検証 `feat/cors-restrict-origin` ✅
+
+- [x] 🔧 CORS が `FRONTEND_ORIGIN` のみ許可することの確認
+- [x] 🔴 テスト: FRONTEND_ORIGIN には Allow-Origin + Allow-Credentials を返す
+- [x] 🔴 テスト: 別オリジンには Allow-Origin を返さない
+- [x] 🔴 テスト: プリフライト(OPTIONS)も同じ判定
+- [x] 🟢 CORS 設定を `handler.CORS(origin)` に抽出（main.go はこれを使う）
+
+#### 9-C-2: フロントのエラーバウンダリ `feat/frontend-error-boundary`
+
 - [ ] 🔧 フロントのエラーバウンダリ
-- [ ] 🔧 404画面
+
+#### 9-C-3: 仕上げドキュメント `docs/readme-finalize`
+
+- [x] 🔧 404画面（`NotFoundPage` + `path="*"`。PR 8系で実装済み）
 - [ ] 🔧 README（起動手順、環境変数、アーキテクチャ図）
 - [ ] 🔧 `recipe_link_caches` の要否を判断 ※spec.md 13章 未決事項3
 - [ ] 🔧 応答時間の計測（検索 p95 200ms以内）

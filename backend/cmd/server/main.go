@@ -118,10 +118,7 @@ func run() error {
 	// RequestID の後に置く。request_id を全ログに伝播させ、1リクエスト1行の
 	// アクセスログを出す。本文・機微なヘッダ・クエリは記録しない。
 	e.Use(handler.RequestLogging(slog.Default()))
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{env("FRONTEND_ORIGIN", "http://localhost:5173")},
-		AllowCredentials: true,
-	}))
+	e.Use(handler.CORS(env("FRONTEND_ORIGIN", "http://localhost:5173")))
 
 	// レート制限は IP 単位（spec.md 11章）。認証は総当たりを防ぐため 10req/min と
 	// 厳しめ、検索は通常利用で詰まらないよう 60req/min。他系統は spec で未指定のため課さない。
