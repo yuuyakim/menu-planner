@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { MascotStatus } from '../../components/MascotStatus'
 import { historiesQueryKey } from '../history/api'
 import { suggestMenu } from './api'
 import { MenuCard } from './MenuCard'
@@ -39,21 +40,7 @@ export function SearchPage() {
 
       <SearchForm onSubmit={run} isPending={isPending} />
 
-      {isPending && (
-        // role=status で、結果を待っていることを支援技術にも伝える。
-        // こんたてんは装飾なので alt は空。待っていることは文言が伝える。
-        <p
-          role="status"
-          className="flex items-center gap-3 rounded-2xl bg-kon-cream px-5 py-4 text-kon-ink"
-        >
-          <img
-            src="/mascot/pose-idea.png"
-            alt=""
-            className="size-12 motion-safe:animate-kon-bob"
-          />
-          検索中…
-        </p>
-      )}
+      {isPending && <MascotStatus>検索中…</MascotStatus>}
 
       {error && <ErrorMessage error={error} />}
 
