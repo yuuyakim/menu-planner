@@ -149,3 +149,32 @@ func containsMenu(menus []domain.Menu, id domain.MenuID) bool {
 	}
 	return false
 }
+
+// MenuIngredients は献立1件に必要な食材を返す（spec.md 2.7 の献立詳細用）。
+//
+// 献立の存在を先に確かめる。確かめないと、存在しない献立でも「食材0件」の
+// 200 を返してしまい、利用者は「食材が登録されていない献立」と区別できない。
+func (s *ShoppingListService) MenuIngredients(ctx context.Context, id domain.MenuID) ([]domain.Ingredient, error) {
+	if _, err := s.menus.FindByID(ctx, id); err != nil {
+		return nil, err
+	}
+
+	pairs, err := s.ingredients.FindByMenuIDs(ctx, []domain.MenuID{id})
+	if err != nil {
+		return nil, fmt.Errorf("食材の取得に失敗しました: %w", err)
+	}
+
+	items := make([]domain.Ingredient, 0, len(pairs))
+	for _, p := range pairs {
+		items = append(items, p.Ingredient)
+	}
+	// 買い物リストと同じ並び（カテゴリ順 → カナ順）に揃える。
+	sort.SliceStable(items, func(a, b int) bool {
+		ca, cb := items[a].Category.Order(), items[b].Category.Order()
+		if ca != cb {
+			return ca < cb
+		}
+		return items[a].NameKana < items[b].NameKana
+	})
+	return items, nil
+}

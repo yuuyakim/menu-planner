@@ -269,3 +269,67 @@ func TestContract_ListFavorites(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	assertMatchesSpec(t, v, req, "", rec)
 }
+
+// newContractShoppingApp は買い物リスト・食材の契約検証用アプリを組み立てる。
+func newContractShoppingApp(shopping handler.ShoppingListUseCase, ing handler.MenuIngredientsUseCase) *echo.Echo {
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewShoppingListHandler(shopping).RegisterRoutes(e)
+	handler.NewIngredientHandler(ing).RegisterRoutes(e)
+	return e
+}
+
+func TestContract_MenuIngredients(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	e := newContractShoppingApp(&fakeShoppingList{}, &fakeMenuIngredients{
+		items: []domain.Ingredient{
+			shoppingTestIngredient("じゃがいも", "じゃがいも", domain.CategoryVegetable),
+			shoppingTestIngredient("豚こま切れ肉", "ぶたこまぎれにく", domain.CategoryMeat),
+		},
+	})
+	req := contractRequest(http.MethodGet,
+		"/api/v1/menus/"+domain.NewMenuID().String()+"/ingredients", "")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assertMatchesSpec(t, v, req, "", rec)
+}
+
+func TestContract_ShoppingList(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	menu := shoppingTestMenu("肉じゃが")
+	e := newContractShoppingApp(&fakeShoppingList{items: []service.ShoppingItem{
+		{
+			Ingredient: shoppingTestIngredient("玉ねぎ", "たまねぎ", domain.CategoryVegetable),
+			UsedIn:     []domain.Menu{menu},
+		},
+	}}, &fakeMenuIngredients{})
+
+	body := `{"menuIds":["` + menu.ID.String() + `"]}`
+	req := contractRequest(http.MethodPost, "/api/v1/shopping-list", body)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assertMatchesSpec(t, v, req, body, rec)
+}
+
+func TestContract_ShoppingList_Problem(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	// 件数が不正なときの 400 も仕様の一部。
+	e := newContractShoppingApp(&fakeShoppingList{err: service.ErrInvalidMenuIDs}, &fakeMenuIngredients{})
+	body := `{"menuIds":["` + domain.NewMenuID().String() + `"]}`
+	req := contractRequest(http.MethodPost, "/api/v1/shopping-list", body)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assertMatchesSpec(t, v, req, body, rec)
+}

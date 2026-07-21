@@ -297,6 +297,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/menus/{id}/ingredients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 献立に必要な食材を取得する
+         * @description 調味料は含まない（spec.md 14.4）。分量も持たない（14.2）。
+         *     代表的な食材の例であり、実際の材料はレシピ元で確認する前提。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description 献立のID */
+                    id: components["parameters"]["MenuIDPath"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 食材の一覧（カテゴリ順→カナ順） */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IngredientsResponse"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shopping-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 複数の献立から買い物リストを作る
+         * @description 週間献立はサーバに保存していないため、献立IDをリクエストで受け取る。
+         *     同じ食材が複数の献立に出たら1件にまとめ、usedIn にその献立を並べる。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ShoppingListRequest"];
+                };
+            };
+            responses: {
+                /** @description 買い物リスト（カテゴリ順→カナ順） */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ShoppingListResponse"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/signup": {
         parameters: {
             query?: never;
@@ -874,6 +965,44 @@ export interface components {
         };
         RecipesResponse: {
             recipes: components["schemas"]["Recipe"][];
+        };
+        Ingredient: {
+            /** Format: uuid */
+            id: string;
+            /** @example 玉ねぎ */
+            name: string;
+            /**
+             * @description 一覧の並び順に使う
+             * @example たまねぎ
+             */
+            nameKana: string;
+            /**
+             * @description 調味料の分類は持たない（spec.md 14.4）
+             * @enum {string}
+             */
+            category: "vegetable" | "meat" | "seafood" | "dairy_egg" | "staple" | "other";
+        };
+        IngredientsResponse: {
+            ingredients: components["schemas"]["Ingredient"][];
+        };
+        ShoppingListRequest: {
+            /** @description 1〜7件。重複は1件として扱う */
+            menuIds: string[];
+        };
+        ShoppingItem: {
+            ingredient: components["schemas"]["Ingredient"];
+            /**
+             * @description その食材を使う献立。分量を持たない設計の補償として、
+             *     何のために買うかを利用者が判断できるようにする。
+             */
+            usedIn: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            }[];
+        };
+        ShoppingListResponse: {
+            items: components["schemas"]["ShoppingItem"][];
         };
         CredentialsRequest: {
             /** Format: email */
