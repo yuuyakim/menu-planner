@@ -25,8 +25,13 @@ func TestSeedSQL_冪等性のためON_CONFLICTを含む(t *testing.T) {
 	sql, err := db.SeedSQL()
 	require.NoError(t, err)
 
-	// name の UNIQUE 制約と ON CONFLICT DO NOTHING で再実行しても重複しない
-	assert.Contains(t, sql, "ON CONFLICT (name) DO NOTHING")
+	// name の UNIQUE 制約と ON CONFLICT で再実行しても重複しない。
+	// **DO NOTHING ではなく DO UPDATE（upsert）にしている。**
+	// 挿入のみだと、説明文やカナの誤りを直しても、既にシード済みのDB
+	// （本番など）には永久に反映されないため。
+	assert.Contains(t, sql, "ON CONFLICT (name) DO UPDATE")
+	assert.Contains(t, sql, "description = EXCLUDED.description",
+		"修正が既存行にも反映されること")
 }
 
 func TestSeedSQL_120件のINSERTがある(t *testing.T) {

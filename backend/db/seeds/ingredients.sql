@@ -153,4 +153,13 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), 'デミグラスソース缶','でみぐらすそーすかん','other'),
 (gen_random_uuid(), 'チョコレート', 'ちょこれーと',   'other'),
 (gen_random_uuid(), 'アーモンド',   'あーもんど',     'other')
-ON CONFLICT (name) DO NOTHING;
+-- **upsert にする。** DO NOTHING（挿入のみ）だと、カナやカテゴリの誤りを直しても
+-- 既にシード済みのDB（本番など）には永久に反映されない。カナは買い物リストの並び順、
+-- カテゴリは売り場の分類に使うため、ずれたまま直せないのは実害になる。
+-- このファイルを「あるべき状態」の定義として扱い、再実行で追いつかせる。
+--
+-- ただし**名前の変更だけはこれでは直らない**（name がキーのため、旧行が残って
+-- 新行が増える）。名前を変えるときはマイグレーションで対応すること。
+ON CONFLICT (name) DO UPDATE SET
+    name_kana = EXCLUDED.name_kana,
+    category  = EXCLUDED.category;

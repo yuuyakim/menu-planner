@@ -84,16 +84,18 @@ func TestSeed_NoSeasoningRegistered(t *testing.T) {
 }
 
 func TestSeed_IsIdempotent(t *testing.T) {
-	// 再実行しても重複しない（ON CONFLICT DO NOTHING）。
+	// 再実行しても行が増えない。
+	//
+	// upsert にしたため、2回目も既存行を上書きする分だけ「影響行数」は returned される。
+	// 冪等性の判定は件数の変化で見る（影響行数ゼロでは判定できない）。
 	pool := seedAll(t)
 	ctx := context.Background()
 
 	before := countRows(t, pool)
 
-	inserted, err := db.Seed(ctx, pool)
+	_, err := db.Seed(ctx, pool)
 	require.NoError(t, err)
-	assert.Zero(t, inserted, "2回目は1行も入らない")
-	assert.Equal(t, before, countRows(t, pool), "行数が変わらない")
+	assert.Equal(t, before, countRows(t, pool), "再実行しても行数が変わらない")
 }
 
 // countRows は3テーブルの行数をまとめて返す。
@@ -105,4 +107,36 @@ func countRows(t *testing.T, pool *pgxpool.Pool) [3]int {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM ingredients`).Scan(&c[1]))
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM menu_ingredients`).Scan(&c[2]))
 	return c
+}
+
+func TestSeed_AppliesCorrectionsToExistingRows(t *testing.T) {
+	// シードは「あるべき状態」の定義。既存行の内容を直したら再シードで反映されること。
+	//
+	// DO NOTHING（挿入のみ）だと、カナやカテゴリの誤りを直しても本番DBは古いまま。
+	// カナは買い物リストの並び順、カテゴリは売り場の分類に使うため、
+	// ずれたまま直せないのは実害になる。
+	pool := seedAll(t)
+	ctx := context.Background()
+
+	// 誤った値が入っている状態を作る。
+	_, err := pool.Exec(ctx,
+		`UPDATE ingredients SET name_kana='まちがい', category='other' WHERE name='玉ねぎ'`)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
+		`UPDATE menus SET description='まちがった説明' WHERE name='親子丼'`)
+	require.NoError(t, err)
+
+	_, err = db.Seed(ctx, pool)
+	require.NoError(t, err)
+
+	var kana, category string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT name_kana, category FROM ingredients WHERE name='玉ねぎ'`).Scan(&kana, &category))
+	assert.Equal(t, "たまねぎ", kana, "食材のカナが直る")
+	assert.Equal(t, "vegetable", category, "食材のカテゴリが直る")
+
+	var desc string
+	require.NoError(t, pool.QueryRow(ctx,
+		`SELECT description FROM menus WHERE name='親子丼'`).Scan(&desc))
+	assert.NotEqual(t, "まちがった説明", desc, "献立の説明も直る")
 }
