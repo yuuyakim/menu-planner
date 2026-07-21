@@ -132,3 +132,44 @@ describe('アカウントを切り替えたとき', () => {
     expect(screen.queryByText(menuA.name)).not.toBeInTheDocument()
   })
 })
+
+describe('週間献立の持ち越し（Issue #83）', () => {
+  // 週間献立は sessionStorage に保存している（レシピを見て戻っても消えないように）。
+  // ログアウトしたら、その保存も表示中の値も捨てなければならない。
+  it('ログアウトすると週間献立が残らない', async () => {
+    const user = userEvent.setup()
+    asUser('user-a', 'エー', menuA)
+    server.use(
+      http.post('/api/v1/menus/suggest-weekly', () =>
+        HttpResponse.json({
+          week: [{ day: 1, menu: menuA }],
+        }),
+      ),
+    )
+    renderWithProviders(<App />, { route: '/weekly' })
+
+    await user.click(
+      await screen.findByRole('button', { name: '1週間分を作る' }),
+    )
+    expect(await screen.findByText(menuA.name)).toBeVisible()
+
+    // 画面を開いたままログアウトする。
+    server.use(
+      http.post(
+        '/api/v1/auth/logout',
+        () => new HttpResponse(null, { status: 204 }),
+      ),
+      http.get('/api/v1/auth/me', () => new HttpResponse(null, { status: 401 })),
+    )
+    await user.click(
+      within(screen.getByRole('banner')).getByRole('button', {
+        name: 'ログアウト',
+      }),
+    )
+    await screen.findByRole('link', { name: 'ログイン' })
+
+    // 別画面へ移るまでもなく、その場で消えていること。
+    expect(screen.queryByText(menuA.name)).not.toBeInTheDocument()
+    expect(sessionStorage.getItem('menu-planner:weekly.week')).toBeNull()
+  })
+})
