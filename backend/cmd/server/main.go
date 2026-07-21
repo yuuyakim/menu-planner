@@ -115,6 +115,9 @@ func run() error {
 
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
+	// RequestID の後に置く。request_id を全ログに伝播させ、1リクエスト1行の
+	// アクセスログを出す。本文・機微なヘッダ・クエリは記録しない。
+	e.Use(handler.RequestLogging(slog.Default()))
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     []string{env("FRONTEND_ORIGIN", "http://localhost:5173")},
 		AllowCredentials: true,

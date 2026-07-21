@@ -1086,12 +1086,22 @@ API消費は生涯約120クエリで頭打ちになる。
 > 本番は実クライアントIPが分かる構成で spec 値（10 / 60）を設定する。
 > Playwright の2ワーカーも同一ホストIPになるため、`xfwd` 転送では回避できない。
 
-### PR 9-B: ロギング `feat/logging`
+### PR 9-B: ロギング `feat/logging` ✅
 
-- [ ] 🔴 テスト: リクエストIDが全ログに伝播する
-- [ ] 🔴 テスト: **パスワードがログに出ない**
-- [ ] 🔴 テスト: **トークンがログに出ない**
-- [ ] 🟢 ロギングミドルウェアを実装
+- [x] 🔴 テスト: リクエストIDが全ログに伝播する（下位層 context 経由 + アクセスログ）
+- [x] 🔴 テスト: **パスワードがログに出ない**（本文を記録しない）
+- [x] 🔴 テスト: **トークンがログに出ない**（Cookie / Authorization を記録しない）
+- [x] 🟢 ロギングミドルウェアを実装（1リクエスト1行のアクセスログ）
+- [x] 🔧 `internal/logctx` で request_id 付き logger を context に載せ、handler / service 両層に伝播
+- [x] 🔧 既存の `slog.*` 呼び出し（menu.go / problem.go / service/menu.go）を request スコープ logger に載せ替え
+- [x] 🔧 main.go で RequestID の後に結線
+
+> **記録するのは method / path / status / latency / ip のみ。** 本文・機微ヘッダ
+> （Cookie / Authorization）・クエリ文字列は出さない。クエリを外すのは OAuth の
+> `code` / `state` が漏れないようにするため。
+> **import 循環を避けるため logger の受け渡しは `internal/logctx`（中立パッケージ）** に置く。
+> handler に置くと service（problem.go 経由で handler が service に依存）から参照できない。
+> エラー時の status は ErrorHandler 確定前なので `toProblem(err).Status` で先取りして記録する。
 
 ### PR 9-C: 仕上げ `feat/hardening`
 

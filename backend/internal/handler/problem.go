@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -89,7 +88,7 @@ func ErrorHandler() echo.HTTPErrorHandler {
 
 		if p.Status >= http.StatusInternalServerError {
 			// 500系は原因を調べられるようログにだけ残し、レスポンスには含めない
-			slog.Error("サーバエラー",
+			LoggerFrom(c).Error("サーバエラー",
 				"error", err,
 				"path", c.Request().URL.Path,
 				"method", c.Request().Method,
@@ -98,7 +97,7 @@ func ErrorHandler() echo.HTTPErrorHandler {
 
 		c.Response().Header().Set(echo.HeaderContentType, ProblemContentType)
 		if err := c.JSON(p.Status, p); err != nil {
-			slog.Error("エラーレスポンスの書き込みに失敗しました", "error", err)
+			LoggerFrom(c).Error("エラーレスポンスの書き込みに失敗しました", "error", err)
 		}
 	}
 }
