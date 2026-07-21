@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { MascotStatus } from '../../components/MascotStatus'
 import { fetchMenu } from './api'
+import { IngredientList } from './IngredientList'
 import { MenuCard } from './MenuCard'
 import { RecipeList } from './RecipeList'
 
@@ -35,21 +37,17 @@ export function MenuDetailPage() {
         <button
           type="button"
           onClick={() => void navigate(-1)}
-          className="text-sm text-slate-600 hover:text-slate-900"
+          className="text-sm text-kon-ink/70 hover:text-kon-ink"
         >
           ← 戻る
         </button>
       ) : (
-        <Link to="/search" className="text-sm text-slate-600 hover:text-slate-900">
+        <Link to="/search" className="text-sm text-kon-ink/70 hover:text-kon-ink">
           ← 献立を探す
         </Link>
       )}
 
-      {isPending && (
-        <p role="status" className="text-slate-600">
-          読み込み中…
-        </p>
-      )}
+      {isPending && <MascotStatus>読み込み中…</MascotStatus>}
 
       {error && <ErrorMessage error={error} />}
 
@@ -57,8 +55,9 @@ export function MenuDetailPage() {
         <>
           <MenuCard menu={menu} headingLevel={1} />
           <section className="space-y-3">
-            <h2 className="font-bold">レシピ</h2>
-            <RecipeList menuId={menu.id} />
+            <h2 className="font-bold text-kon-ink">レシピ</h2>
+            <IngredientList menuId={menu.id} />
+          <RecipeList menuId={menu.id} />
           </section>
         </>
       )}

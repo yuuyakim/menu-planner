@@ -23,7 +23,7 @@ export function RecipeList({ menuId }: { menuId: string }) {
 
   if (isPending) {
     return (
-      <p role="status" className="text-slate-600">
+      <p role="status" className="text-kon-ink/70">
         レシピを読み込み中…
       </p>
     )
@@ -37,7 +37,7 @@ export function RecipeList({ menuId }: { menuId: string }) {
           type="button"
           onClick={() => void refetch()}
           disabled={isFetching}
-          className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+          className="rounded-full border border-kon-leaf-soft bg-white px-4 py-1.5 text-sm font-medium text-kon-ink hover:bg-kon-cream disabled:cursor-not-allowed disabled:text-kon-ink/40"
         >
           再試行
         </button>
@@ -47,7 +47,7 @@ export function RecipeList({ menuId }: { menuId: string }) {
 
   // 0件は障害ではない（spec.md 2.4）。エラー扱いにせず、そう伝える。
   if (recipes.length === 0) {
-    return <p className="text-slate-600">レシピが見つかりませんでした。</p>
+    return <p className="text-kon-ink/70">レシピが見つかりませんでした。</p>
   }
 
   return (
@@ -61,15 +61,15 @@ export function RecipeList({ menuId }: { menuId: string }) {
             // noopener が無いと開いた先から window.opener でこの画面を操作できる。
             // noreferrer は参照元URLを渡さない。
             rel="noopener noreferrer"
-            className="block rounded-lg border border-slate-200 bg-white p-4 hover:border-emerald-400"
+            className="block rounded-2xl border border-kon-leaf-soft bg-white p-4 transition-colors hover:border-kon-leaf hover:bg-kon-cream"
           >
             {/* タイトルが空でもリンクの名前が空にならないようURLで補う。 */}
-            <span className="font-medium text-emerald-800">
+            <span className="font-medium text-kon-ink underline decoration-kon-leaf decoration-2 underline-offset-2">
               {r.title || r.url}
             </span>
-            <span className="mt-1 block text-sm text-slate-500">{r.domain}</span>
+            <span className="mt-1 block text-sm text-kon-ink/55">{r.domain}</span>
             {r.snippet && (
-              <span className="mt-1 block text-sm text-slate-600">
+              <span className="mt-1 block text-sm text-kon-ink/75">
                 {r.snippet}
               </span>
             )}

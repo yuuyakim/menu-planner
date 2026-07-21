@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 
 import type { DayMenu } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { MascotStatus } from '../../components/MascotStatus'
 import { useSessionState } from '../../hooks/useSessionState'
 import { historiesQueryKey } from '../history/api'
 import { rerollDay, suggestWeekly } from './api'
@@ -67,7 +68,7 @@ export function WeeklyPage({ today = new Date() }: Props) {
 
   return (
     <section className="space-y-6">
-      <h1 className="text-2xl font-bold">1週間の献立</h1>
+      <h1 className="text-2xl font-bold text-kon-ink">1週間の献立</h1>
 
       <SearchForm
         onSubmit={(next) => {
@@ -78,23 +79,31 @@ export function WeeklyPage({ today = new Date() }: Props) {
         submitLabel="1週間分を作る"
       />
 
+      {/* 週の組み立ては1食分より待つ。出来上がりの絵を添えて何を待って
+          いるかを分かりやすくする。 */}
       {create.isPending && (
-        <p role="status" className="text-slate-600">
-          作成中…
-        </p>
+        <MascotStatus image="/mascot/pose-dish.png">作成中…</MascotStatus>
       )}
 
       {/* 引き直しの失敗で週全体を消さない。失敗した日以外はそのまま使える。 */}
       {error && <ErrorMessage error={error} />}
 
       {week && (
-        <ul className="space-y-4">
+        <>
+          {/* 献立が決まってはじめて買うものが決まる。作る前は出さない。 */}
+          <Link
+            to="/shopping-list"
+            className="inline-block rounded-full bg-kon-leaf px-5 py-2 font-medium text-white hover:bg-kon-leaf/90"
+          >
+            買い物リストを見る
+          </Link>
+          <ul className="space-y-4">
           {week.map((d) => (
             <li key={d.day} aria-label={dayLabel(d.day, today)}>
               {/* 見出し(h2)にはしない。この中の MenuCard が献立名を h2 で
                   持つため、同じ項目に h2 が2つ並んで階層が読めなくなる。
                   日付は li の aria-label が読み上げる。 */}
-              <p className="mb-2 font-medium text-slate-700">
+              <p className="mb-2 font-medium text-kon-ink/80">
                 {dayLabel(d.day, today)}
               </p>
               <MenuCard menu={d.menu} />
@@ -103,13 +112,13 @@ export function WeeklyPage({ today = new Date() }: Props) {
                   type="button"
                   onClick={() => reroll.mutate(d.day)}
                   disabled={reroll.isPending}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                  className="rounded-full border border-kon-leaf-soft bg-white px-4 py-1.5 text-sm font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream disabled:cursor-not-allowed disabled:text-kon-ink/40"
                 >
                   引き直す
                 </button>
                 <Link
                   to={`/menus/${d.menu.id}`}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-emerald-700 hover:bg-slate-50"
+                  className="rounded-full border border-kon-leaf-soft bg-white px-4 py-1.5 text-sm font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream"
                 >
                   レシピを見る
                 </Link>
@@ -117,6 +126,7 @@ export function WeeklyPage({ today = new Date() }: Props) {
             </li>
           ))}
         </ul>
+        </>
       )}
     </section>
   )

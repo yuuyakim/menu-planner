@@ -1,5 +1,11 @@
 import { apiGet, apiPost } from '../../api/client'
-import type { DayMenu, Menu, Recipe } from '../../api/types'
+import type {
+  DayMenu,
+  Ingredient,
+  Menu,
+  Recipe,
+  ShoppingItem,
+} from '../../api/types'
 import type { MenuFilter } from './SearchForm'
 
 // toQuery は絞り込み条件をクエリ文字列にする。
@@ -56,4 +62,26 @@ export async function rerollDay(
 export async function fetchMenu(menuId: string): Promise<Menu> {
   const res = await apiGet<{ menu: Menu }>(`/menus/${menuId}`)
   return res.menu
+}
+
+/** fetchIngredients は献立に必要な食材を取得する。調味料は含まない。 */
+export async function fetchIngredients(menuId: string): Promise<Ingredient[]> {
+  const res = await apiGet<{ ingredients: Ingredient[] }>(
+    `/menus/${menuId}/ingredients`,
+  )
+  return res.ingredients
+}
+
+/**
+ * fetchShoppingList は複数の献立から買い物リストを取得する。
+ *
+ * 週間献立はサーバに保存していないため、献立IDを送って組み立ててもらう。
+ */
+export async function fetchShoppingList(
+  menuIds: string[],
+): Promise<ShoppingItem[]> {
+  const res = await apiPost<{ items: ShoppingItem[] }>('/shopping-list', {
+    menuIds,
+  })
+  return res.items
 }

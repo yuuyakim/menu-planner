@@ -37,11 +37,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
 // DefaultFallback は既定のフォールバック。エラーだと伝え、再読み込みで復帰させる。
 // role="alert" にして、支援技術にも異常を知らせる。
+// 不具合の画面なのでマスコットは出さない（ErrorMessage と同じ約束）。
 function DefaultFallback() {
   return (
     <section role="alert">
-      <h1 className="text-2xl font-bold">問題が発生しました</h1>
-      <p className="mt-2 text-slate-600">
+      <h1 className="text-2xl font-bold text-kon-ink">問題が発生しました</h1>
+      <p className="mt-2 text-kon-ink/75">
         画面の表示中に予期しないエラーが発生しました。お手数ですが再読み込みしてください。
       </p>
       <button
@@ -49,7 +50,7 @@ function DefaultFallback() {
         onClick={() => {
           window.location.reload()
         }}
-        className="mt-4 inline-block rounded bg-emerald-700 px-4 py-2 text-white hover:bg-emerald-800"
+        className="mt-4 inline-block rounded-full bg-kon-leaf px-5 py-2 font-medium text-white transition-colors hover:brightness-95"
       >
         再読み込み
       </button>

@@ -113,6 +113,26 @@ describe('新規登録', () => {
     return u
   }
 
+  it('こんたてんが迎える。挨拶は場面で変わる', async () => {
+    const u = userEvent.setup()
+    renderLogin()
+
+    // 戻ってきた人と初めての人では、かける言葉が違う。
+    expect(screen.getByText('おかえり！待ってたよ')).toBeVisible()
+
+    await u.click(screen.getByRole('button', { name: '新規登録はこちら' }))
+
+    expect(screen.getByText('はじめまして！よろしくね')).toBeVisible()
+    expect(screen.queryByText('おかえり！待ってたよ')).not.toBeInTheDocument()
+  })
+
+  it('迎えるこんたてんは装飾で、読み上げ名に混ざらない', () => {
+    const { container } = renderLogin()
+
+    expect(container.querySelector('img')).not.toBeNull()
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
+  })
+
   it('新規登録に切り替えられる', async () => {
     renderLogin()
     await switchToSignUp()

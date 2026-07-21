@@ -17,6 +17,10 @@ export type User = Schemas['User']
 export type HistoryItem = Schemas['HistoryItem']
 export type FavoriteItem = Schemas['FavoriteItem']
 
+export type Ingredient = Schemas['Ingredient']
+export type IngredientCategory = Ingredient['category']
+export type ShoppingItem = Schemas['ShoppingItem']
+
 /** RFC 7807 の problem+json。 */
 export type Problem = Schemas['Problem']
 
@@ -38,3 +42,25 @@ export const difficultyLabels: Record<Difficulty, string> = {
 
 export const genres = Object.keys(genreLabels) as Genre[]
 export const difficulties = Object.keys(difficultyLabels) as Difficulty[]
+
+// categoryLabels は食材カテゴリの表示名。買い物リストの見出しに使う。
+// 調味料は食材として持たないため（spec.md 14.4）ここにも無い。
+export const categoryLabels: Record<IngredientCategory, string> = {
+  vegetable: '野菜',
+  meat: '肉',
+  seafood: '魚介',
+  dairy_egg: '卵・乳製品',
+  staple: '主食',
+  other: 'その他',
+}
+
+// categoryOrder は売り場を回る順に近い並び。サーバもこの順で返すが、
+// 見出しを出す側でも順序を持たないと、サーバの並びに暗黙に依存してしまう。
+export const categoryOrder: IngredientCategory[] = [
+  'vegetable',
+  'meat',
+  'seafood',
+  'dairy_egg',
+  'staple',
+  'other',
+]

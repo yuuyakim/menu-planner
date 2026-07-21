@@ -105,8 +105,8 @@ export function FavoriteButton({ menu }: { menu: Menu }) {
         aria-pressed={isFavorite}
         className={
           isFavorite
-            ? 'rounded-lg p-1.5 text-amber-400 hover:bg-amber-50 disabled:opacity-50'
-            : 'rounded-lg p-1.5 text-slate-300 hover:bg-slate-100 hover:text-slate-400 disabled:opacity-50'
+            ? 'rounded-lg p-1.5 text-kon-gold hover:bg-kon-cream disabled:opacity-50'
+            : 'rounded-lg p-1.5 text-kon-ink/25 hover:bg-kon-cream hover:text-kon-ink/45 disabled:opacity-50'
         }
       >
         <StarIcon filled={isFavorite} />
@@ -116,9 +116,9 @@ export function FavoriteButton({ menu }: { menu: Menu }) {
         <div
           role="dialog"
           aria-label="お気に入りにはログインが必要です"
-          className="absolute right-0 top-full z-20 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          className="absolute right-0 top-full z-20 mt-1 w-64 rounded-2xl border border-kon-leaf-soft bg-white p-4 shadow-lg"
         >
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-kon-ink/80">
             ログインすると、気に入った献立をお気に入りに登録できます。
           </p>
           <div className="mt-3 flex items-center gap-3">
@@ -127,14 +127,14 @@ export function FavoriteButton({ menu }: { menu: Menu }) {
               // 探し直させない（戻り先は RequireAuth と同じ仕組み）。
               to="/login"
               state={{ from: location.pathname }}
-              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+              className="rounded-full bg-kon-leaf px-4 py-1.5 text-sm font-medium text-white transition-colors hover:brightness-95"
             >
               ログイン / 新規登録
             </Link>
             <button
               type="button"
               onClick={() => setPromptingLogin(false)}
-              className="text-sm text-slate-600 underline"
+              className="text-sm text-kon-ink/70 underline"
             >
               閉じる
             </button>

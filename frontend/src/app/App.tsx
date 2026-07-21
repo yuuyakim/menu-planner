@@ -10,6 +10,7 @@ import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
 import { SearchPage } from '../features/menu/SearchPage'
+import { ShoppingListPage } from '../features/menu/ShoppingListPage'
 import { WeeklyPage } from '../features/menu/WeeklyPage'
 
 // navItems はヘッダに並べるリンク。増減はここだけで済ませる。
@@ -23,9 +24,12 @@ const navItems = [
 // linkClass は現在地のリンクだけ色を変える。
 // NavLink が渡す isActive を使い、現在地の判定を自前で持たない。
 function linkClass({ isActive }: { isActive: boolean }): string {
+  // whitespace-nowrap が要る。狭い画面で flex がリンクを縮めると、
+  // 「1週間の献立」のような和文がひらがな単位で折り返されて読めなくなる。
+  const base = 'whitespace-nowrap rounded-full px-3 py-1 text-sm transition-colors'
   return isActive
-    ? 'text-emerald-700 font-medium'
-    : 'text-slate-600 hover:text-slate-900'
+    ? `${base} bg-kon-leaf/20 font-medium text-kon-ink`
+    : `${base} text-kon-ink/70 hover:bg-kon-cream hover:text-kon-ink`
 }
 
 // App は全画面共通の骨組み。ヘッダはルートが変わっても残す。
@@ -38,11 +42,24 @@ export function App() {
   const location = useLocation()
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <nav className="mx-auto flex max-w-3xl items-center gap-6 px-4 py-4">
+    <div className="min-h-screen bg-kon-cream/40 text-kon-ink">
+      <header className="border-b border-kon-leaf-soft bg-white">
+        {/* 狭い画面では折り返す。1行に押し込むと各リンクが縮んで和文が割れる。 */}
+        <nav className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3">
           {/* ホームへの導線。どの画面からでも起点に戻れるようにする。 */}
-          <Link to="/" className="font-bold text-slate-900">
+          <Link
+            to="/"
+            className="mr-2 flex items-center gap-2 whitespace-nowrap font-bold text-kon-ink"
+          >
+            {/* こんたてんは頭と体がひと続きなので、顔だけを切り出すと断面が出る。
+                丸く抜いた枠に収めて上端を見せることで、断面を隠して顔を出す。 */}
+            <span className="size-9 shrink-0 overflow-hidden rounded-full bg-kon-cream">
+              <img
+                src="/mascot/hero.png"
+                alt=""
+                className="size-full scale-125 object-cover object-top"
+              />
+            </span>
             献立くん
           </Link>
           {navItems.map((item) => (
@@ -65,6 +82,8 @@ export function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/weekly" element={<WeeklyPage />} />
+            {/* 買い物リストは週間献立から作る。未認証でも使える（spec.md 2.7）。 */}
+            <Route path="/shopping-list" element={<ShoppingListPage />} />
             <Route path="/menus/:id" element={<MenuDetailPage />} />
             {/* 履歴とお気に入りは本人のものだけを扱うため認証必須。
                 検索と週間献立は未認証でも使える（spec.md 1.3）。 */}
