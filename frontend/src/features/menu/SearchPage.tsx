@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { ErrorMessage } from '../../components/ErrorMessage'
+import { MascotStatus } from '../../components/MascotStatus'
 import { historiesQueryKey } from '../history/api'
 import { suggestMenu } from './api'
 import { MenuCard } from './MenuCard'
@@ -35,16 +36,11 @@ export function SearchPage() {
 
   return (
     <section className="space-y-6">
-      <h1 className="text-2xl font-bold">献立を探す</h1>
+      <h1 className="text-2xl font-bold text-kon-ink">献立を探す</h1>
 
       <SearchForm onSubmit={run} isPending={isPending} />
 
-      {isPending && (
-        // role=status で、結果を待っていることを支援技術にも伝える。
-        <p role="status" className="text-slate-600">
-          検索中…
-        </p>
-      )}
+      {isPending && <MascotStatus>検索中…</MascotStatus>}
 
       {error && <ErrorMessage error={error} />}
 
@@ -55,13 +51,13 @@ export function SearchPage() {
           <button
             type="button"
             onClick={() => filter && run(filter)}
-            className="rounded-lg border border-slate-300 bg-white px-5 py-2 font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream"
           >
             別の献立を見る
           </button>
 
           <section className="space-y-3 pt-2">
-            <h2 className="font-bold">レシピ</h2>
+            <h2 className="font-bold text-kon-ink">レシピ</h2>
             {/* レシピの失敗はこの中で閉じる。献立の表示は道連れにしない。 */}
             <RecipeList menuId={menu.id} />
           </section>

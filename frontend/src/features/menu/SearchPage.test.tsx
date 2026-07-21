@@ -115,6 +115,32 @@ describe('検索結果', () => {
     expect(screen.queryByText('検索中…')).not.toBeInTheDocument()
   })
 
+  it('検索中のこんたてんは装飾で、待っていることは文言が伝える', async () => {
+    const user = userEvent.setup()
+    let release!: () => void
+    const pending = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(
+      http.get('/api/v1/menus/suggest', async () => {
+        await pending
+        return HttpResponse.json({ menu: oyakodon })
+      }),
+    )
+    renderWithProviders(<SearchPage />)
+
+    await user.click(search())
+
+    // 絵に alt を付けると、読み上げが「検索中」の前にキャラの説明を挟む。
+    // 状態を伝えるのは文言の役目に留める。
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent('検索中')
+    expect(screen.queryAllByRole('img')).toHaveLength(0)
+
+    release()
+    await screen.findByRole('article')
+  })
+
   it('422 は条件に合う献立が無いことを伝える', async () => {
     const user = userEvent.setup()
     respondProblem(422, '条件に合う献立が見つかりません')

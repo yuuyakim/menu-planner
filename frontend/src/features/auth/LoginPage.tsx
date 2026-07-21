@@ -16,11 +16,14 @@ const copy = {
     heading: 'ログイン',
     submit: 'ログイン',
     switch: '新規登録はこちら',
+    // 戻ってきた人と初めての人では、かける言葉が違う。
+    greeting: 'おかえり！待ってたよ',
   },
   signup: {
     heading: '新規登録',
     submit: '登録する',
     switch: 'ログインはこちら',
+    greeting: 'はじめまして！よろしくね',
   },
 } as const
 
@@ -108,11 +111,28 @@ export function LoginPage() {
 
   return (
     <section className="mx-auto max-w-sm space-y-6">
-      <h1 className="text-2xl font-bold">{text.heading}</h1>
+      {/* ここは何かが失敗した画面ではないので、こんたてんが迎える。
+          絵は装飾（alt=""）で、挨拶は本文として持つ。 */}
+      <div className="flex items-center gap-3">
+        <img
+          src="/mascot/face-happy.png"
+          alt=""
+          className="size-16 shrink-0"
+        />
+        <p className="relative rounded-2xl border border-kon-leaf-soft bg-white px-4 py-2 text-sm font-medium text-kon-ink">
+          {text.greeting}
+          <span
+            aria-hidden="true"
+            className="absolute -left-[7px] bottom-3 size-3 rotate-45 border-b border-l border-kon-leaf-soft bg-white"
+          />
+        </p>
+      </div>
+
+      <h1 className="text-2xl font-bold text-kon-ink">{text.heading}</h1>
 
       <form className="space-y-4" onSubmit={onSubmit} noValidate>
         <div>
-          <label htmlFor={emailId} className="mb-1 block text-sm font-medium">
+          <label htmlFor={emailId} className="mb-1 block text-sm font-medium text-kon-ink">
             メールアドレス
           </label>
           <input
@@ -121,12 +141,12 @@ export function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="w-full rounded-xl border border-kon-leaf-soft bg-white px-3 py-2 text-kon-ink outline-none focus:border-kon-leaf"
           />
         </div>
 
         <div>
-          <label htmlFor={passwordId} className="mb-1 block text-sm font-medium">
+          <label htmlFor={passwordId} className="mb-1 block text-sm font-medium text-kon-ink">
             パスワード
           </label>
           <input
@@ -137,7 +157,7 @@ export function LoginPage() {
             // 新規登録では「新しいパスワード」として扱わせ、
             // 保存済みのものを提案させない。
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="w-full rounded-xl border border-kon-leaf-soft bg-white px-3 py-2 text-kon-ink outline-none focus:border-kon-leaf"
           />
         </div>
 
@@ -146,7 +166,7 @@ export function LoginPage() {
         {notice ? (
           <p
             role="alert"
-            className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900"
+            className="rounded-2xl border border-kon-peach bg-kon-peach/25 px-4 py-3 text-kon-ink"
           >
             {notice}
           </p>
@@ -157,13 +177,13 @@ export function LoginPage() {
         <button
           type="submit"
           disabled={submit.isPending}
-          className="w-full rounded-lg bg-emerald-600 px-6 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="w-full rounded-full bg-kon-leaf px-6 py-2.5 font-medium text-white transition-colors hover:brightness-95 disabled:cursor-not-allowed disabled:bg-kon-leaf-soft disabled:text-kon-ink/70"
         >
           {submit.isPending ? '送信中…' : text.submit}
         </button>
       </form>
 
-      <div className="border-t border-slate-200 pt-4">
+      <div className="border-t border-kon-leaf-soft pt-4">
         {/*
           Google認証は fetch ではなく通常の遷移で始める。
           OAuth はブラウザ自身がリダイレクトを辿る必要があり、
@@ -171,7 +191,7 @@ export function LoginPage() {
         */}
         <a
           href={googleLoginPath}
-          className="block rounded-lg border border-slate-300 bg-white px-6 py-2.5 text-center font-medium text-slate-700 hover:bg-slate-50"
+          className="block rounded-full border border-kon-leaf-soft bg-white px-6 py-2.5 text-center font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream"
         >
           Googleでログイン
         </a>
@@ -185,7 +205,7 @@ export function LoginPage() {
           setInvalid(undefined)
           submit.reset()
         }}
-        className="text-sm text-emerald-700 underline"
+        className="text-sm text-kon-ink underline decoration-kon-leaf decoration-2 underline-offset-2"
       >
         {text.switch}
       </button>
