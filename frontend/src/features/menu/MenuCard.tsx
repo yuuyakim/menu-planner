@@ -18,22 +18,26 @@ export function MenuCard({ menu, headingLevel = 2 }: Props) {
   return (
     // お気に入りは献立の右端に置く。下に積むと、献立の情報が増えていないのに
     // カードの縦幅だけが伸びる。週間献立では7枚分まとめて効いてくる。
-    <article className="flex gap-4 rounded-xl border border-slate-200 bg-white p-6">
+    <article className="flex gap-4 rounded-2xl border border-kon-leaf-soft bg-white p-6">
       <div className="min-w-0 flex-1">
         <Heading
-          className={headingLevel === 1 ? 'text-2xl font-bold' : 'text-xl font-bold'}
+          className={
+            headingLevel === 1
+              ? 'text-2xl font-bold text-kon-ink'
+              : 'text-xl font-bold text-kon-ink'
+          }
         >
           {menu.name}
         </Heading>
         <div className="mt-2 flex gap-2 text-sm">
-          <span className="rounded-full bg-slate-100 px-3 py-0.5 text-slate-700">
+          <span className="rounded-full bg-kon-cream px-3 py-0.5 text-kon-ink/80">
             {genreLabels[menu.genre]}
           </span>
-          <span className="rounded-full bg-slate-100 px-3 py-0.5 text-slate-700">
+          <span className="rounded-full bg-kon-cream px-3 py-0.5 text-kon-ink/80">
             {difficultyLabels[menu.difficulty]}
           </span>
         </div>
-        <p className="mt-3 text-slate-600">{menu.description}</p>
+        <p className="mt-3 text-kon-ink/75">{menu.description}</p>
       </div>
 
       {/* 献立が出る場所ならどこでもお気に入りにできる。

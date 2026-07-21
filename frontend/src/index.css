@@ -16,4 +16,18 @@
   --color-kon-gold: #fecf6e; /* 吹き出しの黄。注目 */
   --color-kon-wood: #d8b385; /* おたまの木。落ち着いた添え色 */
   --color-kon-ink: #724e2d; /* 輪郭の茶。本文の文字色 */
+
+  /* 待っているあいだ、こんたてんが考えながら揺れる動き。
+     使うときは motion-safe: を付ける（動きを減らす設定を尊重するため）。 */
+  --animate-kon-bob: kon-bob 1.8s ease-in-out infinite;
+}
+
+@keyframes kon-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
