@@ -64,8 +64,9 @@ func NewAuthHandler(s AuthUseCase, tokens *auth.JWT, google GoogleAuthenticator,
 }
 
 // RegisterRoutes は認証APIのルーティングを登録する。
-func (h *AuthHandler) RegisterRoutes(e *echo.Echo) {
-	g := e.Group(APIBasePath)
+// mw はグループ全体に前置するミドルウェア（レート制限など）。
+func (h *AuthHandler) RegisterRoutes(e *echo.Echo, mw ...echo.MiddlewareFunc) {
+	g := e.Group(APIBasePath, mw...)
 	g.POST("/auth/signup", h.SignUp)
 	g.POST("/auth/login", h.Login)
 	g.POST("/auth/refresh", h.Refresh)

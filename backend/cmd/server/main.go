@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -119,10 +120,19 @@ func run() error {
 		AllowCredentials: true,
 	}))
 
+	// レート制限は IP 単位（spec.md 11章）。認証は総当たりを防ぐため 10req/min と
+	// 厳しめ、検索は通常利用で詰まらないよう 60req/min。他系統は spec で未指定のため課さない。
+	//
+	// 上限は環境変数で上書きできる。Vite プロキシ配下（開発・E2E）では全リクエストが
+	// プロキシの単一IPに集約され、正当な利用でも即座に上限へ達してしまう。そこでは
+	// 0 を渡して制限を切る（RateLimiter が 0 以下を無制限として扱う）。
+	authLimit := handler.RateLimiter(envInt("AUTH_RATE_LIMIT_PER_MIN", 10), time.Minute)
+	searchLimit := handler.RateLimiter(envInt("SEARCH_RATE_LIMIT_PER_MIN", 60), time.Minute)
+
 	health := handler.NewHealthHandler()
 	e.GET("/health", health.Health)
-	menuHandler.RegisterRoutes(e)
-	authHandler.RegisterRoutes(e)
+	menuHandler.RegisterRoutes(e, searchLimit)
+	authHandler.RegisterRoutes(e, authLimit)
 	historyHandler.RegisterRoutes(e)
 	favoriteHandler.RegisterRoutes(e)
 
@@ -152,4 +162,20 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envInt は環境変数を整数として読む。未設定・空・数値でない場合は fallback。
+// レート制限の上限のように「設定されていれば上書き、無ければ既定」を表す。
+func envInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		slog.Warn("環境変数を整数として解釈できませんでした。既定値を使います",
+			"key", key, "value", v, "fallback", fallback)
+		return fallback
+	}
+	return n
 }
