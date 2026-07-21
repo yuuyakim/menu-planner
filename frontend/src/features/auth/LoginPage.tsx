@@ -45,6 +45,15 @@ export function LoginPage() {
     mutationFn: (m: Mode) =>
       m === 'login' ? login({ email, password }) : signUp({ email, password }),
     onSuccess: (user: User) => {
+      // 前のユーザーのキャッシュを先に捨てる。ログアウトを挟まずに
+      // （セッション切れなどで）ログインし直した場合、これが無いと
+      // 前のユーザーのお気に入りや履歴が表示されてしまう（Issue #78）。
+      //
+      // ここは resetQueries ではなく clear でよい。直後に新しいユーザーを
+      // setQueryData で入れ、さらに画面遷移して他のクエリは張り直されるため、
+      // 「取り直されず読み込み中のまま固まる」問題が起きない。
+      // 余計な取り直しも走らせずに済む（ログアウト側は事情が違うので resetQueries）。
+      queryClient.clear()
       // 取得済みのユーザーをキャッシュに入れ、遷移先で問い合わせ直さない。
       queryClient.setQueryData(meQueryKey, user)
       void navigate(from, { replace: true })

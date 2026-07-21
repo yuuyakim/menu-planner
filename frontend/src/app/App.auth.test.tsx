@@ -154,6 +154,9 @@ describe('認証済みのとき', () => {
         '/api/v1/auth/logout',
         () => new HttpResponse(null, { status: 204 }),
       ),
+      // ログアウトでキャッシュを丸ごと初期化するため（Issue #78）、
+      // 誘導される前に履歴が一度だけ取り直される。
+      http.get('/api/v1/histories', () => HttpResponse.json({ histories: [] })),
     )
     renderWithProviders(<App />, { route: '/histories' })
     await screen.findByRole('heading', { level: 1, name: '検索履歴' })
