@@ -480,10 +480,11 @@ API消費は生涯約120クエリで頭打ちになる。
 
 ### PR 5-H: Google SSO の認可URL `feat/google-auth-url` ✅（コード）
 
-- [ ] 🔧 Google Cloud Console で OAuth クライアントを作成（**要ユーザー操作・未完**）
-      → コード・単体テストはダミー設定で完了。**実クレデンシャルは 5-I の
-        コールバック実機確認で必要**。リダイレクトURIは
-        `http://localhost:8080/api/v1/auth/google/callback`。
+- [x] 🔧 Google Cloud Console で OAuth クライアントを作成（2026-07-22 完了）
+      → 本番クライアントを作成し、承認済みリダイレクトURIに
+        `https://kondatekun.yuuyakim.com/api/v1/auth/google/callback` を登録。
+        本番でGoogleログインが通ることを確認済み。
+        開発用の `http://localhost:8080/api/v1/auth/google/callback` も併記のまま残す。
 - [x] 🔴 テスト: 認可URLに PKCE の code_challenge が含まれる（S256）
 - [x] 🔴 テスト: state が生成され Cookie に保存される（URL の state と一致）
 - [x] 🔴 テスト: state は毎回異なる
@@ -1186,8 +1187,12 @@ API消費は生涯約120クエリで頭打ちになる。
 - [x] 🔴 テスト(front): シークレット送信／未設定時は送らない／クライアント詐称値は握り潰す
 - [x] 🟢 `handler.TrustedProxyIPExtractor` を実装し `e.IPExtractor` に設定
 - [x] 🟢 Pages Function が `X-Proxy-Secret` を付与
-- [ ] 🔧 本番の環境変数を設定（Cloud Run: `TRUSTED_PROXY_SECRET`・レート制限 10/60、
-      Pages: `TRUSTED_PROXY_SECRET` 同値）※デプロイ作業
+- [x] 🔧 本番の環境変数を設定（Cloud Run: `TRUSTED_PROXY_SECRET`・レート制限 10/60、
+      Pages: `TRUSTED_PROXY_SECRET` 同値）※デプロイ作業（2026-07-22 完了・外形検証済み）
+      → 検索 60/min（60×200 → 429）、認証 10/min（10×401 → 429）を実測。
+        詐称防止も確認: 公開ドメイン経由では Function がクライアント送信の
+        `X-Forwarded-For` を握り潰し、backend 直叩きでは秘密なしの XFF を信頼せず
+        接続元IPで計数（偽XFFを変えても同一バケツのまま 429）。
 
 > **ホップ数ではなく共有シークレットで信頼を判定する。** backend のURLは公開されており
 > 直接叩けるため、XFF を無条件に信じると毎回違うIPを詐称するだけでレート制限を回避できる。
