@@ -58,6 +58,22 @@ export async function rerollDay(
   return res.menu
 }
 
+/** savedWeeklyMenusQueryKey は保存した週間献立のキャッシュキー。 */
+export const savedWeeklyMenusQueryKey = ['saved-weekly-menus'] as const
+
+/**
+ * saveWeeklyMenu は組み立てた1週間分をサーバに保存する（spec.md 2.8）。
+ *
+ * 保存できるのは10件まで。超過すると 409 が返る。押し出さずに断る仕様なので、
+ * 呼び出し側は「古いものを消してもらう」案内をする必要がある。
+ */
+export async function saveWeeklyMenu(week: DayMenu[]): Promise<string> {
+  const res = await apiPost<{ id: string }>('/weekly-menus', {
+    days: week.map((d) => ({ day: d.day, menuId: d.menu.id })),
+  })
+  return res.id
+}
+
 /** fetchMenu は献立を1件取得する。 */
 export async function fetchMenu(menuId: string): Promise<Menu> {
   const res = await apiGet<{ menu: Menu }>(`/menus/${menuId}`)

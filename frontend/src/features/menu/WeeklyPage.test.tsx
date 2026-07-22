@@ -301,3 +301,138 @@ describe('買い物リストへの導線（11-G）', () => {
     ).toBeVisible()
   })
 })
+
+describe('週間献立の保存', () => {
+  // 既定のハンドラは /auth/me に 401 を返す（＝未ログイン）。
+  // 保存は認証が要るため、ログイン済みの場合だけ差し替える。
+  function signedIn() {
+    server.use(
+      http.get('/api/v1/auth/me', () =>
+        HttpResponse.json({
+          user: {
+            id: '018f0000-0000-7000-8000-0000000000ff',
+            email: 'user@example.com',
+            displayName: 'ユーザー',
+          },
+        }),
+      ),
+    )
+  }
+
+  // respondSave は保存を仕込み、送られた本文を記録する。
+  function respondSave() {
+    const bodies: { days?: { day: number; menuId: string }[] }[] = []
+    server.use(
+      http.post('/api/v1/weekly-menus', async ({ request }) => {
+        bodies.push((await request.json()) as { days: { day: number; menuId: string }[] })
+        return HttpResponse.json(
+          { id: '018f0000-0000-7000-8000-0000000000aa' },
+          { status: 201 },
+        )
+      }),
+    )
+    return bodies
+  }
+
+  function saveButton() {
+    return screen.getByRole('button', { name: 'この週を保存する' })
+  }
+
+  it('週を作る前は保存の導線を出さない', () => {
+    signedIn()
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    // 保存するものがまだ無い。買い物リストと同じ扱い。
+    expect(
+      screen.queryByRole('button', { name: 'この週を保存する' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'ログインして保存する' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('未ログインなら保存ボタンではなくログイン導線を出す', async () => {
+    const user = userEvent.setup()
+    respondWeekly()
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    await user.click(create())
+    await screen.findAllByRole('listitem')
+
+    // 押せないボタンを見せるより、何をすれば保存できるかを示す。
+    const link = await screen.findByRole('link', { name: 'ログインして保存する' })
+    expect(link).toHaveAttribute('href', '/login')
+    expect(
+      screen.queryByRole('button', { name: 'この週を保存する' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('ログイン済みなら7日分を送って保存し、知らせを出す', async () => {
+    const user = userEvent.setup()
+    signedIn()
+    respondWeekly()
+    const bodies = respondSave()
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    await user.click(create())
+    await screen.findAllByRole('listitem')
+
+    await user.click(await screen.findByRole('button', { name: 'この週を保存する' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('保存しました')
+    await waitFor(() => expect(bodies).toHaveLength(1))
+    expect(bodies[0].days).toHaveLength(7)
+    expect(bodies[0].days?.[0]).toEqual({ day: 1, menuId: menu(1).id })
+    expect(bodies[0].days?.[6]).toEqual({ day: 7, menuId: menu(7).id })
+  })
+
+  it('上限に達していたら、古いものを消すよう伝える', async () => {
+    const user = userEvent.setup()
+    signedIn()
+    respondWeekly()
+    server.use(
+      http.post('/api/v1/weekly-menus', () =>
+        HttpResponse.json(
+          {
+            type: 'https://example.com/probs/saved-weekly-menu-limit-reached',
+            title: '保存できる週間献立は10件までです',
+            status: 409,
+          },
+          { status: 409, headers: { 'Content-Type': 'application/problem+json' } },
+        ),
+      ),
+    )
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    await user.click(create())
+    await screen.findAllByRole('listitem')
+    await user.click(await screen.findByRole('button', { name: 'この週を保存する' }))
+
+    // 押し直しても直らない。次に取るべき行動は「古いものを消す」。
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('10件まで')
+    expect(alert).toHaveTextContent('削除してください')
+  })
+
+  it('引き直すと保存済みの知らせを消す', async () => {
+    const user = userEvent.setup()
+    signedIn()
+    respondWeekly()
+    respondSave()
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    await user.click(create())
+    await screen.findAllByRole('listitem')
+    await user.click(await screen.findByRole('button', { name: 'この週を保存する' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('保存しました')
+
+    respondReroll({ ...menu(9), name: '差し替え後' })
+    await user.click(dayItem(3).getByRole('button', { name: '引き直す' }))
+
+    // 出したままだと「今の画面の状態が保存されている」と誤解させる。
+    await waitFor(() =>
+      expect(screen.queryByRole('status')).not.toBeInTheDocument(),
+    )
+    expect(saveButton()).toBeVisible()
+  })
+})
