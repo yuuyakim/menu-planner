@@ -14,12 +14,17 @@ import (
 
 // fakeSavedWeeklyStore は SavedWeeklyMenuStore を代用する。
 type fakeSavedWeeklyStore struct {
-	saveCalls  int
-	lastUserID domain.UserID
-	lastDays   []domain.DayMenu
-	count      int
-	countErr   error
-	saveErr    error
+	saveCalls    int
+	listCalls    int
+	deleteCalls  int
+	lastUserID   domain.UserID
+	lastDays     []domain.DayMenu
+	lastDeleteID domain.SavedWeeklyMenuID
+	saved        []domain.SavedWeeklyMenu
+	count        int
+	countErr     error
+	saveErr      error
+	deleteErr    error
 }
 
 func (s *fakeSavedWeeklyStore) Save(
@@ -35,9 +40,11 @@ func (s *fakeSavedWeeklyStore) Save(
 }
 
 func (s *fakeSavedWeeklyStore) List(
-	_ context.Context, _ domain.UserID,
+	_ context.Context, userID domain.UserID,
 ) ([]domain.SavedWeeklyMenu, error) {
-	return nil, nil
+	s.listCalls++
+	s.lastUserID = userID
+	return s.saved, nil
 }
 
 func (s *fakeSavedWeeklyStore) Count(_ context.Context, _ domain.UserID) (int, error) {
@@ -45,9 +52,12 @@ func (s *fakeSavedWeeklyStore) Count(_ context.Context, _ domain.UserID) (int, e
 }
 
 func (s *fakeSavedWeeklyStore) Delete(
-	_ context.Context, _ domain.UserID, _ domain.SavedWeeklyMenuID,
+	_ context.Context, userID domain.UserID, id domain.SavedWeeklyMenuID,
 ) error {
-	return nil
+	s.deleteCalls++
+	s.lastUserID = userID
+	s.lastDeleteID = id
+	return s.deleteErr
 }
 
 // weekInput は7日分の指定を作る。
@@ -191,4 +201,69 @@ func TestSavedWeeklyService_Save_件数の取得に失敗したら保存しな�
 	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
 	require.ErrorIs(t, err, sentinel)
 	assert.Zero(t, store.saveCalls)
+}
+
+func TestSavedWeeklyService_List_委譲する(t *testing.T) {
+	t.Parallel()
+
+	want := []domain.SavedWeeklyMenu{{ID: domain.NewSavedWeeklyMenuID()}}
+	store := &fakeSavedWeeklyStore{saved: want}
+	svc := service.NewSavedWeeklyMenuService(store)
+
+	userID := domain.NewUserID()
+	got, err := svc.List(context.Background(), userID.String())
+	require.NoError(t, err)
+
+	assert.Equal(t, want, got)
+	assert.Equal(t, 1, store.listCalls)
+	assert.Equal(t, userID.String(), store.lastUserID.String())
+}
+
+func TestSavedWeeklyService_List_壊れたユーザーIDは認証エラー(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeSavedWeeklyStore{}
+	svc := service.NewSavedWeeklyMenuService(store)
+
+	_, err := svc.List(context.Background(), "not-a-uuid")
+	require.ErrorIs(t, err, service.ErrUserNotFound)
+	assert.Zero(t, store.listCalls)
+}
+
+func TestSavedWeeklyService_Delete_委譲する(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeSavedWeeklyStore{}
+	svc := service.NewSavedWeeklyMenuService(store)
+
+	userID := domain.NewUserID()
+	id := domain.NewSavedWeeklyMenuID()
+	require.NoError(t, svc.Delete(context.Background(), userID.String(), id.String()))
+
+	assert.Equal(t, 1, store.deleteCalls)
+	assert.Equal(t, userID.String(), store.lastUserID.String())
+	assert.Equal(t, id.String(), store.lastDeleteID.String())
+}
+
+func TestSavedWeeklyService_Delete_壊れた保存IDは400相当(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeSavedWeeklyStore{}
+	svc := service.NewSavedWeeklyMenuService(store)
+
+	err := svc.Delete(context.Background(), domain.NewUserID().String(), "not-a-uuid")
+	require.ErrorIs(t, err, domain.ErrInvalidSavedWeeklyMenuID)
+	assert.Zero(t, store.deleteCalls, "IDが壊れていたら消しに行かないべき")
+}
+
+func TestSavedWeeklyService_Delete_見つからなければそのまま返す(t *testing.T) {
+	t.Parallel()
+
+	// 他人のものを指した場合も repository がこのエラーにする。
+	store := &fakeSavedWeeklyStore{deleteErr: service.ErrSavedWeeklyMenuNotFound}
+	svc := service.NewSavedWeeklyMenuService(store)
+
+	err := svc.Delete(context.Background(),
+		domain.NewUserID().String(), domain.NewSavedWeeklyMenuID().String())
+	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuNotFound)
 }
