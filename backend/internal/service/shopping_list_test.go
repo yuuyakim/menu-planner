@@ -15,9 +15,60 @@ import (
 // fakeIngredientRepo は献立IDごとの食材を定型で返す。
 type fakeIngredientRepo struct {
 	byMenu   map[domain.MenuID][]domain.Ingredient
+	all      []domain.Ingredient
 	err      error
 	lastIDs  []domain.MenuID
 	callCont int
+	allCalls int
+}
+
+// FindAll は食材マスタ全件（spec.md 2.9）。この fake では all をそのまま返す。
+func (r *fakeIngredientRepo) FindAll(_ context.Context) ([]domain.Ingredient, error) {
+	r.allCalls++
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.all, nil
+}
+
+// FindByIDs は all の中から指定IDのものを返す。存在しないIDは黙って落とす
+// （本物の repository と同じ振る舞い。件数の判断は service の仕事）。
+func (r *fakeIngredientRepo) FindByIDs(_ context.Context, ids []domain.IngredientID) ([]domain.Ingredient, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	want := make(map[domain.IngredientID]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	out := []domain.Ingredient{}
+	for _, i := range r.all {
+		if want[i.ID] {
+			out = append(out, i)
+		}
+	}
+	return out, nil
+}
+
+// FindMenuIDsByIngredientIDs は byMenu を走査し、指定食材を1つでも使う献立を返す。
+func (r *fakeIngredientRepo) FindMenuIDsByIngredientIDs(_ context.Context, ids []domain.IngredientID) ([]domain.MenuID, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	want := make(map[domain.IngredientID]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	out := []domain.MenuID{}
+	for menuID, ings := range r.byMenu {
+		for _, i := range ings {
+			if want[i.ID] {
+				out = append(out, menuID)
+				break
+			}
+		}
+	}
+	return out, nil
 }
 
 func (r *fakeIngredientRepo) FindByMenuIDs(_ context.Context, ids []domain.MenuID) ([]service.MenuIngredient, error) {

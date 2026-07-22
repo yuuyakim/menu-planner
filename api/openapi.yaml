@@ -195,6 +195,65 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/menus/search-by-ingredients:
+    post:
+      tags: [menus]
+      summary: 手持ちの食材で作れる献立を探す
+      description: |
+        選んだ食材を1つでも使う献立を、当てはまり具合とともに返す（spec.md 2.9 / 5.6）。
+
+        完全一致には絞らない。献立1件の食材は平均4.4種で、それを全部持っている
+        状況はまれなため、絞ると候補がほぼ0件になる。各候補に不足食材を示すことで
+        「あと2品買えば作れる」が分かるようにする。
+
+        並びは「不足の少ない順 → 一致の多い順 → カナ順」。上位20件まで。
+        手持ちと1つも重ならない献立は返さない。未認証でも使える。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ingredientIds]
+              properties:
+                ingredientIds:
+                  type: array
+                  description: 手持ちの食材。1件以上。重複は1件として扱う。
+                  minItems: 1
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: 候補の献立
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MenuMatchesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/ingredients:
+    get:
+      tags: [ingredients]
+      summary: 食材マスタを全件取得する
+      description: |
+        手持ちの食材を選ぶ画面の選択肢に使う（spec.md 2.9 / 5.6）。
+        並びはカテゴリ順（野菜→肉→魚介→卵乳→主食→その他）、同カテゴリ内はカナ順。
+        166件で固定的なため、ページングも検索クエリも設けない。
+        未認証でも使える（検索と同じ扱い）。
+      security: []
+      responses:
+        '200':
+          description: 食材マスタ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngredientsResponse'
+
   /api/v1/shopping-list:
     post:
       tags: [menus]
@@ -947,6 +1006,33 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SavedWeeklyMenu'
+
+    MenuMatch:
+      type: object
+      description: |
+        手持ちの食材に対する献立1件の当てはまり具合。
+        matched は手持ちと重なった食材、missing は買い足しが要る食材。
+      required: [menu, matched, missing]
+      properties:
+        menu:
+          $ref: '#/components/schemas/Menu'
+        matched:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ingredient'
+        missing:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ingredient'
+
+    MenuMatchesResponse:
+      type: object
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/MenuMatch'
 
     Problem:
       type: object
