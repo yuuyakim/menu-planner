@@ -62,6 +62,7 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), '豆苗',         'とうみょう',     'vegetable'),
 (gen_random_uuid(), 'にんにくの芽', 'にんにくのめ',   'vegetable'),
 (gen_random_uuid(), '空芯菜',       'くうしんさい',   'vegetable'),
+(gen_random_uuid(), '青パパイヤ',   'あおぱぱいや',   'vegetable'),
 
 -- ============ 肉 ============
 (gen_random_uuid(), '鶏もも肉',     'とりももにく',   'meat'),
@@ -85,6 +86,7 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), 'チャーシュー', 'ちゃーしゅー',   'meat'),
 (gen_random_uuid(), 'スペアリブ',   'すぺありぶ',     'meat'),
 (gen_random_uuid(), '鶏手羽先',     'とりてばさき',   'meat'),
+(gen_random_uuid(), 'スパム',       'すぱむ',         'meat'),
 
 -- ============ 魚介 ============
 (gen_random_uuid(), '鮭',           'さけ',           'seafood'),
@@ -148,6 +150,9 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), '春巻きの皮',   'はるまきのかわ', 'staple'),
 (gen_random_uuid(), '小籠包の皮',   'しょうろんぽうのかわ','staple'),
 (gen_random_uuid(), 'ワンタンの皮', 'わんたんのかわ', 'staple'),
+(gen_random_uuid(), 'ライスペーパー','らいすぺーぱー', 'staple'),
+(gen_random_uuid(), 'ピタパン',     'ぴたぱん',       'staple'),
+(gen_random_uuid(), 'トッポギ用餅', 'とっぽぎようもち','staple'),
 (gen_random_uuid(), '春餅',         'しゅんぴん',     'staple'),
 (gen_random_uuid(), 'そうめん',     'そうめん',       'staple'),
 (gen_random_uuid(), 'きりたんぽ',   'きりたんぽ',     'staple'),
@@ -172,6 +177,7 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), 'ひよこ豆',     'ひよこまめ',     'other'),
 (gen_random_uuid(), 'ミックスビーンズ','みっくすびーんず','other'),
 (gen_random_uuid(), 'ザーサイ',     'ざーさい',       'other'),
+(gen_random_uuid(), 'レンズ豆',     'れんずまめ',     'other'),
 (gen_random_uuid(), 'カシューナッツ','かしゅーなっつ', 'other'),
 (gen_random_uuid(), 'キムチ',       'きむち',         'other'),
 (gen_random_uuid(), 'トマト缶',     'とまとかん',     'other'),
