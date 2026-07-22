@@ -169,12 +169,6 @@ func (s *ShoppingListService) MenuIngredients(ctx context.Context, id domain.Men
 		items = append(items, p.Ingredient)
 	}
 	// 買い物リストと同じ並び（カテゴリ順 → カナ順）に揃える。
-	sort.SliceStable(items, func(a, b int) bool {
-		ca, cb := items[a].Category.Order(), items[b].Category.Order()
-		if ca != cb {
-			return ca < cb
-		}
-		return items[a].NameKana < items[b].NameKana
-	})
+	sortIngredientsForDisplay(items)
 	return items, nil
 }

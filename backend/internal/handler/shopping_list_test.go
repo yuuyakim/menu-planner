@@ -207,7 +207,7 @@ func ingredientsApp(t *testing.T, svc handler.MenuIngredientsUseCase) *echo.Echo
 	t.Helper()
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewIngredientHandler(svc).RegisterRoutes(e)
+	handler.NewIngredientHandler(svc, &fakeIngredientCatalog{}).RegisterRoutes(e)
 	return e
 }
 

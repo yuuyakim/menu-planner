@@ -124,20 +124,51 @@ func (h *ShoppingListHandler) Build(c echo.Context) error {
 	return c.JSON(http.StatusOK, shoppingListResponse{Items: out})
 }
 
-// IngredientHandler は献立の食材のHTTP境界。
+// IngredientCatalogUseCase は食材マスタそのものを扱う操作。
+// 実装は service.IngredientService。
+type IngredientCatalogUseCase interface {
+	All(ctx context.Context) ([]domain.Ingredient, error)
+}
+
+// IngredientHandler は食材のHTTP境界。
+//
+// 「献立の食材」と「食材マスタ全件」で参照するものが違うため、
+// use case を分けて受け取る。前者は献立×食材（ShoppingListService）、
+// 後者は献立に紐づかない一覧（IngredientService）。
 type IngredientHandler struct {
-	svc MenuIngredientsUseCase
+	svc     MenuIngredientsUseCase
+	catalog IngredientCatalogUseCase
 }
 
 // NewIngredientHandler は IngredientHandler を生成する。
-func NewIngredientHandler(svc MenuIngredientsUseCase) *IngredientHandler {
-	return &IngredientHandler{svc: svc}
+func NewIngredientHandler(svc MenuIngredientsUseCase, catalog IngredientCatalogUseCase) *IngredientHandler {
+	return &IngredientHandler{svc: svc, catalog: catalog}
 }
 
 // RegisterRoutes は食材APIのルーティングを登録する。
 func (h *IngredientHandler) RegisterRoutes(e *echo.Echo, mw ...echo.MiddlewareFunc) {
 	g := e.Group(APIBasePath, mw...)
 	g.GET("/menus/:id/ingredients", h.List)
+	g.GET("/ingredients", h.All)
+}
+
+// All は食材マスタを表示順で全件返す。手持ちの食材を選ぶ選択肢に使う。
+//
+//	GET /api/v1/ingredients
+//
+// 166件で固定的なため、ページングも検索クエリも設けない（spec.md 5.6）。
+// 未認証でも使える（検索と同じ扱い）。
+func (h *IngredientHandler) All(c echo.Context) error {
+	items, err := h.catalog.All(c.Request().Context())
+	if err != nil {
+		return fmt.Errorf("食材マスタの取得に失敗しました: %w", err)
+	}
+
+	out := make([]ingredientDTO, 0, len(items))
+	for _, i := range items {
+		out = append(out, toIngredientDTO(i))
+	}
+	return c.JSON(http.StatusOK, ingredientsResponse{Ingredients: out})
 }
 
 // List は献立に必要な食材を返す。
