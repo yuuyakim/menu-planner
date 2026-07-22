@@ -56,6 +56,47 @@ func (r *IngredientRepository) FindByMenuIDs(ctx context.Context, ids []domain.M
 	return scanMenuIngredients(rows)
 }
 
+// FindAll は食材マスタを全件返す。手持ちの食材を選ぶ画面の選択肢に使う（spec.md 2.9）。
+//
+// 並びはカナ順。**FindByMenuIDs と同じくカテゴリ順への並べ替えはしない。**
+// カテゴリの表示順は domain の知識（`AllIngredientCategories`）で、
+// SQLに CASE で書き写すと定義が二重になって食い違う。
+//
+// 166件で固定的なため、件数の上限も検索条件も設けない。
+func (r *IngredientRepository) FindAll(ctx context.Context) ([]domain.Ingredient, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, name, name_kana, category
+		   FROM ingredients
+		  ORDER BY name_kana, name`)
+	if err != nil {
+		return nil, fmt.Errorf("食材マスタの取得に失敗しました: %w", err)
+	}
+	defer rows.Close()
+
+	items := []domain.Ingredient{}
+	for rows.Next() {
+		var id, name, kana, category string
+		if err := rows.Scan(&id, &name, &kana, &category); err != nil {
+			return nil, fmt.Errorf("食材の読み取りに失敗しました: %w", err)
+		}
+		iID, err := domain.ParseIngredientID(id)
+		if err != nil {
+			return nil, fmt.Errorf("食材IDの解釈に失敗しました: %w", err)
+		}
+		c, err := domain.ParseIngredientCategory(category)
+		if err != nil {
+			return nil, fmt.Errorf("食材カテゴリの解釈に失敗しました: %w", err)
+		}
+		items = append(items, domain.Ingredient{
+			ID: iID, Name: name, NameKana: kana, Category: c,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("食材の読み取りに失敗しました: %w", err)
+	}
+	return items, nil
+}
+
 // scanMenuIngredients は行を service.MenuIngredient に写す。
 func scanMenuIngredients(rows pgx.Rows) ([]service.MenuIngredient, error) {
 	items := []service.MenuIngredient{}

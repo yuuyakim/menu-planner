@@ -342,6 +342,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ingredients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 食材マスタを全件取得する
+         * @description 手持ちの食材を選ぶ画面の選択肢に使う（spec.md 2.9 / 5.6）。
+         *     並びはカテゴリ順（野菜→肉→魚介→卵乳→主食→その他）、同カテゴリ内はカナ順。
+         *     166件で固定的なため、ページングも検索クエリも設けない。
+         *     未認証でも使える（検索と同じ扱い）。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 食材マスタ */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IngredientsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shopping-list": {
         parameters: {
             query?: never;

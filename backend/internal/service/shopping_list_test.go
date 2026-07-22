@@ -15,9 +15,20 @@ import (
 // fakeIngredientRepo は献立IDごとの食材を定型で返す。
 type fakeIngredientRepo struct {
 	byMenu   map[domain.MenuID][]domain.Ingredient
+	all      []domain.Ingredient
 	err      error
 	lastIDs  []domain.MenuID
 	callCont int
+	allCalls int
+}
+
+// FindAll は食材マスタ全件（spec.md 2.9）。この fake では all をそのまま返す。
+func (r *fakeIngredientRepo) FindAll(_ context.Context) ([]domain.Ingredient, error) {
+	r.allCalls++
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.all, nil
 }
 
 func (r *fakeIngredientRepo) FindByMenuIDs(_ context.Context, ids []domain.MenuID) ([]service.MenuIngredient, error) {
