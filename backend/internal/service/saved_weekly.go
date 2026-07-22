@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
@@ -41,4 +42,87 @@ type SavedWeeklyMenuStore interface {
 	// Delete は保存を1件削除する。
 	// 該当が無い、または他人のものであれば ErrSavedWeeklyMenuNotFound を返す。
 	Delete(ctx context.Context, userID domain.UserID, id domain.SavedWeeklyMenuID) error
+}
+
+// SavedDayInput は保存する1日分の指定。APIの生の値をそのまま受ける。
+type SavedDayInput struct {
+	Day    int
+	MenuID string
+}
+
+// SavedWeeklyMenuService は週間献立の保存を担う。
+type SavedWeeklyMenuService struct {
+	store SavedWeeklyMenuStore
+}
+
+// NewSavedWeeklyMenuService は SavedWeeklyMenuService を生成する。
+func NewSavedWeeklyMenuService(store SavedWeeklyMenuStore) *SavedWeeklyMenuService {
+	return &SavedWeeklyMenuService{store: store}
+}
+
+// Save は認証済みユーザーの週間献立を1件保存する。
+//
+// 7日分ちょうどでなければ ErrInvalidWeek（400）、日の範囲外・重複は ErrInvalidDay（400）、
+// 献立IDが壊れていれば domain.ErrInvalidMenuID（400）、
+// 上限に達していれば ErrSavedWeeklyMenuLimitReached（409）。
+func (s *SavedWeeklyMenuService) Save(
+	ctx context.Context, userID string, input []SavedDayInput,
+) (domain.SavedWeeklyMenuID, error) {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return domain.SavedWeeklyMenuID{}, ErrUserNotFound
+	}
+
+	days, err := toSavedDays(input)
+	if err != nil {
+		return domain.SavedWeeklyMenuID{}, err
+	}
+
+	// 上限は保存の直前に見る（spec.md 2.8）。
+	//
+	// **数えてから書くまでの間に別のリクエストが割り込む余地は残る。**
+	// 同一利用者が同時に保存を送ると 11 件目が通りうるが、上限は課金や
+	// 権限の境目ではなく「際限なく溜めない」ための目安なので、
+	// そこまでの厳密さは要らないと判断した。DB制約で締めるには
+	// 件数を数えるトリガか排他ロックが要り、割に合わない。
+	count, err := s.store.Count(ctx, uid)
+	if err != nil {
+		return domain.SavedWeeklyMenuID{}, err
+	}
+	if count >= SavedWeeklyMenuLimit {
+		return domain.SavedWeeklyMenuID{}, ErrSavedWeeklyMenuLimitReached
+	}
+
+	return s.store.Save(ctx, uid, days)
+}
+
+// toSavedDays は API の生の指定を検証して DayMenu に直す。
+//
+// 献立の中身はここでは引かない。存在するかどうかは保存時の外部キーが判定し、
+// repository が ErrMenuNotFound に変換する。事前に SELECT で確かめる方式は、
+// 確認と INSERT の間に他の操作が割り込むと破綻するため採らない（お気に入りと同じ）。
+func toSavedDays(input []SavedDayInput) ([]domain.DayMenu, error) {
+	if len(input) != domain.WeekLength {
+		return nil, fmt.Errorf("%w: %d日分の指定です（%d日分が必要）",
+			ErrInvalidWeek, len(input), domain.WeekLength)
+	}
+
+	days := make([]domain.DayMenu, 0, domain.WeekLength)
+	seen := make(map[int]bool, domain.WeekLength)
+	for _, in := range input {
+		if in.Day < 1 || in.Day > domain.WeekLength {
+			return nil, fmt.Errorf("%w: %d", ErrInvalidDay, in.Day)
+		}
+		if seen[in.Day] {
+			return nil, fmt.Errorf("%w: %d日目が重複しています", ErrInvalidDay, in.Day)
+		}
+		seen[in.Day] = true
+
+		mid, err := domain.ParseMenuID(in.MenuID)
+		if err != nil {
+			return nil, err
+		}
+		days = append(days, domain.DayMenu{Day: in.Day, Menu: domain.Menu{ID: mid}})
+	}
+	return days, nil
 }
