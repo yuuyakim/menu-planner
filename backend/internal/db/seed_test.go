@@ -34,33 +34,54 @@ func TestSeedSQL_冪等性のためON_CONFLICTを含む(t *testing.T) {
 		"修正が既存行にも反映されること")
 }
 
-func TestSeedSQL_120件のINSERTがある(t *testing.T) {
+// wantMenuCounts は (ジャンル, 難易度) ごとの期待件数。
+//
+// **easy / normal は各40件、elaborate は各10件が最終形**（合計360件）。
+// 2026-07-22 に「献立が少なすぎる。特に簡単・普通を増やしたい」という要望を受け、
+// 全ての組で10件だったものを easy / normal だけ40件に増やしている。
+// elaborate を据え置くのは、利用者レビューで「高価・入手困難なものが混ざる」と
+// 指摘されており（task.md「利用者レビューからの後続タスク」C）、
+// 日常的に作れる献立の比率を上げたいため。
+//
+// 投入はジャンル単位で分けているため、移行中は 40 と 10 が混在する。
+// 未投入のジャンルには「投入待ち」とコメントを付けている。
+func wantMenuCounts() map[[2]string]int {
+	return map[[2]string]int{
+		{"japanese", "easy"}: 40, {"japanese", "normal"}: 40, {"japanese", "elaborate"}: 10,
+		{"western", "easy"}: 40, {"western", "normal"}: 40, {"western", "elaborate"}: 10,
+		{"chinese", "easy"}: 40, {"chinese", "normal"}: 40, {"chinese", "elaborate"}: 10,
+		{"other", "easy"}: 40, {"other", "normal"}: 40, {"other", "elaborate"}: 10,
+	}
+}
+
+func TestSeedSQL_期待件数のINSERTがある(t *testing.T) {
 	t.Parallel()
 
 	sql, err := db.SeedSQL()
 	require.NoError(t, err)
+
+	want := 0
+	for _, n := range wantMenuCounts() {
+		want += n
+	}
 
 	// VALUES の各行は "(gen_random_uuid(), '" で始まる。
 	// 単に "gen_random_uuid()" を数えるとコメント中の記述まで拾ってしまう。
 	got := strings.Count(sql, "(gen_random_uuid(), '")
-	assert.Equal(t, 120, got, "献立は120件であること")
+	assert.Equal(t, want, got, "献立は%d件であること", want)
 }
 
-func TestSeedSQL_各ジャンルと難易度が10件ずつ(t *testing.T) {
+func TestSeedSQL_ジャンルと難易度ごとの件数(t *testing.T) {
 	t.Parallel()
 
 	sql, err := db.SeedSQL()
 	require.NoError(t, err)
 
-	genres := []string{"japanese", "western", "chinese", "other"}
-	difficulties := []string{"easy", "normal", "elaborate"}
-
-	for _, g := range genres {
-		for _, d := range difficulties {
-			// "'japanese', 'easy'" の形で出現する
-			pattern := "'" + g + "', '" + d + "'"
-			got := strings.Count(sql, pattern)
-			assert.Equal(t, 10, got, "%s × %s は10件であること", g, d)
-		}
+	for key, want := range wantMenuCounts() {
+		genre, difficulty := key[0], key[1]
+		// "'japanese', 'easy'" の形で出現する
+		pattern := "'" + genre + "', '" + difficulty + "'"
+		got := strings.Count(sql, pattern)
+		assert.Equal(t, want, got, "%s × %s は%d件であること", genre, difficulty, want)
 	}
 }

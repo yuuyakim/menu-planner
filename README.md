@@ -36,7 +36,7 @@ flowchart LR
         R["repository (pgx)"]
         G["gateway (Brave / stub)"]
     end
-    DB[("PostgreSQL :5432<br/>献立マスタ120件 / users / histories / favorites<br/>saved_weekly_menus / recipe_link_caches")]
+    DB[("PostgreSQL :5432<br/>献立マスタ360件 / users / histories / favorites<br/>saved_weekly_menus / recipe_link_caches")]
     Brave["Brave Search API"]
 
     Browser --> SPA --> Proxy --> MW --> H --> S
@@ -52,7 +52,7 @@ flowchart LR
 - **週間献立は保存できる**（`saved_weekly_menus`、1ユーザー10件まで）。作業中の週は sessionStorage に持つが、
   買い物の場で見返すには端末やセッションをまたぐ必要があるためサーバにも置く（[spec.md 2.8](./spec.md)）。
   上限に達したら古いものを押し出さず 409 で断る。保存は明示的な操作なので、黙って消えると行為の意味が壊れる。
-- **レシピリンクはキャッシュ**する（`recipe_link_caches`、TTL 7日）。献立は120件固定のため、外部APIの消費は生涯およそ120クエリで頭打ちになる（[spec.md 13.2](./spec.md)）。
+- **レシピリンクはキャッシュ**する（`recipe_link_caches`、TTL 7日）。献立は360件固定のため、外部APIの消費は生涯およそ360クエリで頭打ちになる（[spec.md 13.2](./spec.md)）。
 
 ## クイックスタート
 
@@ -63,7 +63,7 @@ cd menu-planner
 cp .env.example .env      # 既定は SEARCH_API_PROVIDER=stub。APIキー無しで全機能が動く
 make up                   # コンテナ起動（db / backend / frontend）
 make migrate              # マイグレーション適用
-make seed                 # 献立マスタ120件を投入
+make seed                 # 献立マスタ360件を投入
 # → http://localhost:5173 を開く
 ```
 
