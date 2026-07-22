@@ -342,6 +342,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/menus/search-by-ingredients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 手持ちの食材で作れる献立を探す
+         * @description 選んだ食材を1つでも使う献立を、当てはまり具合とともに返す（spec.md 2.9 / 5.6）。
+         *
+         *     完全一致には絞らない。献立1件の食材は平均4.4種で、それを全部持っている
+         *     状況はまれなため、絞ると候補がほぼ0件になる。各候補に不足食材を示すことで
+         *     「あと2品買えば作れる」が分かるようにする。
+         *
+         *     並びは「不足の少ない順 → 一致の多い順 → カナ順」。上位20件まで。
+         *     手持ちと1つも重ならない献立は返さない。未認証でも使える。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description 手持ちの食材。1件以上。重複は1件として扱う。 */
+                        ingredientIds: string[];
+                    };
+                };
+            };
+            responses: {
+                /** @description 候補の献立 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MenuMatchesResponse"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ingredients": {
         parameters: {
             query?: never;
@@ -1232,6 +1287,18 @@ export interface components {
         };
         SavedWeeklyMenusResponse: {
             weeklyMenus: components["schemas"]["SavedWeeklyMenu"][];
+        };
+        /**
+         * @description 手持ちの食材に対する献立1件の当てはまり具合。
+         *     matched は手持ちと重なった食材、missing は買い足しが要る食材。
+         */
+        MenuMatch: {
+            menu: components["schemas"]["Menu"];
+            matched: components["schemas"]["Ingredient"][];
+            missing: components["schemas"]["Ingredient"][];
+        };
+        MenuMatchesResponse: {
+            matches: components["schemas"]["MenuMatch"][];
         };
         /** @description RFC 7807 の Problem Details。 */
         Problem: {

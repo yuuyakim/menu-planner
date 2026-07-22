@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -15,11 +16,12 @@ import (
 // 選択肢がこれにあたる。
 type IngredientService struct {
 	ingredients IngredientRepository
+	menus       MenuRepository
 }
 
 // NewIngredientService は IngredientService を生成する。
-func NewIngredientService(i IngredientRepository) *IngredientService {
-	return &IngredientService{ingredients: i}
+func NewIngredientService(i IngredientRepository, m MenuRepository) *IngredientService {
+	return &IngredientService{ingredients: i, menus: m}
 }
 
 // All は食材マスタを表示順（カテゴリ順 → カナ順）で全件返す。
@@ -52,4 +54,147 @@ func sortIngredientsForDisplay(items []domain.Ingredient) {
 		}
 		return items[a].NameKana < items[b].NameKana
 	})
+}
+
+// maxIngredientSearchResults は食材からの検索で返す上限（spec.md 5.6）。
+// 食材を多く選ぶほど候補は増えるが、一覧で見比べる用途でこれを超えても選べない。
+const maxIngredientSearchResults = 20
+
+var (
+	// ErrInvalidIngredientIDs は食材の指定が0件であることを表す（400）。
+	ErrInvalidIngredientIDs = errors.New("食材の指定が不正です")
+
+	// ErrIngredientNotFound は指定された食材の中に存在しないものがあることを表す（404）。
+	//
+	// 黙って無視すると、利用者の意図と違う条件で検索した結果を
+	// 正しい答えとして返すことになる。
+	ErrIngredientNotFound = errors.New("指定された食材が見つかりません")
+)
+
+// MenuMatch は手持ちの食材に対する献立1件の当てはまり具合（spec.md 5.6）。
+type MenuMatch struct {
+	// Menu は候補の献立。
+	Menu domain.Menu
+	// Matched は手持ちと重なった食材。
+	Matched []domain.Ingredient
+	// Missing は足りない食材。買い足せば作れることを示す。
+	Missing []domain.Ingredient
+}
+
+// SearchByIngredients は手持ちの食材で作れる献立を探す。
+//
+// 完全一致には絞らない。献立1件の食材は平均4.4種で、それを全部持っている状況は
+// まれなため、絞ると候補がほぼ0件になり機能が成立しない（spec.md 2.9）。
+func (s *IngredientService) SearchByIngredients(
+	ctx context.Context, ids []domain.IngredientID,
+) ([]MenuMatch, error) {
+	have := uniqueIngredientIDs(ids)
+	if len(have) == 0 {
+		return nil, fmt.Errorf("%w: 1件以上指定してください", ErrInvalidIngredientIDs)
+	}
+
+	// 存在を先に確かめる。存在しないIDを黙って落とすと、
+	// 利用者が選んだつもりの条件と違う結果を返してしまう。
+	found, err := s.ingredients.FindByIDs(ctx, have)
+	if err != nil {
+		return nil, fmt.Errorf("食材の取得に失敗しました: %w", err)
+	}
+	if len(found) != len(have) {
+		return nil, fmt.Errorf("%w: 指定%d件のうち%d件しか存在しません",
+			ErrIngredientNotFound, len(have), len(found))
+	}
+
+	// 手持ちと1つも重ならない献立はここで落ちる（SQL側で絞る）。
+	menuIDs, err := s.ingredients.FindMenuIDsByIngredientIDs(ctx, have)
+	if err != nil {
+		return nil, fmt.Errorf("献立の絞り込みに失敗しました: %w", err)
+	}
+	if len(menuIDs) == 0 {
+		return []MenuMatch{}, nil
+	}
+
+	// 不足を出すには、候補献立の「全食材」が要る。重なった分だけでは足りない。
+	pairs, err := s.ingredients.FindByMenuIDs(ctx, menuIDs)
+	if err != nil {
+		return nil, fmt.Errorf("食材の取得に失敗しました: %w", err)
+	}
+	menus, err := s.menus.FindByIDs(ctx, menuIDs)
+	if err != nil {
+		return nil, fmt.Errorf("献立の取得に失敗しました: %w", err)
+	}
+
+	matches := buildMatches(menus, pairs, have)
+	sortMatches(matches)
+	if len(matches) > maxIngredientSearchResults {
+		matches = matches[:maxIngredientSearchResults]
+	}
+	return matches, nil
+}
+
+// buildMatches は献立ごとに手持ちとの重なりと不足を組み立てる。
+func buildMatches(
+	menus []domain.Menu, pairs []MenuIngredient, have []domain.IngredientID,
+) []MenuMatch {
+	haveSet := make(map[domain.IngredientID]bool, len(have))
+	for _, id := range have {
+		haveSet[id] = true
+	}
+
+	byMenu := make(map[domain.MenuID][]domain.Ingredient, len(menus))
+	for _, p := range pairs {
+		byMenu[p.MenuID] = append(byMenu[p.MenuID], p.Ingredient)
+	}
+
+	matches := make([]MenuMatch, 0, len(menus))
+	for _, m := range menus {
+		matched := []domain.Ingredient{}
+		missing := []domain.Ingredient{}
+		for _, ing := range byMenu[m.ID] {
+			if haveSet[ing.ID] {
+				matched = append(matched, ing)
+			} else {
+				missing = append(missing, ing)
+			}
+		}
+		// 重なりゼロはSQLで落ちているはずだが、ここでも守る。
+		// 献立に食材が1件も紐づいていない場合もここで除ける。
+		if len(matched) == 0 {
+			continue
+		}
+		sortIngredientsForDisplay(matched)
+		sortIngredientsForDisplay(missing)
+		matches = append(matches, MenuMatch{Menu: m, Matched: matched, Missing: missing})
+	}
+	return matches
+}
+
+// sortMatches は候補を「不足の少ない順 → 一致の多い順 → カナ順」に並べる（spec.md 5.6）。
+//
+// 第1が不足なのは、知りたいのが「いま作れるか」であって
+// 「手持ちを何品使うか」ではないため。同じ不足数なら手持ちを多く使う方を上に出す
+// （余らせずに済む）。カナ順は同値のときに並びを安定させるためだけのもの。
+func sortMatches(matches []MenuMatch) {
+	sort.SliceStable(matches, func(a, b int) bool {
+		if la, lb := len(matches[a].Missing), len(matches[b].Missing); la != lb {
+			return la < lb
+		}
+		if ma, mb := len(matches[a].Matched), len(matches[b].Matched); ma != mb {
+			return ma > mb
+		}
+		return matches[a].Menu.NameKana < matches[b].Menu.NameKana
+	})
+}
+
+// uniqueIngredientIDs は重複を除く。順序は保つ。
+func uniqueIngredientIDs(ids []domain.IngredientID) []domain.IngredientID {
+	seen := make(map[domain.IngredientID]bool, len(ids))
+	out := make([]domain.IngredientID, 0, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
