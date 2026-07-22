@@ -3,7 +3,13 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md"]
   pull_request:
+    paths-ignore: ["**.md"]
+
+# ドキュメントだけの変更ではCIを走らせない。仕様やタスクの更新だけで
+# 4ジョブ・約11分を消費していた（例: PR #107 / #121 はどちらも .md のみ）。
+# 必須チェックは設定していないため、走らないことでマージは妨げられない。
 
 # 同一PRへの連続pushでは古い実行をキャンセルする
 concurrency:
@@ -42,9 +48,15 @@ jobs:
 
       # testcontainers が実Postgresを起動する。ubuntu-latest には Docker が
       # 入っているため追加のサービス定義は不要。
+      # -race はテスト時間をほぼ倍にする（実測 74s のうち相当分）。
+      # 作業PR（base が feature/*）では外し、**main に出る経路**
+      # ＝ main 宛のPRと main への push では必ず有効にする。
+      # 競合はマージ前に必ず一度は検査される。
       - name: テスト
         working-directory: backend
-        run: go test ./... -race -cover -timeout 10m
+        env:
+          RACE: ${{ (github.base_ref == 'main' || github.ref_name == 'main') && '-race' || '' }}
+        run: go test ./... $RACE -cover -timeout 10m
 
   frontend:
     name: Frontend (TypeScript)
@@ -104,11 +116,26 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # ブラウザ本体はキャッシュせず毎回入れる。数十秒で済み、
-      # バージョン不一致による分かりにくい失敗を避けられる。
+      # ブラウザ本体は毎回入れると37秒かかる（実測）。package-lock.json を
+      # キーにキャッシュする。Playwright の版はそこに固定されるため、
+      # 版が変われば自動で別キーになり、バージョン不一致は起きない。
+      - name: ブラウザのキャッシュ
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      # OSの依存パッケージはキャッシュ対象外なので毎回入れる（数秒）。
+      # ブラウザ本体はキャッシュが無いときだけ落とす。
       - name: ブラウザのインストール
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
 
       # アプリ一式（DB・backend・frontend）を起動する。
       # SEARCH_API_PROVIDER は compose の既定が stub なので外部APIは叩かない。
@@ -140,8 +167,12 @@ jobs:
         if: always()
         run: docker compose down --volumes
 
+  # 本番イメージの検証は main に出る経路だけで行う。
+  # 作業PR（base が feature/*）では走らせない。Dockerfile の prod 段は
+  # 変更頻度が低く、壊れていれば main 宛の最終PRで必ず捕まる。
   docker:
     name: Docker build
+    if: github.base_ref == 'main' || github.ref_name == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -151,14 +182,43 @@ jobs:
           docker build --target prod -t menu-planner-backend:ci ./backend
           docker build --target prod -t menu-planner-frontend:ci ./frontend
 
-      - name: compose 起動と /health の疎通確認
+      # DBだけ起こす（postgres は取得済みイメージなのでビルドが無い）。
+      #
+      # 以前はここで `docker compose up backend` していたが、compose の backend は
+      # `target: dev` のため、**検証されるのは dev イメージで、直前にビルドした
+      # prod イメージは一度も動いていなかった**。しかも E2E ジョブが同じ dev 一式を
+      # 起動しており、67秒を二重に払っていた。
+      - name: DBの起動
+        run: docker compose up -d --wait --wait-timeout 120 db
+
+      # ビルドした prod イメージそのものを動かす。
+      # /health はDBを見ないが、起動時のDB接続に失敗するとプロセスが落ちるため、
+      # 200 が返ること自体が「本番イメージが起動できる」ことの確認になる。
+      - name: 本番イメージの起動と /health の疎通確認
         run: |
-          docker compose up -d --wait --wait-timeout 180 backend
-          curl -fsS --retry 5 --retry-delay 3 http://localhost:8080/health
+          # ネットワーク名は compose のプロジェクト名に依存するため、
+          # 名前を決め打ちせず db コンテナから引く。
+          network=$(docker inspect "$(docker compose ps -q db)" \
+            --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')
+          # SEARCH_API_PROVIDER はバイナリ側に既定が無く、未設定だと起動時に落ちる
+          # （既定値を与えていたのは compose だった）。ローカル検証で判明。
+          docker run -d --name backend-prod --network "$network" \
+            -e DATABASE_URL='postgres://app:password@db:5432/menu_planner?sslmode=disable' \
+            -e JWT_SECRET='ci-only-secret' \
+            -e SEARCH_API_PROVIDER='stub' \
+            -p 8080:8080 \
+            menu-planner-backend:ci
+          curl -fsS --retry 10 --retry-delay 2 http://localhost:8080/health
 
       - name: 失敗時のログ出力
         if: failure()
-        run: docker compose logs
+        run: |
+          docker logs backend-prod || true
+          docker compose logs
+
+      - name: 本番コンテナの後片付け
+        if: always()
+        run: docker rm -f backend-prod || true
 
       - name: 後片付け
         if: always()
