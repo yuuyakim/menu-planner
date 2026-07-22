@@ -58,6 +58,10 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), 'ビーツ',       'びーつ',         'vegetable'),
 (gen_random_uuid(), '長芋',         'ながいも',       'vegetable'),
 (gen_random_uuid(), '里芋',         'さといも',       'vegetable'),
+(gen_random_uuid(), 'ブロッコリー', 'ぶろっこりー',   'vegetable'),
+(gen_random_uuid(), '豆苗',         'とうみょう',     'vegetable'),
+(gen_random_uuid(), 'にんにくの芽', 'にんにくのめ',   'vegetable'),
+(gen_random_uuid(), '空芯菜',       'くうしんさい',   'vegetable'),
 
 -- ============ 肉 ============
 (gen_random_uuid(), '鶏もも肉',     'とりももにく',   'meat'),
@@ -80,6 +84,7 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), 'ウインナー',   'ういんなー',     'meat'),
 (gen_random_uuid(), 'チャーシュー', 'ちゃーしゅー',   'meat'),
 (gen_random_uuid(), 'スペアリブ',   'すぺありぶ',     'meat'),
+(gen_random_uuid(), '鶏手羽先',     'とりてばさき',   'meat'),
 
 -- ============ 魚介 ============
 (gen_random_uuid(), '鮭',           'さけ',           'seafood'),
@@ -108,6 +113,7 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), 'はんぺん',     'はんぺん',       'seafood'),
 (gen_random_uuid(), 'たらこ',       'たらこ',         'seafood'),
 (gen_random_uuid(), 'ムール貝',     'むーるがい',     'seafood'),
+(gen_random_uuid(), 'くらげ',       'くらげ',         'seafood'),
 
 -- ============ 卵・乳 ============
 (gen_random_uuid(), '卵',           'たまご',         'dairy_egg'),
@@ -141,6 +147,7 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), '焼売の皮',     'しゅうまいのかわ','staple'),
 (gen_random_uuid(), '春巻きの皮',   'はるまきのかわ', 'staple'),
 (gen_random_uuid(), '小籠包の皮',   'しょうろんぽうのかわ','staple'),
+(gen_random_uuid(), 'ワンタンの皮', 'わんたんのかわ', 'staple'),
 (gen_random_uuid(), '春餅',         'しゅんぴん',     'staple'),
 (gen_random_uuid(), 'そうめん',     'そうめん',       'staple'),
 (gen_random_uuid(), 'きりたんぽ',   'きりたんぽ',     'staple'),
@@ -164,6 +171,8 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), '黒豆',         'くろまめ',       'other'),
 (gen_random_uuid(), 'ひよこ豆',     'ひよこまめ',     'other'),
 (gen_random_uuid(), 'ミックスビーンズ','みっくすびーんず','other'),
+(gen_random_uuid(), 'ザーサイ',     'ざーさい',       'other'),
+(gen_random_uuid(), 'カシューナッツ','かしゅーなっつ', 'other'),
 (gen_random_uuid(), 'キムチ',       'きむち',         'other'),
 (gen_random_uuid(), 'トマト缶',     'とまとかん',     'other'),
 (gen_random_uuid(), 'ツナ缶',       'つなかん',       'other'),
