@@ -112,6 +112,10 @@ func run() error {
 	favoriteSvc := service.NewFavoriteService(favoriteRepo)
 	favoriteHandler := handler.NewFavoriteHandler(favoriteSvc, tokens)
 
+	savedWeeklyRepo := repository.NewSavedWeeklyMenuRepository(pool)
+	savedWeeklySvc := service.NewSavedWeeklyMenuService(savedWeeklyRepo)
+	savedWeeklyHandler := handler.NewSavedWeeklyMenuHandler(savedWeeklySvc, tokens)
+
 	ingredientRepo := repository.NewIngredientRepository(pool)
 
 	menuRepo := repository.NewMenuRepository(pool)
@@ -162,6 +166,7 @@ func run() error {
 	authHandler.RegisterRoutes(e, authLimit)
 	historyHandler.RegisterRoutes(e)
 	favoriteHandler.RegisterRoutes(e)
+	savedWeeklyHandler.RegisterRoutes(e)
 
 	addr := ":" + env("PORT", "8080")
 

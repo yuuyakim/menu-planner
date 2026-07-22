@@ -916,6 +916,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/weekly-menus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 組み立てた1週間分の献立を保存する
+         * @description 7日分をひとまとまりで保存する（spec.md 2.8）。買い物の場で見返すのが主な用途。
+         *
+         *     保存できるのは1ユーザーあたり10件まで。上限に達した状態での保存は、
+         *     古いものを押し出さず 409 で断る。履歴（FIFO）と違い保存は明示的な操作であり、
+         *     黙って消えると保存という行為の意味が壊れるため。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description 7日分ちょうど。day の重複は不可。 */
+                        days: {
+                            /** @description 起点からの通し番号（spec.md 13.3 の当日起点）。 */
+                            day: number;
+                            /** Format: uuid */
+                            menuId: string;
+                        }[];
+                    };
+                };
+            };
+            responses: {
+                /** @description 保存した */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** Format: uuid */
+                            id: string;
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+                /** @description 保存の上限（10件）に達している */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
