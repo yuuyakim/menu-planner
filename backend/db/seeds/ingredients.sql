@@ -56,6 +56,8 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), 'バジル',       'ばじる',         'vegetable'),
 (gen_random_uuid(), 'パクチー',     'ぱくちー',       'vegetable'),
 (gen_random_uuid(), 'ビーツ',       'びーつ',         'vegetable'),
+(gen_random_uuid(), '長芋',         'ながいも',       'vegetable'),
+(gen_random_uuid(), '里芋',         'さといも',       'vegetable'),
 
 -- ============ 肉 ============
 (gen_random_uuid(), '鶏もも肉',     'とりももにく',   'meat'),
@@ -95,6 +97,14 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), 'フカヒレ',     'ふかひれ',       'seafood'),
 (gen_random_uuid(), '干し貝柱',     'ほしかいばしら', 'seafood'),
 (gen_random_uuid(), '上海蟹',       'しゃんはいがに', 'seafood'),
+(gen_random_uuid(), 'さんま',       'さんま',         'seafood'),
+(gen_random_uuid(), 'いわし',       'いわし',         'seafood'),
+(gen_random_uuid(), 'あじ',         'あじ',           'seafood'),
+-- 干物は生の魚と売り場も用途も違うため、別の食材として持つ。
+(gen_random_uuid(), 'あじの開き',   'あじのひらき',   'seafood'),
+(gen_random_uuid(), 'しらす',       'しらす',         'seafood'),
+(gen_random_uuid(), 'ちくわ',       'ちくわ',         'seafood'),
+(gen_random_uuid(), 'はんぺん',     'はんぺん',       'seafood'),
 
 -- ============ 卵・乳 ============
 (gen_random_uuid(), '卵',           'たまご',         'dairy_egg'),
@@ -129,11 +139,16 @@ INSERT INTO ingredients (id, name, name_kana, category) VALUES
 (gen_random_uuid(), '春巻きの皮',   'はるまきのかわ', 'staple'),
 (gen_random_uuid(), '小籠包の皮',   'しょうろんぽうのかわ','staple'),
 (gen_random_uuid(), '春餅',         'しゅんぴん',     'staple'),
+(gen_random_uuid(), 'そうめん',     'そうめん',       'staple'),
+(gen_random_uuid(), 'きりたんぽ',   'きりたんぽ',     'staple'),
 
 -- ============ その他 ============
 (gen_random_uuid(), '豆腐',         'とうふ',         'other'),
 (gen_random_uuid(), '焼き豆腐',     'やきどうふ',     'other'),
 (gen_random_uuid(), '油揚げ',       'あぶらあげ',     'other'),
+(gen_random_uuid(), '厚揚げ',       'あつあげ',       'other'),
+-- 梅干しは味付けに使うが、常備しておらずその献立のために買うため食材として扱う（14.4）。
+(gen_random_uuid(), '梅干し',       'うめぼし',       'other'),
 (gen_random_uuid(), 'こんにゃく',   'こんにゃく',     'other'),
 (gen_random_uuid(), '糸こんにゃく', 'いとこんにゃく', 'other'),
 (gen_random_uuid(), 'しらたき',     'しらたき',       'other'),
