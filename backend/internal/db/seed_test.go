@@ -48,7 +48,7 @@ func TestSeedSQL_冪等性のためON_CONFLICTを含む(t *testing.T) {
 func wantMenuCounts() map[[2]string]int {
 	return map[[2]string]int{
 		{"japanese", "easy"}: 40, {"japanese", "normal"}: 40, {"japanese", "elaborate"}: 10,
-		{"western", "easy"}: 10, {"western", "normal"}: 10, {"western", "elaborate"}: 10, // 投入待ち
+		{"western", "easy"}: 40, {"western", "normal"}: 40, {"western", "elaborate"}: 10,
 		{"chinese", "easy"}: 10, {"chinese", "normal"}: 10, {"chinese", "elaborate"}: 10, // 投入待ち
 		{"other", "easy"}: 10, {"other", "normal"}: 10, {"other", "elaborate"}: 10, // 投入待ち
 	}
