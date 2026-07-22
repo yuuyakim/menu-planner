@@ -50,7 +50,7 @@ func wantMenuCounts() map[[2]string]int {
 		{"japanese", "easy"}: 40, {"japanese", "normal"}: 40, {"japanese", "elaborate"}: 10,
 		{"western", "easy"}: 40, {"western", "normal"}: 40, {"western", "elaborate"}: 10,
 		{"chinese", "easy"}: 40, {"chinese", "normal"}: 40, {"chinese", "elaborate"}: 10,
-		{"other", "easy"}: 10, {"other", "normal"}: 10, {"other", "elaborate"}: 10, // 投入待ち
+		{"other", "easy"}: 40, {"other", "normal"}: 40, {"other", "elaborate"}: 10,
 	}
 }
 
