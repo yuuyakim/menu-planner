@@ -36,7 +36,7 @@ flowchart LR
         R["repository (pgx)"]
         G["gateway (Brave / stub)"]
     end
-    DB[("PostgreSQL :5432<br/>献立マスタ120件 / users / histories / favorites / recipe_link_caches")]
+    DB[("PostgreSQL :5432<br/>献立マスタ360件 / users / histories / favorites / recipe_link_caches")]
     Brave["Brave Search API"]
 
     Browser --> SPA --> Proxy --> MW --> H --> S
@@ -49,7 +49,7 @@ flowchart LR
 - **食材は自前のマスタで持つ**（[spec.md 14章](./spec.md)）。レシピをクロールしない判断のため外部から取得できず、
   自前の献立マスタと同様に自前で持つ。調味料は含めず、分量も持たない（買い物リストは食材名のチェックリスト）。
   代表的な食材の例であり、**アレルギー対応とは位置づけない**。
-- **レシピリンクはキャッシュ**する（`recipe_link_caches`、TTL 7日）。献立は120件固定のため、外部APIの消費は生涯およそ120クエリで頭打ちになる（[spec.md 13.2](./spec.md)）。
+- **レシピリンクはキャッシュ**する（`recipe_link_caches`、TTL 7日）。献立は360件固定のため、外部APIの消費は生涯およそ360クエリで頭打ちになる（[spec.md 13.2](./spec.md)）。
 
 ## クイックスタート
 
@@ -60,7 +60,7 @@ cd menu-planner
 cp .env.example .env      # 既定は SEARCH_API_PROVIDER=stub。APIキー無しで全機能が動く
 make up                   # コンテナ起動（db / backend / frontend）
 make migrate              # マイグレーション適用
-make seed                 # 献立マスタ120件を投入
+make seed                 # 献立マスタ360件を投入
 # → http://localhost:5173 を開く
 ```
 
