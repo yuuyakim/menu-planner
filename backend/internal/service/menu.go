@@ -318,8 +318,9 @@ func (s *MenuService) pickForDay(candidates, remaining, others []domain.Menu, re
 // 先読みはしない。その日その日で選ぶため、週全体では3連続を避けられる並びが
 // あるのに袋小路に入ることが理論上ある（例: 残り1件が直前2日と同じジャンル）。
 // 候補1〜12件・ジャンル1〜4種を総当たりで2400回試して5回、いずれも候補が
-// 2ジャンルしか無い作為的な形でのみ起きた。実マスタ相当（120件・4ジャンル）
+// 2ジャンルしか無い作為的な形でのみ起きた。当時の実マスタ相当（120件・4ジャンル）
 // では2000回試して0回であり、先読みを入れる複雑さに見合わないと判断した。
+// マスタはその後360件に増えており、候補が増える分だけ袋小路はさらに起きにくい。
 func (s *MenuService) pickDay(candidates, remaining []domain.Menu, recentIDs []domain.MenuID, week []domain.DayMenu) (domain.DayMenu, error) {
 	streak, hasStreak := streakingGenre(week)
 
