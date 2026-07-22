@@ -14,18 +14,30 @@ import (
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
 // fakeIngredientCatalog は IngredientCatalogUseCase を差し替える。
 type fakeIngredientCatalog struct {
-	items []domain.Ingredient
-	err   error
-	calls int
+	items       []domain.Ingredient
+	matches     []service.MenuMatch
+	lastIDs     []domain.IngredientID
+	err         error
+	calls       int
+	searchCalls int
 }
 
 func (s *fakeIngredientCatalog) All(_ context.Context) ([]domain.Ingredient, error) {
 	s.calls++
 	return s.items, s.err
+}
+
+func (s *fakeIngredientCatalog) SearchByIngredients(
+	_ context.Context, ids []domain.IngredientID,
+) ([]service.MenuMatch, error) {
+	s.searchCalls++
+	s.lastIDs = ids
+	return s.matches, s.err
 }
 
 func catalogApp(t *testing.T, catalog handler.IngredientCatalogUseCase) *echo.Echo {

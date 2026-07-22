@@ -24,7 +24,7 @@ func TestIngredientService_All_カテゴリ順そのあとカナ順(t *testing.T
 		ingredient("玉ねぎ", "たまねぎ", domain.CategoryVegetable),
 		ingredient("鮭", "さけ", domain.CategorySeafood),
 	}}
-	svc := service.NewIngredientService(repo)
+	svc := service.NewIngredientService(repo, &fakeMenuRepoForList{})
 
 	got, err := svc.All(context.Background())
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestIngredientService_All_repositoryの並びに依存しない(t *testing.
 		ingredient("玉ねぎ", "たまねぎ", domain.CategoryVegetable),
 		ingredient("じゃがいも", "じゃがいも", domain.CategoryVegetable),
 	}}
-	svc := service.NewIngredientService(repo)
+	svc := service.NewIngredientService(repo, &fakeMenuRepoForList{})
 
 	got, err := svc.All(context.Background())
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestIngredientService_All_0件でもnilを返さない(t *testing.T) {
 	t.Parallel()
 
 	repo := &fakeIngredientRepo{all: []domain.Ingredient{}}
-	svc := service.NewIngredientService(repo)
+	svc := service.NewIngredientService(repo, &fakeMenuRepoForList{})
 
 	got, err := svc.All(context.Background())
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestIngredientService_All_取得の失敗はそのまま返す(t *testing.T
 
 	sentinel := errors.New("DB障害")
 	repo := &fakeIngredientRepo{err: sentinel}
-	svc := service.NewIngredientService(repo)
+	svc := service.NewIngredientService(repo, &fakeMenuRepoForList{})
 
 	_, err := svc.All(context.Background())
 	assert.ErrorIs(t, err, sentinel)
