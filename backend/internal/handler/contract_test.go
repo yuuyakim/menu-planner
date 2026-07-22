@@ -275,7 +275,7 @@ func newContractShoppingApp(shopping handler.ShoppingListUseCase, ing handler.Me
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
 	handler.NewShoppingListHandler(shopping).RegisterRoutes(e)
-	handler.NewIngredientHandler(ing).RegisterRoutes(e)
+	handler.NewIngredientHandler(ing, &fakeIngredientCatalog{}).RegisterRoutes(e)
 	return e
 }
 

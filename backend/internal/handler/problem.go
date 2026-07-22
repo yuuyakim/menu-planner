@@ -46,6 +46,8 @@ var problemMapping = []struct {
 	{domain.ErrInvalidMenuID, http.StatusBadRequest, "invalid-menu-id", "不正な献立IDです"},
 	{domain.ErrInvalidHistoryID, http.StatusBadRequest, "invalid-history-id", "不正な履歴IDです"},
 	{domain.ErrInvalidSavedWeeklyMenuID, http.StatusBadRequest, "invalid-saved-weekly-menu-id", "不正な保存IDです"},
+	// 食材からの検索で本文に壊れたIDが来た場合（13-C で初めて外に出る経路になった）。
+	{domain.ErrInvalidIngredientID, http.StatusBadRequest, "invalid-ingredient-id", "不正な食材IDです"},
 	{domain.ErrInvalidMenu, http.StatusBadRequest, "invalid-menu", "不正な献立です"},
 	{repository.ErrMenuNotFound, http.StatusNotFound, "menu-not-found", "献立が見つかりません"},
 	{service.ErrHistoryNotFound, http.StatusNotFound, "history-not-found", "履歴が見つかりません"},
@@ -58,6 +60,11 @@ var problemMapping = []struct {
 	{service.ErrInvalidDay, http.StatusBadRequest, "invalid-day", "不正な日の指定です"},
 	// 買い物リストの献立指定が0件、または上限（7件）超過。
 	{service.ErrInvalidMenuIDs, http.StatusBadRequest, "invalid-menu-ids", "献立の指定が不正です"},
+	// 手持ちの食材の指定が0件（spec.md 5.6）。
+	{service.ErrInvalidIngredientIDs, http.StatusBadRequest, "invalid-ingredient-ids", "食材の指定が不正です"},
+	// 指定された食材の中に存在しないものがある。黙って無視すると、
+	// 利用者の意図と違う条件の結果を正しい答えとして返すことになるため 404 で知らせる。
+	{service.ErrIngredientNotFound, http.StatusNotFound, "ingredient-not-found", "指定された食材が見つかりません"},
 	// 指定された献立の中に存在しないものがある。黙って除くと
 	// 「頼んだ献立の食材が抜けたリスト」を渡すことになるため 404 で知らせる。
 	{service.ErrMenuNotFoundInList, http.StatusNotFound, "menu-not-found", "指定された献立が見つかりません"},

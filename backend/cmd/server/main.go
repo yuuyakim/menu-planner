@@ -127,7 +127,8 @@ func run() error {
 	// 買い物リストと食材は同じ service が担う（どちらも献立×食材を扱うため）。
 	shoppingSvc := service.NewShoppingListService(menuRepo, ingredientRepo)
 	shoppingHandler := handler.NewShoppingListHandler(shoppingSvc)
-	ingredientHandler := handler.NewIngredientHandler(shoppingSvc)
+	ingredientSvc := service.NewIngredientService(ingredientRepo, menuRepo)
+	ingredientHandler := handler.NewIngredientHandler(shoppingSvc, ingredientSvc)
 
 	e := echo.New()
 	e.HideBanner = true

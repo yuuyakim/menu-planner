@@ -21,6 +21,7 @@ export type FavoriteItem = Schemas['FavoriteItem']
 export type Ingredient = Schemas['Ingredient']
 export type IngredientCategory = Ingredient['category']
 export type ShoppingItem = Schemas['ShoppingItem']
+export type MenuMatch = Schemas['MenuMatch']
 
 /** RFC 7807 の problem+json。 */
 export type Problem = Schemas['Problem']

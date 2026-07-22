@@ -53,6 +53,18 @@ type IngredientRepository interface {
 	// 並びは食材のカナ順。カテゴリ順への並べ替えは domain の知識なので
 	// service 側で行う（SQLに CASE を書かない）。
 	FindByMenuIDs(ctx context.Context, ids []domain.MenuID) ([]MenuIngredient, error)
+
+	// FindAll は食材マスタを全件返す。手持ちの食材を選ぶ選択肢に使う（spec.md 2.9）。
+	// 並びはカナ順。カテゴリ順への並べ替えは FindByMenuIDs と同じ理由で service 側。
+	FindAll(ctx context.Context) ([]domain.Ingredient, error)
+
+	// FindByIDs は指定したIDの食材を返す。存在しないIDは黙って落ちる
+	// （件数の判断は呼び出し側の仕事）。
+	FindByIDs(ctx context.Context, ids []domain.IngredientID) ([]domain.Ingredient, error)
+
+	// FindMenuIDsByIngredientIDs は指定した食材のいずれかを使う献立のIDを返す。
+	// 1つも重ならない献立は返らない（spec.md 5.6）。
+	FindMenuIDsByIngredientIDs(ctx context.Context, ids []domain.IngredientID) ([]domain.MenuID, error)
 }
 
 // RecipeSearchGateway はレシピ掲載ページの検索を抽象化する。
