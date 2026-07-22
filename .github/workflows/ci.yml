@@ -6,6 +6,9 @@ on:
     paths-ignore: ["**.md"]
   pull_request:
     paths-ignore: ["**.md"]
+  # 作業PRでも E2E / 本番イメージ検証を回したいときの手動実行:
+  #   gh workflow run CI --ref <ブランチ名>
+  workflow_dispatch:
 
 # ドキュメントだけの変更ではCIを走らせない。仕様やタスクの更新だけで
 # 4ジョブ・約11分を消費していた（例: PR #107 / #121 はどちらも .md のみ）。
@@ -55,7 +58,7 @@ jobs:
       - name: テスト
         working-directory: backend
         env:
-          RACE: ${{ (github.base_ref == 'main' || github.ref_name == 'main') && '-race' || '' }}
+          RACE: ${{ (github.base_ref == 'main' || github.ref_name == 'main' || github.event_name == 'workflow_dispatch') && '-race' || '' }}
         run: go test ./... $RACE -cover -timeout 10m
 
   frontend:
@@ -100,8 +103,17 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  # E2E は1実行あたり3.5分と最も重く、しかも中身は
+  # 「アプリ起動 132s / ブラウザ導入 37s」に対し実テストは22秒。
+  # main に出る経路（main 宛のPR・main への push）だけで走らせる。
+  #
+  # 作業PRで走らせたいときは workflow_dispatch で手動実行できる:
+  #   gh workflow run CI --ref <ブランチ名>
   e2e:
     name: E2E (Playwright)
+    if: >-
+      github.base_ref == 'main' || github.ref_name == 'main'
+      || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -172,7 +184,9 @@ jobs:
   # 変更頻度が低く、壊れていれば main 宛の最終PRで必ず捕まる。
   docker:
     name: Docker build
-    if: github.base_ref == 'main' || github.ref_name == 'main'
+    if: >-
+      github.base_ref == 'main' || github.ref_name == 'main'
+      || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
