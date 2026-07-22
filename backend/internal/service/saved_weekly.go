@@ -96,6 +96,33 @@ func (s *SavedWeeklyMenuService) Save(
 	return s.store.Save(ctx, uid, days)
 }
 
+// List は認証済みユーザーの保存を新しい順に、中身の7日分も含めて返す。
+//
+// 上限が10件と小さいので全件返す。ページングは設けない。
+func (s *SavedWeeklyMenuService) List(
+	ctx context.Context, userID string,
+) ([]domain.SavedWeeklyMenu, error) {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+	return s.store.List(ctx, uid)
+}
+
+// Delete は認証済みユーザーの保存を1件削除する。
+// 自分のものでなければ ErrSavedWeeklyMenuNotFound（404）。
+func (s *SavedWeeklyMenuService) Delete(ctx context.Context, userID, id string) error {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	sid, err := domain.ParseSavedWeeklyMenuID(id)
+	if err != nil {
+		return err
+	}
+	return s.store.Delete(ctx, uid, sid)
+}
+
 // toSavedDays は API の生の指定を検証して DayMenu に直す。
 //
 // 献立の中身はここでは引かない。存在するかどうかは保存時の外部キーが判定し、

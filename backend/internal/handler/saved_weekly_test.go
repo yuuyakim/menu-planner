@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -22,11 +23,30 @@ import (
 
 // fakeSavedWeeklyService は SavedWeeklyMenuUseCase を差し替える。
 type fakeSavedWeeklyService struct {
-	saveCalls  int
-	lastUserID string
-	lastDays   []service.SavedDayInput
-	id         domain.SavedWeeklyMenuID
-	err        error
+	saveCalls    int
+	listCalls    int
+	deleteCalls  int
+	lastUserID   string
+	lastDays     []service.SavedDayInput
+	lastDeleteID string
+	id           domain.SavedWeeklyMenuID
+	saved        []domain.SavedWeeklyMenu
+	err          error
+}
+
+func (s *fakeSavedWeeklyService) List(
+	_ context.Context, userID string,
+) ([]domain.SavedWeeklyMenu, error) {
+	s.listCalls++
+	s.lastUserID = userID
+	return s.saved, s.err
+}
+
+func (s *fakeSavedWeeklyService) Delete(_ context.Context, userID, id string) error {
+	s.deleteCalls++
+	s.lastUserID = userID
+	s.lastDeleteID = id
+	return s.err
 }
 
 func (s *fakeSavedWeeklyService) Save(
@@ -212,4 +232,162 @@ func TestSavedWeeklyMenus_Save_壊れたJSONは400(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Zero(t, svc.saveCalls)
+}
+
+// getWeeklyMenus は認証つきで GET /weekly-menus を叩く。
+func getWeeklyMenus(t *testing.T, e *echo.Echo, access string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/weekly-menus", nil)
+	if access != "" {
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	}
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+// deleteWeeklyMenu は認証つきで DELETE /weekly-menus/:id を叩く。
+func deleteWeeklyMenu(t *testing.T, e *echo.Echo, access, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/weekly-menus/"+id, nil)
+	if access != "" {
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	}
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestSavedWeeklyMenus_List_中身の7日分を含めて返す(t *testing.T) {
+	t.Parallel()
+
+	id := domain.NewSavedWeeklyMenuID()
+	days := make([]domain.DayMenu, 0, domain.WeekLength)
+	for day := 1; day <= domain.WeekLength; day++ {
+		days = append(days, domain.DayMenu{Day: day, Menu: domain.Menu{
+			ID:          domain.NewMenuID(),
+			Name:        "献立",
+			NameKana:    "こんだて",
+			Genre:       domain.GenreJapanese,
+			Difficulty:  domain.DifficultyEasy,
+			Description: "説明",
+		}})
+	}
+	created := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+
+	svc := &fakeSavedWeeklyService{saved: []domain.SavedWeeklyMenu{
+		{ID: id, Days: days, CreatedAt: created},
+	}}
+	e, tokens := savedWeeklyApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := getWeeklyMenus(t, e, access)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		WeeklyMenus []struct {
+			ID   string `json:"id"`
+			Days []struct {
+				Day  int `json:"day"`
+				Menu struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"menu"`
+			} `json:"days"`
+			CreatedAt time.Time `json:"createdAt"`
+		} `json:"weeklyMenus"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Len(t, body.WeeklyMenus, 1)
+	assert.Equal(t, id.String(), body.WeeklyMenus[0].ID)
+	// 「開く」に個別取得が要らないよう、一覧に7日分を含める（spec.md 5.3）。
+	require.Len(t, body.WeeklyMenus[0].Days, domain.WeekLength)
+	assert.Equal(t, 1, body.WeeklyMenus[0].Days[0].Day)
+	assert.Equal(t, "献立", body.WeeklyMenus[0].Days[0].Menu.Name)
+	assert.True(t, created.Equal(body.WeeklyMenus[0].CreatedAt))
+}
+
+func TestSavedWeeklyMenus_List_0件でもnullではなく空配列(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedWeeklyService{saved: nil}
+	e, tokens := savedWeeklyApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := getWeeklyMenus(t, e, access)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"weeklyMenus":[]`)
+}
+
+func TestSavedWeeklyMenus_List_Unauthorized(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedWeeklyService{}
+	e, _ := savedWeeklyApp(t, svc)
+
+	rec := getWeeklyMenus(t, e, "")
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Zero(t, svc.listCalls)
+}
+
+func TestSavedWeeklyMenus_Delete_NoContent(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedWeeklyService{}
+	e, tokens := savedWeeklyApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	id := domain.NewSavedWeeklyMenuID().String()
+	rec := deleteWeeklyMenu(t, e, access, id)
+
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Equal(t, 1, svc.deleteCalls)
+	assert.Equal(t, "user-abc", svc.lastUserID)
+	assert.Equal(t, id, svc.lastDeleteID)
+}
+
+func TestSavedWeeklyMenus_Delete_他人のものは404(t *testing.T) {
+	t.Parallel()
+
+	// 403 だと他人が何を保存しているかを漏らすため、存在しない扱いにする。
+	svc := &fakeSavedWeeklyService{err: service.ErrSavedWeeklyMenuNotFound}
+	e, tokens := savedWeeklyApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := deleteWeeklyMenu(t, e, access, domain.NewSavedWeeklyMenuID().String())
+
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Contains(t, rec.Body.String(), "saved-weekly-menu-not-found")
+}
+
+func TestSavedWeeklyMenus_Delete_壊れたIDは400(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedWeeklyService{err: domain.ErrInvalidSavedWeeklyMenuID}
+	e, tokens := savedWeeklyApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := deleteWeeklyMenu(t, e, access, "not-a-uuid")
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "invalid-saved-weekly-menu-id")
+}
+
+func TestSavedWeeklyMenus_Delete_Unauthorized(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedWeeklyService{}
+	e, _ := savedWeeklyApp(t, svc)
+
+	rec := deleteWeeklyMenu(t, e, "", domain.NewSavedWeeklyMenuID().String())
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Zero(t, svc.deleteCalls)
 }

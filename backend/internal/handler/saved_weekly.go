@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -15,6 +16,8 @@ import (
 // 実装は service.SavedWeeklyMenuService。
 type SavedWeeklyMenuUseCase interface {
 	Save(ctx context.Context, userID string, days []service.SavedDayInput) (domain.SavedWeeklyMenuID, error)
+	List(ctx context.Context, userID string) ([]domain.SavedWeeklyMenu, error)
+	Delete(ctx context.Context, userID, id string) error
 }
 
 // SavedWeeklyMenuHandler は保存した週間献立APIの受け口。
@@ -34,7 +37,10 @@ func (h *SavedWeeklyMenuHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
 	// RequireAuth はグループではなくルート個別に付ける。グループに付けると
 	// /api/v1 配下の未定義パスにも走り、404 であるべきものが 401 になる（Issue #73）。
-	g.POST("/weekly-menus", h.Save, RequireAuth(h.tokens))
+	requireAuth := RequireAuth(h.tokens)
+	g.GET("/weekly-menus", h.List, requireAuth)
+	g.POST("/weekly-menus", h.Save, requireAuth)
+	g.DELETE("/weekly-menus/:id", h.Delete, requireAuth)
 }
 
 // saveWeeklyMenuRequest は POST /weekly-menus のリクエストボディ。
@@ -83,4 +89,68 @@ func (h *SavedWeeklyMenuHandler) Save(c echo.Context) error {
 		return err
 	}
 	return c.JSON(http.StatusCreated, savedWeeklyMenuResponse{ID: id.String()})
+}
+
+// savedWeeklyMenuItemDTO は保存した週1件のAPI表現。
+//
+// 中身の7日分をここに含めるため、「開く」ための個別取得は要らない
+// （spec.md 5.3）。1日分の形は週間献立の提案と同じ dayMenuDTO を使う。
+// 画面では同じものとして扱えた方が素直なため。
+type savedWeeklyMenuItemDTO struct {
+	ID        string       `json:"id"`
+	Days      []dayMenuDTO `json:"days"`
+	CreatedAt time.Time    `json:"createdAt"`
+}
+
+// savedWeeklyMenusResponse は GET /weekly-menus のレスポンス。
+type savedWeeklyMenusResponse struct {
+	WeeklyMenus []savedWeeklyMenuItemDTO `json:"weeklyMenus"`
+}
+
+// List は現在のユーザーの保存を新しい順に返す。
+//
+//	GET /api/v1/weekly-menus
+//
+// 上限が10件と小さいので全件返す（spec.md 2.8）。ページングは設けない。
+func (h *SavedWeeklyMenuHandler) List(c echo.Context) error {
+	userID, ok := UserIDFromContext(c)
+	if !ok {
+		return auth.ErrTokenInvalid
+	}
+
+	saved, err := h.svc.List(c.Request().Context(), userID)
+	if err != nil {
+		return err
+	}
+
+	// 0件でも null ではなく [] を返す。
+	items := make([]savedWeeklyMenuItemDTO, 0, len(saved))
+	for _, s := range saved {
+		days := make([]dayMenuDTO, 0, len(s.Days))
+		for _, d := range s.Days {
+			days = append(days, dayMenuDTO{Day: d.Day, Menu: toMenuDTO(d.Menu)})
+		}
+		items = append(items, savedWeeklyMenuItemDTO{
+			ID:        s.ID.String(),
+			Days:      days,
+			CreatedAt: s.CreatedAt,
+		})
+	}
+	return c.JSON(http.StatusOK, savedWeeklyMenusResponse{WeeklyMenus: items})
+}
+
+// Delete は現在のユーザーの保存を1件削除する。
+//
+//	DELETE /api/v1/weekly-menus/:id
+//
+// 他人のものは 404（存在を明かさない）、未認証は 401。成功時は 204。
+func (h *SavedWeeklyMenuHandler) Delete(c echo.Context) error {
+	userID, ok := UserIDFromContext(c)
+	if !ok {
+		return auth.ErrTokenInvalid
+	}
+	if err := h.svc.Delete(c.Request().Context(), userID, c.Param("id")); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }

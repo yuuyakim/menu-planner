@@ -923,7 +923,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 保存した週間献立を新しい順に取得する
+         * @description 中身の7日分を含めて返すため、「開く」ための個別取得は設けていない。
+         *     上限が10件と小さいのでページングも設けず全件返す（spec.md 2.8 / 5.3）。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 保存した週間献立 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavedWeeklyMenusResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+            };
+        };
         put?: never;
         /**
          * 組み立てた1週間分の献立を保存する
@@ -981,6 +1006,49 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/weekly-menus/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * 保存した週間献立を削除する
+         * @description 自分の行だけを消すため、他人の保存には到達できない。
+         *     他人のものを指した場合は 403 ではなく 404 を返す（403 だと保存の存在を明かすため）。
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 削除した */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -1108,6 +1176,20 @@ export interface components {
         };
         FavoritesResponse: {
             favorites: components["schemas"]["FavoriteItem"][];
+        };
+        /**
+         * @description 保存した週間献立1件。中身の7日分をここに含めるため、「開く」ための
+         *     個別取得は要らない。1日分の形は週間献立の提案と同じ DayMenu。
+         */
+        SavedWeeklyMenu: {
+            /** Format: uuid */
+            id: string;
+            days: components["schemas"]["DayMenu"][];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        SavedWeeklyMenusResponse: {
+            weeklyMenus: components["schemas"]["SavedWeeklyMenu"][];
         };
         /** @description RFC 7807 の Problem Details。 */
         Problem: {
