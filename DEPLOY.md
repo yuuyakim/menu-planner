@@ -48,9 +48,9 @@ flowchart LR
 | `JWT_SECRET` | ダミー | **`openssl rand -base64 32` の実値**（Secret Manager 推奨） |
 | `SEARCH_API_PROVIDER` | `stub` | `brave`（または当面 `stub`） |
 | `SEARCH_API_KEY` | 空 | Brave のキー（`brave` の場合） |
-| `FRONTEND_ORIGIN` | `http://localhost:5173` | **Pages のURL**（例 `https://menu-planner.pages.dev`） |
+| `FRONTEND_ORIGIN` | `http://localhost:5173` | **公開URL**（`https://kondatekun.yuuyakim.com`） |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | 空可 | 本番のOAuthクライアント |
-| `GOOGLE_REDIRECT_URL` | localhost | **`https://<pages>/api/v1/auth/google/callback`**（同一オリジン経由） |
+| `GOOGLE_REDIRECT_URL` | localhost | **`https://kondatekun.yuuyakim.com/api/v1/auth/google/callback`**（同一オリジン経由） |
 | `AUTH_RATE_LIMIT_PER_MIN` | `0`（無制限） | `10`（spec値） |
 | `SEARCH_RATE_LIMIT_PER_MIN` | `0`（無制限） | `60`（spec値） |
 | `TRUSTED_PROXY_SECRET` | 未設定 | **Pages と共有する秘密**（`openssl rand -base64 32`） |
@@ -90,18 +90,51 @@ flowchart LR
    - `TRUSTED_PROXY_SECRET` … Cloud Run に設定したものと**同じ値**
    - `/api/*` を backend に転送する Pages Function は `frontend/functions/api/[[path]].ts` に実装済み（10-B）。
    - この Function が `CF-Connecting-IP` を `X-Forwarded-For` として前送りするため、backend 側でIP単位のレート制限が効く。
-3. デプロイ後の URL（`https://menu-planner.pages.dev`）を控える。
-4. 疎通確認: `curl https://<pages>/api/v1/menus/suggest` が献立のJSONを返す（＝同一オリジンでAPIが通っている）。
+3. デプロイ後の URL（`https://<project>.pages.dev`）を控える。カスタムドメインは手順6。
+4. 疎通確認: `curl https://<公開URL>/api/v1/menus/suggest` が献立のJSONを返す（＝同一オリジンでAPIが通っている）。
 
 ### 4. 認証（Google OAuth）
 1. Google Cloud Console でOAuthクライアントを作成/更新。
-2. 承認済みリダイレクトURIに **`https://<pages>/api/v1/auth/google/callback`** を追加。
+2. 承認済みリダイレクトURIに **`https://<公開URL>/api/v1/auth/google/callback`** を追加。
 3. `GOOGLE_CLIENT_ID` / `_SECRET` / `_REDIRECT_URL` を Cloud Run に設定。
 
 ### 5. 仕上げの相互設定
-1. Cloud Run の `FRONTEND_ORIGIN` を Pages の URL に設定して再デプロイ。
-2. ブラウザで Pages の URL を開き、サインアップ→検索→履歴→お気に入りを一通り確認。
+1. Cloud Run の `FRONTEND_ORIGIN` を公開URLに設定して再デプロイ。
+2. ブラウザで公開URLを開き、サインアップ→検索→履歴→お気に入りを一通り確認。
 3. レート制限が実IPで効くこと、認証Cookieが維持されることを確認。
+
+### 6. カスタムドメイン（`kondatekun.yuuyakim.com`）
+
+`yuuyakim.com` は Cloudflare Registrar で取得した個人ドメイン。献立くんはその**サブドメイン**に載せる。
+apex は他の用途のために空けておく。
+
+**先に着手する**: Google の「承認済みドメイン」に `yuuyakim.com` を登録するには、
+Google Search Console でのドメイン所有権確認が要る（Cloudflare DNS に TXT を1本）。
+ここが通らないと OAuth 同意画面の設定が進まないため、最初に片付ける。
+
+1. Pages プロジェクト → **Custom domains** に `kondatekun.yuuyakim.com` を追加。
+   DNS も同じ Cloudflare アカウントにあるため CNAME は自動、証明書発行を数分待つ。
+2. Google Cloud Console
+   - OAuth 同意画面の承認済みドメインに `yuuyakim.com`
+   - 承認済みリダイレクトURIに `https://kondatekun.yuuyakim.com/api/v1/auth/google/callback` を**追加**
+     （切り替えが済むまで `pages.dev` の分は消さない）
+3. Cloud Run の `FRONTEND_ORIGIN` と `GOOGLE_REDIRECT_URL` を上表の値に更新して再デプロイ。
+4. 新URLで通し確認 → 安定後に Google の旧リダイレクトURIを削除。
+
+> **`FRONTEND_ORIGIN` の更新を忘れないこと。** Googleログインの最終リダイレクト先は
+> この値（`internal/handler/google.go`）。古いままだとログインは成功するのに
+> `pages.dev` へ戻される。以前の「localhost に飛ぶ」不具合と同じ経路。
+
+**HTTPS**: `.com` は `.app` と違い HSTS preload されていない。Cloudflare の SSL/TLS で
+**Always Use HTTPS を有効化**する。HSTS を入れる場合、設定はゾーン単位なので
+`includeSubDomains` はオフのままにする（`yuuyakim.com` 配下に今後作る全サブドメインが
+HTTPS 必須になるため）。Preload は登録すると解除に数ヶ月かかるので押さない。
+
+**Cookie**: 認証Cookieは `Domain` 属性を付けずに発行している（`internal/handler/session.go`）。
+host-only なので `kondatekun.yuuyakim.com` のセッションは apex にも他のサブドメインにも
+送られない。個人ドメインに別のものを載せても混ざらない。この性質に依存しているので、
+`Domain` を足す変更をするときはここを読み直すこと。
+なお Cookie はホスト単位のため、`pages.dev` でのログイン状態は新URLに引き継がれない。
 
 ## コード側の対応（別PR）
 
@@ -116,6 +149,7 @@ flowchart LR
 
 | 要素 | 実際の値 |
 | --- | --- |
+| 公開URL | `https://kondatekun.yuuyakim.com`（Cloudflare Registrar の `yuuyakim.com` のサブドメイン） |
 | frontend | Cloudflare Pages（ルート `frontend` / 出力 `dist`、Functions で `/api` を中継） |
 | backend | Cloud Run `asia-northeast1`、`min-instances=0` / **`max-instances=2`**（課金の上限） |
 | DB | Neon `ap-southeast-1`（Cloud Run は東京のため、DBクエリごとにリージョン間の往復が乗る） |
@@ -138,6 +172,32 @@ flowchart LR
 > **設定の順番に注意**: `TRUSTED_PROXY_SECRET` を Pages と Cloud Run の**両方に設定してから**
 > レート制限を有効化すること。先に制限だけ入れると backend が全リクエストを
 > 「Cloud Run 入口の単一アドレス」とみなし、全ユーザーが同じ枠を共有して即ブロックされる。
+
+### カスタムドメイン切替後の確認（2026-07-22）
+
+`https://kondatekun.yuuyakim.com` へ切り替えた後、外形から再検証した結果。
+
+| 検証 | 結果 |
+| --- | --- |
+| DNS | `104.21.91.153` / `172.67.223.116`（Cloudflare）✅ |
+| TLS 証明書 | 検証OK ✅ |
+| HTTP → HTTPS | 301 ✅（Always Use HTTPS 有効） |
+| HSTS | 未設定（方針どおり。入れる場合も `includeSubDomains` はオフ） |
+| `/api` 同一オリジンプロキシ | 200 / 献立JSON ✅ |
+| `GOOGLE_REDIRECT_URL` | 認可URLの `redirect_uri` が本番ドメイン ✅ |
+| `FRONTEND_ORIGIN` | 本番オリジンのみ CORS 許可、他は拒否 ✅ |
+| レート制限（検索 60/min） | 65回中 60×200 → 5×429 ✅ |
+| レート制限（認証 10/min） | 13回中 10×401 → 3×429 ✅ |
+| IP偽装によるレート制限回避 | **無効化を再実証** ✅（下記） |
+| 本番 Google ログイン（実機） | 成功 ✅ |
+
+**IP偽装の再実証**: 公開ドメイン経由ではクライアントが送った `X-Forwarded-For` を
+Pages Function が上書きするため、偽装しても 429 のまま。Cloud Run を直叩きした場合も、
+共有シークレットを伴わない `X-Forwarded-For` は信頼されず接続元IPで計数されるため、
+偽装値を変えても同じバケツのまま 429 になる。
+
+> **外形からは検証できない点**: 「異なる実クライアントIPが別枠で数えられる」ことは
+> 単一の送信元からは確かめられない。上記が示すのは「詐称で枠を増やせない」ことまで。
 
 ## ロールバック / 注意
 - backend は Cloud Run のリビジョンで即ロールバック可能。

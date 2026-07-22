@@ -4,7 +4,7 @@
 週間献立の提案、**必要な食材の表示と買い物リスト**、検索履歴、お気に入り、
 メール/パスワード・Google の認証に対応する。
 
-**本番: https://menu-planner-6cj.pages.dev**
+**本番: https://kondatekun.yuuyakim.com**
 （Cloudflare Pages ＋ Cloud Run ＋ Neon。構成と手順は [`DEPLOY.md`](./DEPLOY.md)）
 
 仕様の正は [`spec.md`](./spec.md)。実装の進め方は [`task.md`](./task.md)。
