@@ -60,6 +60,11 @@ export function IngredientPicker({
         )}
       </div>
 
+      {/* 選択肢は166種あり、そのまま並べると縦に1300px を超える。
+          押した「探す」ボタンと結果が画面外に出てしまい、利用者からは
+          何も起きていないように見える。ここを高さで区切り、
+          ボタンと結果が常に手の届く位置に来るようにする。 */}
+      <div className="max-h-[55vh] space-y-5 overflow-y-auto rounded-2xl border border-kon-leaf-soft bg-white/40 p-4">
       {groups.map((group) => (
         // fieldset/legend にするのは、どのカテゴリの選択肢かを
         // 支援技術（とテスト）が区別できるようにするため。
@@ -88,6 +93,7 @@ export function IngredientPicker({
           </div>
         </fieldset>
       ))}
+      </div>
     </div>
   )
 }
