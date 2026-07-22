@@ -10,6 +10,7 @@ import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
 import { SavedWeeklyPage } from '../features/menu/SavedWeeklyPage'
+import { SearchByIngredientsPage } from '../features/menu/SearchByIngredientsPage'
 import { SearchPage } from '../features/menu/SearchPage'
 import { ShoppingListPage } from '../features/menu/ShoppingListPage'
 import { WeeklyPage } from '../features/menu/WeeklyPage'
@@ -17,6 +18,7 @@ import { WeeklyPage } from '../features/menu/WeeklyPage'
 // navItems はヘッダに並べるリンク。増減はここだけで済ませる。
 const navItems = [
   { to: '/search', label: '献立を探す' },
+  { to: '/from-fridge', label: '冷蔵庫から探す' },
   { to: '/weekly', label: '1週間の献立' },
   { to: '/saved-weekly', label: '保存した週間献立' },
   { to: '/histories', label: '履歴' },
@@ -84,6 +86,8 @@ export function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/weekly" element={<WeeklyPage />} />
+            {/* 冷蔵庫から探すのは検索と同じ扱いで、未認証でも使える（spec.md 2.9）。 */}
+            <Route path="/from-fridge" element={<SearchByIngredientsPage />} />
             {/* 買い物リストは週間献立から作る。未認証でも使える（spec.md 2.7）。 */}
             <Route path="/shopping-list" element={<ShoppingListPage />} />
             <Route path="/menus/:id" element={<MenuDetailPage />} />

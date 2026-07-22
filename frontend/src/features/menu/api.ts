@@ -3,6 +3,7 @@ import type {
   DayMenu,
   Ingredient,
   Menu,
+  MenuMatch,
   Recipe,
   SavedWeeklyMenu,
   ShoppingItem,
@@ -84,6 +85,34 @@ export async function fetchSavedWeeklyMenus(): Promise<SavedWeeklyMenu[]> {
 /** deleteSavedWeeklyMenu は保存した週間献立を1件削除する。 */
 export async function deleteSavedWeeklyMenu(id: string): Promise<void> {
   await apiDelete(`/weekly-menus/${id}`)
+}
+
+/** ingredientsQueryKey は食材マスタのキャッシュキー。 */
+export const ingredientsQueryKey = ['ingredients'] as const
+
+/**
+ * fetchAllIngredients は食材マスタを全件取得する。手持ちの食材を選ぶ選択肢に使う。
+ * カテゴリ順→カナ順で返る（spec.md 5.6）。
+ */
+export async function fetchAllIngredients(): Promise<Ingredient[]> {
+  const res = await apiGet<{ ingredients: Ingredient[] }>('/ingredients')
+  return res.ingredients
+}
+
+/**
+ * searchByIngredients は手持ちの食材で作れる献立を探す。
+ *
+ * 完全一致には絞らず、各候補に不足食材が付く（spec.md 2.9）。
+ * 並びは「不足の少ない順 → 一致の多い順」で、上位20件まで。
+ */
+export async function searchByIngredients(
+  ingredientIds: string[],
+): Promise<MenuMatch[]> {
+  const res = await apiPost<{ matches: MenuMatch[] }>(
+    '/menus/search-by-ingredients',
+    { ingredientIds },
+  )
+  return res.matches
 }
 
 /** fetchMenu は献立を1件取得する。 */
