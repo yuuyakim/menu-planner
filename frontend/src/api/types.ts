@@ -12,6 +12,7 @@ export type SearchMode = Schemas['SearchMode']
 
 export type Menu = Schemas['Menu']
 export type DayMenu = Schemas['DayMenu']
+export type SavedWeeklyMenu = Schemas['SavedWeeklyMenu']
 export type Recipe = Schemas['Recipe']
 export type User = Schemas['User']
 export type HistoryItem = Schemas['HistoryItem']

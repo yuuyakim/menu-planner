@@ -9,6 +9,7 @@ import { FavoritePage } from '../features/favorite/FavoritePage'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
+import { SavedWeeklyPage } from '../features/menu/SavedWeeklyPage'
 import { SearchPage } from '../features/menu/SearchPage'
 import { ShoppingListPage } from '../features/menu/ShoppingListPage'
 import { WeeklyPage } from '../features/menu/WeeklyPage'
@@ -17,6 +18,7 @@ import { WeeklyPage } from '../features/menu/WeeklyPage'
 const navItems = [
   { to: '/search', label: '献立を探す' },
   { to: '/weekly', label: '1週間の献立' },
+  { to: '/saved-weekly', label: '保存した週間献立' },
   { to: '/histories', label: '履歴' },
   { to: '/favorites', label: 'お気に入り' },
 ] as const
@@ -92,6 +94,15 @@ export function App() {
               element={
                 <RequireAuth>
                   <HistoryPage />
+                </RequireAuth>
+              }
+            />
+            {/* 保存はユーザーに紐づくため認証必須（spec.md 2.8）。 */}
+            <Route
+              path="/saved-weekly"
+              element={
+                <RequireAuth>
+                  <SavedWeeklyPage />
                 </RequireAuth>
               }
             />

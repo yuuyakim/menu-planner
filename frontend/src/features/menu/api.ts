@@ -1,9 +1,10 @@
-import { apiGet, apiPost } from '../../api/client'
+import { apiDelete, apiGet, apiPost } from '../../api/client'
 import type {
   DayMenu,
   Ingredient,
   Menu,
   Recipe,
+  SavedWeeklyMenu,
   ShoppingItem,
 } from '../../api/types'
 import type { MenuFilter } from './SearchForm'
@@ -72,6 +73,17 @@ export async function saveWeeklyMenu(week: DayMenu[]): Promise<string> {
     days: week.map((d) => ({ day: d.day, menuId: d.menu.id })),
   })
   return res.id
+}
+
+/** fetchSavedWeeklyMenus は保存した週間献立を新しい順に取得する。 */
+export async function fetchSavedWeeklyMenus(): Promise<SavedWeeklyMenu[]> {
+  const res = await apiGet<{ weeklyMenus: SavedWeeklyMenu[] }>('/weekly-menus')
+  return res.weeklyMenus
+}
+
+/** deleteSavedWeeklyMenu は保存した週間献立を1件削除する。 */
+export async function deleteSavedWeeklyMenu(id: string): Promise<void> {
+  await apiDelete(`/weekly-menus/${id}`)
 }
 
 /** fetchMenu は献立を1件取得する。 */
