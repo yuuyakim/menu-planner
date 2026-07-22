@@ -1,9 +1,10 @@
-import { apiGet, apiPost } from '../../api/client'
+import { apiDelete, apiGet, apiPost } from '../../api/client'
 import type {
   DayMenu,
   Ingredient,
   Menu,
   Recipe,
+  SavedWeeklyMenu,
   ShoppingItem,
 } from '../../api/types'
 import type { MenuFilter } from './SearchForm'
@@ -56,6 +57,33 @@ export async function rerollDay(
     difficulty: filter.difficulty,
   })
   return res.menu
+}
+
+/** savedWeeklyMenusQueryKey は保存した週間献立のキャッシュキー。 */
+export const savedWeeklyMenusQueryKey = ['saved-weekly-menus'] as const
+
+/**
+ * saveWeeklyMenu は組み立てた1週間分をサーバに保存する（spec.md 2.8）。
+ *
+ * 保存できるのは10件まで。超過すると 409 が返る。押し出さずに断る仕様なので、
+ * 呼び出し側は「古いものを消してもらう」案内をする必要がある。
+ */
+export async function saveWeeklyMenu(week: DayMenu[]): Promise<string> {
+  const res = await apiPost<{ id: string }>('/weekly-menus', {
+    days: week.map((d) => ({ day: d.day, menuId: d.menu.id })),
+  })
+  return res.id
+}
+
+/** fetchSavedWeeklyMenus は保存した週間献立を新しい順に取得する。 */
+export async function fetchSavedWeeklyMenus(): Promise<SavedWeeklyMenu[]> {
+  const res = await apiGet<{ weeklyMenus: SavedWeeklyMenu[] }>('/weekly-menus')
+  return res.weeklyMenus
+}
+
+/** deleteSavedWeeklyMenu は保存した週間献立を1件削除する。 */
+export async function deleteSavedWeeklyMenu(id: string): Promise<void> {
+  await apiDelete(`/weekly-menus/${id}`)
 }
 
 /** fetchMenu は献立を1件取得する。 */

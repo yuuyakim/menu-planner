@@ -1,12 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 
+import { ApiError } from '../../api/client'
 import type { DayMenu } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotStatus } from '../../components/MascotStatus'
 import { useSessionState } from '../../hooks/useSessionState'
+import { useCurrentUser } from '../auth/useCurrentUser'
 import { historiesQueryKey } from '../history/api'
-import { rerollDay, suggestWeekly } from './api'
+import { rerollDay, saveWeeklyMenu, savedWeeklyMenusQueryKey, suggestWeekly } from './api'
 import { MenuCard } from './MenuCard'
 import { SearchForm, type MenuFilter } from './SearchForm'
 
@@ -27,6 +29,18 @@ function dayLabel(day: number, today: Date): string {
   const weekday = weekdays[date.getDay()]
   const base = `${day}日目 ${date.getMonth() + 1}/${date.getDate()}(${weekday})`
   return day === 1 ? `${base} 今日` : base
+}
+
+// saveErrorText は保存の失敗を利用者向けの文言にする。
+//
+// 409 だけ特別に扱う。上限に達したときサーバは押し出さずに断るため
+// （spec.md 2.8）、利用者が次に取るべき行動は「古いものを消す」であって
+// 「もう一度試す」ではない。それを伝えないと、押し直して失敗し続ける。
+function saveErrorText(error: Error): string {
+  if (error instanceof ApiError && error.status === 409) {
+    return '保存できるのは10件までです。「保存した週間献立」から古いものを削除してください。'
+  }
+  return error.message
 }
 
 type Props = {
@@ -64,6 +78,23 @@ export function WeeklyPage({ today = new Date() }: Props) {
     },
   })
 
+  // 保存は認証が要る（spec.md 2.8）。未ログインなら押させずログインへ誘う。
+  const { user } = useCurrentUser()
+
+  const save = useMutation({
+    mutationFn: () => saveWeeklyMenu(week ?? []),
+    onSuccess: () => {
+      // 保存一覧を開いたときに、今保存したものが載っている状態にする。
+      void queryClient.invalidateQueries({ queryKey: savedWeeklyMenusQueryKey })
+    },
+  })
+
+  // 引き直すと保存済みの内容とずれるため、知らせを消す。
+  // 出したままだと「今の画面の状態が保存されている」と誤解させる。
+  const clearSaved = () => {
+    if (save.isSuccess || save.isError) save.reset()
+  }
+
   const error = create.error ?? reroll.error
 
   return (
@@ -73,6 +104,7 @@ export function WeeklyPage({ today = new Date() }: Props) {
       <SearchForm
         onSubmit={(next) => {
           setFilter(next)
+          clearSaved()
           create.mutate(next)
         }}
         isPending={create.isPending}
@@ -90,13 +122,50 @@ export function WeeklyPage({ today = new Date() }: Props) {
 
       {week && (
         <>
-          {/* 献立が決まってはじめて買うものが決まる。作る前は出さない。 */}
-          <Link
-            to="/shopping-list"
-            className="inline-block rounded-full bg-kon-leaf px-5 py-2 font-medium text-white hover:bg-kon-leaf/90"
-          >
-            買い物リストを見る
-          </Link>
+          {/* 献立が決まってはじめて買うものが決まる。作る前は出さない。
+              保存も同じで、週が無ければ保存するものが無い。 */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              to="/shopping-list"
+              className="inline-block rounded-full bg-kon-leaf px-5 py-2 font-medium text-white hover:bg-kon-leaf/90"
+            >
+              買い物リストを見る
+            </Link>
+
+            {user ? (
+              <button
+                type="button"
+                onClick={() => save.mutate()}
+                disabled={save.isPending}
+                className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream disabled:cursor-not-allowed disabled:text-kon-ink/40"
+              >
+                {save.isPending ? '保存中…' : 'この週を保存する'}
+              </button>
+            ) : (
+              // 押せないボタンを出すより、何をすれば保存できるかを示す。
+              <Link
+                to="/login"
+                className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream"
+              >
+                ログインして保存する
+              </Link>
+            )}
+          </div>
+
+          {save.isSuccess && (
+            <p role="status" className="rounded-2xl bg-kon-cream px-5 py-3 text-kon-ink">
+              保存しました。「保存した週間献立」からいつでも開けます
+            </p>
+          )}
+
+          {save.error && (
+            <p
+              role="alert"
+              className="rounded-2xl border border-kon-peach bg-kon-peach/25 px-5 py-3 text-kon-ink"
+            >
+              {saveErrorText(save.error)}
+            </p>
+          )}
           <ul className="space-y-4">
           {week.map((d) => (
             <li key={d.day} aria-label={dayLabel(d.day, today)}>
@@ -110,7 +179,10 @@ export function WeeklyPage({ today = new Date() }: Props) {
               <div className="mt-2 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => reroll.mutate(d.day)}
+                  onClick={() => {
+                    clearSaved()
+                    reroll.mutate(d.day)
+                  }}
                   disabled={reroll.isPending}
                   className="rounded-full border border-kon-leaf-soft bg-white px-4 py-1.5 text-sm font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream disabled:cursor-not-allowed disabled:text-kon-ink/40"
                 >

@@ -45,12 +45,15 @@ var problemMapping = []struct {
 	{domain.ErrInvalidDifficulty, http.StatusBadRequest, "invalid-difficulty", "不正な難易度です"},
 	{domain.ErrInvalidMenuID, http.StatusBadRequest, "invalid-menu-id", "不正な献立IDです"},
 	{domain.ErrInvalidHistoryID, http.StatusBadRequest, "invalid-history-id", "不正な履歴IDです"},
+	{domain.ErrInvalidSavedWeeklyMenuID, http.StatusBadRequest, "invalid-saved-weekly-menu-id", "不正な保存IDです"},
 	{domain.ErrInvalidMenu, http.StatusBadRequest, "invalid-menu", "不正な献立です"},
 	{repository.ErrMenuNotFound, http.StatusNotFound, "menu-not-found", "献立が見つかりません"},
 	{service.ErrHistoryNotFound, http.StatusNotFound, "history-not-found", "履歴が見つかりません"},
 	// 自分のお気に入りに無い献立の削除。他人のものを消そうとした場合もここに来る
 	// （所有者を明かす 403 は他人の登録内容を漏らすため返さない）。
 	{service.ErrFavoriteNotFound, http.StatusNotFound, "favorite-not-found", "お気に入りが見つかりません"},
+	// 他人の保存を消そうとした場合もここに来る。403 だと保存の存在を明かすため返さない。
+	{service.ErrSavedWeeklyMenuNotFound, http.StatusNotFound, "saved-weekly-menu-not-found", "保存した週間献立が見つかりません"},
 	{service.ErrHistoryForbidden, http.StatusForbidden, "history-forbidden", "この履歴を操作する権限がありません"},
 	{service.ErrInvalidDay, http.StatusBadRequest, "invalid-day", "不正な日の指定です"},
 	// 買い物リストの献立指定が0件、または上限（7件）超過。
@@ -66,6 +69,9 @@ var problemMapping = []struct {
 	{service.ErrEmailTaken, http.StatusConflict, "email-taken", "メールアドレスは既に登録されています"},
 	// お気に入りの重複も同様に 409。既にある状態との競合であって入力の誤りではない。
 	{service.ErrFavoriteExists, http.StatusConflict, "favorite-exists", "この献立は既にお気に入りに登録されています"},
+	// 保存した週間献立が上限（10件）に達している。履歴のように押し出さず断るため、
+	// 入力の誤り（400）ではなく今の状態との競合（409）にする（spec.md 2.8）。
+	{service.ErrSavedWeeklyMenuLimitReached, http.StatusConflict, "saved-weekly-menu-limit-reached", "保存できる週間献立は10件までです"},
 	// 認証失敗。存在しないメールもパスワード違いも同じ 401 に丸める。
 	{service.ErrInvalidCredentials, http.StatusUnauthorized, "invalid-credentials", "メールアドレスまたはパスワードが正しくありません"},
 	// トークンが無効（欠落・期限切れ・改竄・種別違い）。内訳は明かさず一律 401。
