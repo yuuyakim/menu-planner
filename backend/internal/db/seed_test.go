@@ -85,3 +85,46 @@ func TestSeedSQL_ジャンルと難易度ごとの件数(t *testing.T) {
 		assert.Equal(t, want, got, "%s × %s は%d件であること", genre, difficulty, want)
 	}
 }
+
+// wantRoleCounts は役割ごとの期待件数（spec.md 2.10）。
+//
+// **14-B 時点の値。既存360件を分類しただけで、拡充はしていない。**
+// 副菜31件・汁物15件は全体の13%で、ジャンル×難易度で絞ると1桁になる。
+// この状態で side を選べるようにしても同じ献立が繰り返し出るため、
+// 14-C で side を各ジャンル10件以上・soup を各ジャンル5件以上まで増やす。
+// **増やしたらこの表も更新すること。**
+func wantRoleCounts() map[string]int {
+	return map[string]int{"main": 314, "side": 31, "soup": 15}
+}
+
+func TestSeedSQL_役割ごとの件数(t *testing.T) {
+	t.Parallel()
+
+	sql, err := db.SeedSQL()
+	require.NoError(t, err)
+
+	total := 0
+	for role, want := range wantRoleCounts() {
+		// "'easy', 'main', '" の形で出現する。難易度に続く位置で数えることで、
+		// 説明文に同じ語が現れても拾わない。
+		got := strings.Count(sql, "', '"+role+"', '")
+		assert.Equal(t, want, got, "役割 %s は%d件であること", role, want)
+		total += want
+	}
+
+	// 役割の付け漏れを検出する。行数と一致しなければ、どれかの行に role が無い。
+	rows := strings.Count(sql, "(gen_random_uuid(), '")
+	assert.Equal(t, rows, total, "全ての行に役割が付いていること")
+}
+
+func TestSeedSQL_役割の付け替えが既存行にも反映される(t *testing.T) {
+	t.Parallel()
+
+	sql, err := db.SeedSQL()
+	require.NoError(t, err)
+
+	// 役割は後から見直す前提の列（分類は主観が入る）。ON CONFLICT に
+	// 含めないと、シード済みのDBでは初回の分類のまま固定されてしまう。
+	assert.Contains(t, sql, "role        = EXCLUDED.role",
+		"役割の付け替えが既存行にも反映されること")
+}

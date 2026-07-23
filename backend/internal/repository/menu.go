@@ -26,7 +26,7 @@ func NewMenuRepository(pool *pgxpool.Pool) *MenuRepository {
 	return &MenuRepository{pool: pool}
 }
 
-const menuColumns = `id, name, name_kana, genre, difficulty, description`
+const menuColumns = `id, name, name_kana, genre, difficulty, role, description`
 
 // FindByID はIDで献立を1件取得する。存在しない場合は ErrMenuNotFound を返す。
 func (r *MenuRepository) FindByID(ctx context.Context, id domain.MenuID) (*domain.Menu, error) {
@@ -132,9 +132,9 @@ type scanner interface {
 
 func scanMenu(s scanner) (domain.Menu, error) {
 	var (
-		id, name, kana, genre, difficulty, description string
+		id, name, kana, genre, difficulty, role, description string
 	)
-	if err := s.Scan(&id, &name, &kana, &genre, &difficulty, &description); err != nil {
+	if err := s.Scan(&id, &name, &kana, &genre, &difficulty, &role, &description); err != nil {
 		return domain.Menu{}, err
 	}
 
@@ -150,6 +150,10 @@ func scanMenu(s scanner) (domain.Menu, error) {
 	if err != nil {
 		return domain.Menu{}, fmt.Errorf("DBの難易度が不正です: %w", err)
 	}
+	r, err := domain.ParseRole(role)
+	if err != nil {
+		return domain.Menu{}, fmt.Errorf("DBの役割が不正です: %w", err)
+	}
 
 	return domain.Menu{
 		ID:          menuID,
@@ -157,6 +161,7 @@ func scanMenu(s scanner) (domain.Menu, error) {
 		NameKana:    kana,
 		Genre:       g,
 		Difficulty:  d,
+		Role:        r,
 		Description: description,
 	}, nil
 }

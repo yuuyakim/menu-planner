@@ -60,6 +60,7 @@ type Menu struct {
 	NameKana    string
 	Genre       Genre
 	Difficulty  Difficulty
+	Role        Role
 	Description string
 }
 
@@ -82,6 +83,9 @@ func (m Menu) Validate() error {
 	}
 	if !m.Difficulty.Valid() {
 		return fmt.Errorf("%w: 難易度が不正です(%q)", ErrInvalidMenu, m.Difficulty)
+	}
+	if !m.Role.Valid() {
+		return fmt.Errorf("%w: 役割が不正です(%q)", ErrInvalidMenu, m.Role)
 	}
 	if strings.TrimSpace(m.Description) == "" {
 		return fmt.Errorf("%w: 説明が空です", ErrInvalidMenu)

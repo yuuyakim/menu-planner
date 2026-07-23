@@ -1762,11 +1762,27 @@ Aのお気に入りが表示されたままになる（履歴も同じ）。
 
 #### 14-B: 役割の列と分類 `feat/menu-role-schema`
 
-- [ ] 🔴 テスト: `role` の値が3値に限られる／既存行が `main` で埋まる／
-      `Role` のパース（未知の値・空文字）／`Menu` の検証に `role` が入る
-- [ ] 🟢 マイグレーション `000009_add_menu_role`（`NOT NULL DEFAULT 'main'` + CHECK）
-- [ ] 🟢 `domain.Role`、`Menu.Role`、repository の scan / columns
-- [ ] 🔧 既存360件への役割付与（seeds/menus.sql）。副菜・汁物にあたる約40件を洗い出す
+- [x] 🔴 テスト: `Role` のパース（3値・未知の値・空文字・`all` を弾く）／
+      `Menu` の検証に `role` が入る／シードの役割ごとの件数と付け漏れ／
+      役割の付け替えが ON CONFLICT で既存行に反映される
+- [x] 🟢 マイグレーション `000009_add_menu_role`（`NOT NULL DEFAULT 'main'` + CHECK + 索引）
+- [x] 🟢 `domain.Role`、`Menu.Role`、repository の scan / columns
+- [x] 🟢 `ErrInvalidRole` の problem 写像（400 `invalid-role`）
+- [x] 🔧 既存360件への役割付与（seeds/menus.sql）。**main 314 / side 31 / soup 15**
+
+> **`ParseRole` は `all` を弾く。** APIの絞り込みで使う `all` は「絞り込まない」ことを
+> 示す値で、献立が持つ役割ではない（spec.md 5.1）。ここで通すと CHECK 制約と食い違う。
+
+> **DEFAULT を `main` にしたのは付け替えを減らすため。** 360件中314件が主菜なので、
+> 既存行を `main` で埋めてから副菜・汁物46件だけをシードで直すほうが差分が小さい。
+
+> **`role` を ON CONFLICT の更新対象に含めた。** 分類は主観が入り後から見直す前提なので、
+> 含めないとシード済みのDB（本番）では初回の分類のまま固定されてしまう。
+
+> **写像漏れ検査が `ErrInvalidRole` を捕まえた。** #129 で入れた仕組みで、
+> **同型の見落としはこれで3度目**（フェーズ12の保存ID・13の食材ID・今回の役割）。
+> 今回は検査があったため handler に届く前に気づけている。
+> 14-D で `role` クエリを解釈するようになると、無いと壊れた値が 500 になっていた。
 
 #### 14-C: 副菜・汁物の拡充 `feat/menu-side-expansion`
 
