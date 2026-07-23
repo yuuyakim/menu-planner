@@ -15,12 +15,12 @@ import type { MenuFilter } from './filter'
 // ラジオの value は文字列しか持てないため、undefined の代わりに使う。
 const allValue = ''
 
-type RadioGroupProps = {
+type RadioGroupProps<T extends string> = {
   legend: string
   /** 選択肢を並び順どおりに [value, ラベル] で渡す。 */
-  options: readonly (readonly [string, string])[]
-  selected: string
-  onChange: (value: string) => void
+  options: readonly (readonly [T, string])[]
+  selected: T
+  onChange: (value: T) => void
 }
 
 // RadioGroup はラジオ1組。**選択肢と並び順は呼び出し側が決める。**
@@ -30,7 +30,12 @@ type RadioGroupProps = {
 //
 // fieldset/legend にするのは、同じ「すべて」が複数の組にあるため、
 // どちらの「すべて」かを支援技術（とテスト）が区別できるようにするため。
-function RadioGroup({ legend, options, selected, onChange }: RadioGroupProps) {
+function RadioGroup<T extends string>({
+  legend,
+  options,
+  selected,
+  onChange,
+}: RadioGroupProps<T>) {
   // 同じ画面に複数のラジオ組が並ぶため、name を一意にする。
   const name = useId()
 
@@ -63,14 +68,22 @@ function RadioGroup({ legend, options, selected, onChange }: RadioGroupProps) {
 
 // allFirst は「すべて」を先頭に置いた選択肢を作る。
 // ジャンル・難易度は未指定＝すべてなので、既定である「すべて」が先頭に来る。
-function allFirst(labels: Record<string, string>) {
-  return [[allValue, 'すべて'] as const, ...Object.entries(labels)] as const
+// 値の型に空文字（＝すべて）が混ざるため、戻り値は T | '' になる。
+function allFirst<T extends string>(
+  labels: Record<T, string>,
+): readonly (readonly [T | typeof allValue, string])[] {
+  return [
+    [allValue, 'すべて'],
+    ...(Object.entries(labels) as [T, string][]),
+  ]
 }
 
-// withAll は roleFilterLabels をそのまま並びとして使う。
-// 「すべて」は末尾で、先頭の「主菜」が既定であることが並びから読み取れる。
-function withAll(labels: Record<string, string>) {
-  return Object.entries(labels)
+// asOptions はラベルの定義順をそのまま選択肢の並びにする。
+// 役割は「すべて」が末尾で、先頭の「主菜」が既定であることが並びから読み取れる。
+function asOptions<T extends string>(
+  labels: Record<T, string>,
+): readonly (readonly [T, string])[] {
+  return Object.entries(labels) as [T, string][]
 }
 
 type Props = {
@@ -105,23 +118,21 @@ export function SearchForm({
           主菜/副菜/汁物 のどれを探すかを選ぶ、という意味。 */}
       <RadioGroup
         legend="種類"
-        options={withAll(roleFilterLabels)}
+        options={asOptions(roleFilterLabels)}
         selected={role}
-        onChange={(v) => setRole(v as RoleFilter)}
+        onChange={setRole}
       />
       <RadioGroup
         legend="ジャンル"
         options={allFirst(genreLabels)}
         selected={genre ?? allValue}
-        onChange={(v) => setGenre(v === allValue ? undefined : (v as Genre))}
+        onChange={(v) => setGenre(v === allValue ? undefined : v)}
       />
       <RadioGroup
         legend="難易度"
         options={allFirst(difficultyLabels)}
         selected={difficulty ?? allValue}
-        onChange={(v) =>
-          setDifficulty(v === allValue ? undefined : (v as Difficulty))
-        }
+        onChange={(v) => setDifficulty(v === allValue ? undefined : v)}
       />
 
       <button
