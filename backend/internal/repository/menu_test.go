@@ -285,3 +285,51 @@ func TestMenuRepository_FindByIDs_重複したIDは1件にまとまる(t *testin
 	require.NoError(t, err)
 	assert.Len(t, got, 1, "同じ献立が何度指定されても1件")
 }
+
+func TestMenuRepository_FindByFilter_roleのみ指定(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+
+	insertMenuWithRole(t, pool, "親子丼", domain.GenreJapanese, domain.DifficultyEasy, domain.RoleMain)
+	insertMenuWithRole(t, pool, "ポテトサラダ", domain.GenreWestern, domain.DifficultyEasy, domain.RoleSide)
+	insertMenuWithRole(t, pool, "わかめスープ", domain.GenreChinese, domain.DifficultyEasy, domain.RoleSoup)
+
+	got, err := repo.FindByFilter(context.Background(), domain.MenuFilter{
+		Role: ptr(domain.RoleSide),
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "ポテトサラダ", got[0].Name)
+}
+
+// nil は「絞り込まない」。既定を主菜に倒すのは入力を解釈する層の仕事で、
+// repository までは持ち込まない（spec.md 2.10）。
+func TestMenuRepository_FindByFilter_roleがnilなら全役割(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+
+	insertMenuWithRole(t, pool, "親子丼", domain.GenreJapanese, domain.DifficultyEasy, domain.RoleMain)
+	insertMenuWithRole(t, pool, "ポテトサラダ", domain.GenreWestern, domain.DifficultyEasy, domain.RoleSide)
+	insertMenuWithRole(t, pool, "わかめスープ", domain.GenreChinese, domain.DifficultyEasy, domain.RoleSoup)
+
+	got, err := repo.FindByFilter(context.Background(), domain.MenuFilter{})
+	require.NoError(t, err)
+	assert.Len(t, got, 3)
+}
+
+func TestMenuRepository_FindByFilter_roleと他の軸を併用(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+
+	insertMenuWithRole(t, pool, "ほうれん草のおひたし", domain.GenreJapanese, domain.DifficultyEasy, domain.RoleSide)
+	insertMenuWithRole(t, pool, "ポテトサラダ", domain.GenreWestern, domain.DifficultyEasy, domain.RoleSide)
+	insertMenuWithRole(t, pool, "親子丼", domain.GenreJapanese, domain.DifficultyEasy, domain.RoleMain)
+
+	got, err := repo.FindByFilter(context.Background(), domain.MenuFilter{
+		Genre: ptr(domain.GenreJapanese),
+		Role:  ptr(domain.RoleSide),
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "ほうれん草のおひたし", got[0].Name)
+}

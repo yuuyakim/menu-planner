@@ -103,6 +103,7 @@ type menuDTO struct {
 	Name        string `json:"name"`
 	Genre       string `json:"genre"`
 	Difficulty  string `json:"difficulty"`
+	Role        string `json:"role"`
 	Description string `json:"description"`
 }
 
@@ -199,6 +200,13 @@ func parseMenuFilter(c echo.Context) (domain.MenuFilter, error) {
 		f.Difficulty = &d
 	}
 
+	// 役割だけは未指定でも既定（主菜）が入るため、空文字でも解釈を通す。
+	role, err := domain.ParseRoleFilter(c.QueryParam("role"))
+	if err != nil {
+		return f, fmt.Errorf("%w: %q", err, c.QueryParam("role"))
+	}
+	f.Role = role
+
 	return f, nil
 }
 
@@ -207,6 +215,7 @@ func parseMenuFilter(c echo.Context) (domain.MenuFilter, error) {
 type weeklyRequest struct {
 	Genre      *string `json:"genre"`
 	Difficulty *string `json:"difficulty"`
+	Role       *string `json:"role"`
 }
 
 // dayMenuDTO は週間献立の1日分のAPI表現。
@@ -279,13 +288,13 @@ func parseWeeklyRequest(c echo.Context) (domain.MenuFilter, error) {
 		}
 	}
 
-	return toMenuFilter(req.Genre, req.Difficulty)
+	return toMenuFilter(req.Genre, req.Difficulty, req.Role)
 }
 
 // toMenuFilter はボディで受けた条件を絞り込み条件に変換する。
 // 未指定・null・空文字はいずれも「絞り込まない」。GET /menus/suggest と
 // 揃えておく（フロントが未選択を空文字で送ることがある）。
-func toMenuFilter(genre, difficulty *string) (domain.MenuFilter, error) {
+func toMenuFilter(genre, difficulty, role *string) (domain.MenuFilter, error) {
 	var f domain.MenuFilter
 
 	if genre != nil && *genre != "" {
@@ -302,6 +311,19 @@ func toMenuFilter(genre, difficulty *string) (domain.MenuFilter, error) {
 		}
 		f.Difficulty = &d
 	}
+
+	// 未指定（nil）と null を空文字と同じに倒し、既定の主菜を入れる。
+	// ここを素通ししてしまうと、週間献立だけ全役割から引くことになる。
+	raw := ""
+	if role != nil {
+		raw = *role
+	}
+	r, err := domain.ParseRoleFilter(raw)
+	if err != nil {
+		return f, fmt.Errorf("%w: %q", err, raw)
+	}
+	f.Role = r
+
 	return f, nil
 }
 
@@ -314,6 +336,7 @@ type rerollRequest struct {
 	Week       []string `json:"week"`
 	Genre      *string  `json:"genre"`
 	Difficulty *string  `json:"difficulty"`
+	Role       *string  `json:"role"`
 }
 
 // rerollResponse は POST /menus/reroll-day のレスポンス。
@@ -331,7 +354,7 @@ func (h *MenuHandler) RerollDay(c echo.Context) error {
 		return err
 	}
 
-	f, err := toMenuFilter(req.Genre, req.Difficulty)
+	f, err := toMenuFilter(req.Genre, req.Difficulty, req.Role)
 	if err != nil {
 		return err
 	}
@@ -413,6 +436,7 @@ func toMenuDTO(m domain.Menu) menuDTO {
 		Name:        m.Name,
 		Genre:       m.Genre.String(),
 		Difficulty:  m.Difficulty.String(),
+		Role:        m.Role.String(),
 		Description: m.Description,
 	}
 }

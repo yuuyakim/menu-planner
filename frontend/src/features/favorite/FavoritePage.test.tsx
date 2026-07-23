@@ -15,6 +15,7 @@ function item(n: number): FavoriteItem {
       name: `献立${n}`,
       genre: 'japanese',
       difficulty: 'easy',
+      role: 'main',
       description: `説明${n}`,
     },
     createdAt: `2026-07-2${n}T10:00:00Z`,

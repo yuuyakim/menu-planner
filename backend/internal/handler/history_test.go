@@ -67,6 +67,7 @@ func historyEntry(t *testing.T, name string, mode domain.SearchMode, at time.Tim
 		NameKana:    name + "かな",
 		Genre:       domain.GenreJapanese,
 		Difficulty:  domain.DifficultyEasy,
+		Role:        domain.RoleMain,
 		Description: name + "の説明",
 	}
 	id, err := domain.ParseHistoryID("018f0000-0000-7000-8000-000000000009")

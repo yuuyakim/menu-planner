@@ -1833,11 +1833,22 @@ Aのお気に入りが表示されたままになる（履歴も同じ）。
 
 #### 14-D: 絞り込みAPI `feat/api-filter-by-role`
 
-- [ ] 🔴 テスト: 既定が `main`／`all` で全役割／`side` で副菜のみ／未知の値は 400／
-      週間献立と引き直しにも効く
-- [ ] 🟢 `MenuFilter.Role`、repository の WHERE、handler のパース（`GET /menus/suggest`・
-      `POST /menus/suggest-weekly`・`POST /menus/reroll-day`）
-- [ ] 🔧 `api/openapi.yaml` を更新し `make gen-api`
+- [x] 🔴 テスト: 既定が `main`／`all` で全役割／`side` で副菜のみ／未知の値は 400／
+      週間献立と引き直しにも効く／応答に `role` が入る
+- [x] 🟢 `domain.ParseRoleFilter`、`MenuFilter.Role`、repository の WHERE、
+      handler のパース（`GET /menus/suggest`・`POST /menus/suggest-weekly`・`POST /menus/reroll-day`）
+- [x] 🔧 `api/openapi.yaml` に `Role` / `RoleFilter` / `RoleQuery` を追加し `make gen-api`
+
+> **既定を入れるのは入力を解釈する層（`ParseRoleFilter`）。** `MenuFilter.Role` の nil は
+> 「絞り込まない」であって「既定」ではない。両方の意味を持たせると、
+> repository が「nil のときは main」を知る必要が出てレイヤが混ざる。
+
+> **`Role` と `RoleFilter` をスキーマとして分けた。** 献立が持つのは3値だが、
+> クエリは `all` を含む4値。1つにすると `all` が保存できる値に見えてしまう。
+
+> **契約テストが `role: ""` を捕まえた。** handler のテストが作る `domain.Menu` に
+> 役割を入れておらず、enum に一致しない値が応答に出ていた。
+> OpenAPI と実際の応答を突き合わせる仕組み（9-0）が働いた形。
 
 #### 14-E: UI `feat/ui-role-filter`
 
