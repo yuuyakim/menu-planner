@@ -149,7 +149,7 @@ INSERT INTO menus (id, name, name_kana, genre, difficulty, role, description) VA
 (gen_random_uuid(), 'ドリア',        'どりあ',            'western', 'easy', 'main', 'ご飯にソースをかけて焼く。余りご飯の使い道に'),
 (gen_random_uuid(), 'ピラフ',        'ぴらふ',            'western', 'easy', 'main', '具材と米を炒めて炊く。一皿で完結する'),
 (gen_random_uuid(), 'シーザーサラダ',  'しーざーさらだ',     'western', 'easy', 'side', 'レタスにドレッシングとチーズを絡める'),
-(gen_random_uuid(), 'コブサラダ',     'こぶさらだ',        'western', 'easy', 'side', '具を角切りにして並べる。これだけで主菜になる'),
+(gen_random_uuid(), 'コブサラダ',     'こぶさらだ',        'western', 'easy', 'main', '具を角切りにして並べる。これだけで主菜になる'),
 (gen_random_uuid(), 'カプレーゼ',     'かぷれーぜ',        'western', 'easy', 'side', '切って並べるだけ。トマトの質がそのまま出る'),
 (gen_random_uuid(), 'ニース風サラダ',  'にーすふうさらだ',    'western', 'easy', 'side', 'ツナと卵を合わせた食べ応えのあるサラダ'),
 (gen_random_uuid(), 'マカロニサラダ',  'まかろにさらだ',     'western', 'easy', 'side', '茹でて和えるだけ。作り置きにも向く'),

@@ -94,7 +94,7 @@ func TestSeedSQL_ジャンルと難易度ごとの件数(t *testing.T) {
 // 14-C で side を各ジャンル10件以上・soup を各ジャンル5件以上まで増やす。
 // **増やしたらこの表も更新すること。**
 func wantRoleCounts() map[string]int {
-	return map[string]int{"main": 314, "side": 31, "soup": 15}
+	return map[string]int{"main": 315, "side": 30, "soup": 15}
 }
 
 func TestSeedSQL_役割ごとの件数(t *testing.T) {
@@ -115,6 +115,37 @@ func TestSeedSQL_役割ごとの件数(t *testing.T) {
 	// 役割の付け漏れを検出する。行数と一致しなければ、どれかの行に role が無い。
 	rows := strings.Count(sql, "(gen_random_uuid(), '")
 	assert.Equal(t, rows, total, "全ての行に役割が付いていること")
+}
+
+// TestSeedSQL_説明文と役割が矛盾しない は、説明文が「単品で一食になる」と
+// 主張しているのに main 以外が付いている行を検出する。
+//
+// **コブサラダで実際に起きた。** 説明文に「これだけで主菜になる」と書いてあるのに
+// side を付けており、分類基準（単品で夕食が成立するか）と正面から矛盾していた。
+// 360件を目視で分類する限り同じ取り違えは必ず再発するため、機械で拾う。
+//
+// 語句は「一食として成立する」と明言しているものだけに絞る。
+// 「これだけで作れる」のような手軽さの表現まで拾うと誤検出になる。
+func TestSeedSQL_説明文と役割が矛盾しない(t *testing.T) {
+	t.Parallel()
+
+	sql, err := db.SeedSQL()
+	require.NoError(t, err)
+
+	claimsMain := []string{"主菜になる", "一食になる", "主菜として"}
+
+	for _, line := range strings.Split(sql, "\n") {
+		if !strings.HasPrefix(line, "(gen_random_uuid(), '") {
+			continue
+		}
+		if strings.Contains(line, "', 'main', '") {
+			continue
+		}
+		for _, phrase := range claimsMain {
+			assert.NotContains(t, line, phrase,
+				"説明文が%qと言っているのに main 以外が付いている", phrase)
+		}
+	}
 }
 
 func TestSeedSQL_役割の付け替えが既存行にも反映される(t *testing.T) {
