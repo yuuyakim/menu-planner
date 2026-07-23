@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
+	"github.com/yuuyakim/menu-planner/backend/internal/logctx"
 	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
@@ -44,18 +46,25 @@ func (r *SubscriptionRepository) Find(
 		return domain.Subscription{}, fmt.Errorf("加入の取得に失敗しました: %w", err)
 	}
 
-	plan, err := domain.ParsePlan(rawPlan)
-	if err != nil {
-		return domain.Subscription{}, fmt.Errorf("DBのプランが不正です: %w", err)
-	}
-	status, err := domain.ParseSubscriptionStatus(rawStatus)
-	if err != nil {
-		return domain.Subscription{}, fmt.Errorf("DBの加入状態が不正です: %w", err)
+	// **未知の値でエラーにしない。** ここで弾くと EntitlementService がそれを返し、
+	// /auth/me が 500 になって、ログイン済みの利用者がアプリを一切使えなくなる。
+	// 未知のプランは domain.Entitlement が free に落とし、未知の状態は
+	// IsActiveAt が false にするため、そのまま通しても安全側に倒れる
+	// （プレミアムとして通ってしまう経路は無い）。
+	// 000010 が CHECK 制約を張らず「決済事業者ごとに増える値を DDL の変更なしに
+	// 受けられる」ことを狙っているのも、この読み方があってはじめて成立する。
+	//
+	// ただし黙って握りつぶすとデータの壊れに気づけないため、警告だけは残す。
+	sub.Plan = domain.Plan(rawPlan)
+	sub.Status = domain.SubscriptionStatus(rawStatus)
+	if !sub.Plan.Valid() || !sub.Status.Valid() {
+		logctx.From(ctx).WarnContext(ctx, "加入に未知の値が入っています。freeとして扱います",
+			slog.String("user_id", userID.String()),
+			slog.String("plan", rawPlan),
+			slog.String("status", rawStatus))
 	}
 
 	sub.UserID = userID
-	sub.Plan = plan
-	sub.Status = status
 	sub.Provider = provider
 	if providerSubID != nil {
 		sub.ProviderSubscriptionID = *providerSubID

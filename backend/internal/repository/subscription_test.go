@@ -51,6 +51,44 @@ func TestSubscriptionRepository_保存して取り出せる(t *testing.T) {
 	require.Empty(t, got.ProviderSubscriptionID, "手動付与は決済IDを持たない")
 }
 
+// 未知の値でエラーにすると EntitlementService がそれを返し、/auth/me が 500 になって
+// ログイン済みの利用者がアプリを一切使えなくなる。000010 が CHECK 制約を張らないのも
+// 「決済事業者ごとに増える値を DDL の変更なしに受けられる」ためなので、
+// 読み出し側が弾いてしまうとその狙いが成立しない。
+func TestSubscriptionRepository_未知の値でも締め出さない(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := repository.NewSubscriptionRepository(pool)
+
+	for _, tt := range []struct {
+		name         string
+		plan, status string
+	}{
+		{"未知のプラン", "pro", "active"},
+		{"未知の状態", "premium", "trialing"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			u := createUser(t, pool, "sub-repo-unknown-"+tt.plan+tt.status+"@example.com")
+			_, err := pool.Exec(ctx,
+				`INSERT INTO subscriptions (user_id, plan, status, current_period_end, provider)
+				 VALUES ($1, $2, $3, $4, $5)`,
+				u.ID.String(), tt.plan, tt.status, time.Now().Add(24*time.Hour), domain.ProviderManual)
+			require.NoError(t, err)
+
+			got, err := repo.Find(ctx, u.ID)
+			require.NoError(t, err, "未知の値はエラーにせず読み出せるべき")
+
+			// EntitlementService と同じ導出をして、安全側に倒れることを確かめる。
+			// 未知のプランは Entitlement が free に落とし、未知の状態は IsActiveAt が弾く。
+			effective := domain.PlanFree
+			if got.IsActiveAt(time.Now()) {
+				effective = domain.NewEntitlement(got.Plan).Plan()
+			}
+			require.Equal(t, domain.PlanFree, effective, "未知の値がプレミアムとして通ってはならない")
+		})
+	}
+}
+
 func TestSubscriptionRepository_Upsertは上書きする(t *testing.T) {
 	pool := newTestPool(t)
 	ctx := context.Background()

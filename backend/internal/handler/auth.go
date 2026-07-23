@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -153,17 +154,42 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		return err
 	}
 
+	// ログインは既存利用者を通す経路であり、プレミアムでありうる。
+	// **Cookie を発行する前にプランを引く。** 後に置くと、ここで失敗したときに
+	// 「画面はログイン失敗、ブラウザには新しいCookie」という食い違いが起きる。
+	// 共有端末では前の利用者のキャッシュが残ったまま別人として認証された状態になり、
+	// フロントが onSuccess で行う queryClient.clear() も走らない（Issue #78 の再発）。
+	plan := h.planFor(c, user.ID.String())
+
 	if err := h.issueSession(c, user.ID.String()); err != nil {
 		return err
 	}
 
-	// ログインは既存利用者を通す経路であり、プレミアムでありうる。
-	// entitlements を引いて実際のプランを返す。
-	ent, err := h.entitlements.For(c.Request().Context(), user.ID.String())
+	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user, plan)})
+}
+
+// planFor は表示用のプランを返す。引けなければ free に落とす。
+//
+// **プランを引けないことでログインや /auth/me を落とさない。** この2経路は
+// 本PR以前 users テーブルにしか依存しておらず、プレミアムの可用性の問題を
+// 認証全体の可用性の問題に格上げしてはならない。マイグレーションは自動デプロイに
+// 含まれず手で流す運用（DEPLOY.md 手順1）なので、subscriptions が無い状態で
+// コードだけが本番に出ることは現実に起こりうる。そこで全利用者がログイン不能に
+// なるより、バッジが一時的に出ないほうがはるかに軽い。
+//
+// 上限の判定（service.SavedWeeklyMenuService）はこの緩和を通さない。あちらは
+// 課金済みの利用者を黙って free の上限で拒むことになるため、引けなければ失敗させる。
+// 表示は縮退させ、権限の行使は縮退させない。
+func (h *AuthHandler) planFor(c echo.Context, userID string) domain.Plan {
+	ent, err := h.entitlements.For(c.Request().Context(), userID)
 	if err != nil {
-		return err
+		LoggerFrom(c).ErrorContext(c.Request().Context(),
+			"プランを取得できませんでした。freeとして表示します",
+			slog.String("user_id", userID),
+			slog.String("error", err.Error()))
+		return domain.PlanFree
 	}
-	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user, ent.Plan())})
+	return ent.Plan()
 }
 
 // Refresh はリフレッシュトークンでアクセストークンを再発行する。
@@ -218,11 +244,7 @@ func (h *AuthHandler) Me(c echo.Context) error {
 		return err
 	}
 
-	ent, err := h.entitlements.For(c.Request().Context(), userID)
-	if err != nil {
-		return err
-	}
-	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user, ent.Plan())})
+	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user, h.planFor(c, userID))})
 }
 
 func toUserDTO(u domain.User, plan domain.Plan) userDTO {
