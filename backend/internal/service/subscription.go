@@ -36,32 +36,39 @@ func NewSubscriptionService(store SubscriptionStore, now func() time.Time) *Subs
 // 1か月足したつもりが1か月に縮む）。Upsert は同じ行を上書きするので履歴も残らず、
 // 利用者は理由の分からないまま突然 free に落ちる。期限切れ・取消済みの加入は
 // 積み増す残りが無いので、現在時刻から起算する。
+//
+// **既存行があれば、それを土台にして書き換える。** Upsert は全列を上書きするため、
+// 構造体を組み直すと Grant が関知しない列まで巻き添えでゼロ値に落ちる。
+// Grant が決めてよいのはプラン・状態・期末の3つだけで、決済事業者側のID
+// （ProviderSubscriptionID）・解約予約（CancelAtPeriodEnd）・加入を作った経路
+// （Provider）は別の経路が持つ情報なので触らない。決済フェーズに入ると、
+// Stripe 由来の加入にボーナス月を手で足しただけで紐付けが切れる。
 func (s *SubscriptionService) Grant(ctx context.Context, userID domain.UserID, months int) error {
 	if months < 1 {
 		return fmt.Errorf("%w: %d", ErrInvalidGrantMonths, months)
 	}
 
 	now := s.now()
-	base := now
 	sub, err := s.store.Find(ctx, userID)
 	switch {
 	case err == nil:
-		if sub.IsActiveAt(now) {
-			base = sub.CurrentPeriodEnd
-		}
+		// 既存行を土台にする。
 	case errors.Is(err, ErrSubscriptionNotFound):
-		// 初回付与。base は現在時刻のまま。
+		// 初回付与。この行を作ったのは手動付与なので Provider は manual。
+		sub = domain.Subscription{UserID: userID, Provider: domain.ProviderManual}
 	default:
 		return err
 	}
 
-	return s.store.Upsert(ctx, domain.Subscription{
-		UserID:           userID,
-		Plan:             domain.PlanPremium,
-		Status:           domain.SubscriptionActive,
-		CurrentPeriodEnd: addMonths(base, months),
-		Provider:         domain.ProviderManual,
-	})
+	base := now
+	if sub.IsActiveAt(now) {
+		base = sub.CurrentPeriodEnd
+	}
+
+	sub.Plan = domain.PlanPremium
+	sub.Status = domain.SubscriptionActive
+	sub.CurrentPeriodEnd = addMonths(base, months)
+	return s.store.Upsert(ctx, sub)
 }
 
 // addMonths は months か月後を返す。翌月に同じ日が無ければ月末に丸める。

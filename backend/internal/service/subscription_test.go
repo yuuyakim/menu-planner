@@ -120,6 +120,44 @@ func TestSubscriptionService_Grant_同じ日がある月はそのまま(t *testi
 	require.Equal(t, time.Date(2026, time.April, 15, 9, 30, 0, 0, time.UTC), sub.CurrentPeriodEnd)
 }
 
+func TestSubscriptionService_Grant_関知しない列を巻き添えにしない(t *testing.T) {
+	store := newFakeSubscriptionStore()
+	u := domain.NewUserID()
+	require.NoError(t, store.Upsert(context.Background(), domain.Subscription{
+		UserID:                 u,
+		Plan:                   domain.PlanPremium,
+		Status:                 domain.SubscriptionActive,
+		CurrentPeriodEnd:       fixedNow.AddDate(0, 1, 0),
+		CancelAtPeriodEnd:      true,
+		Provider:               "stripe",
+		ProviderSubscriptionID: "sub_123",
+	}))
+
+	require.NoError(t, newSubscriptionSvc(store).Grant(context.Background(), u, 1))
+
+	// Upsert は全列を上書きする。構造体を組み直すと、決済由来の加入に
+	// ボーナス月を足しただけで決済事業者との紐付けが切れ、解約予約も消える。
+	sub, err := store.Find(context.Background(), u)
+	require.NoError(t, err)
+	require.Equal(t, "stripe", sub.Provider, "加入を作った経路は Grant が決めるものではない")
+	require.Equal(t, "sub_123", sub.ProviderSubscriptionID, "決済事業者側のIDは保つ")
+	require.True(t, sub.CancelAtPeriodEnd, "解約予約は利用者の意思なので消さない")
+	require.Equal(t, fixedNow.AddDate(0, 2, 0), sub.CurrentPeriodEnd, "期末は積み増す")
+}
+
+func TestSubscriptionService_Grant_初回付与はmanual(t *testing.T) {
+	store := newFakeSubscriptionStore()
+	u := domain.NewUserID()
+
+	require.NoError(t, newSubscriptionSvc(store).Grant(context.Background(), u, 1))
+
+	sub, err := store.Find(context.Background(), u)
+	require.NoError(t, err)
+	require.Equal(t, domain.ProviderManual, sub.Provider)
+	require.False(t, sub.CancelAtPeriodEnd)
+	require.Empty(t, sub.ProviderSubscriptionID)
+}
+
 func TestSubscriptionService_Grant_加入を引けなければ付与しない(t *testing.T) {
 	store := newFakeSubscriptionStore()
 	store.findErr = errors.New("接続に失敗しました")
