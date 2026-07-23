@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **ブランチ構成**: `main` → `feature/premium` → 作業ブランチ。作業ブランチのPRの base は必ず `feature/premium`。`main` 宛てのPRは出さない。
+- **ブランチ構成**: 全14タスクを `feature/premium` 上に積み、完了後に `feature/premium` → `main` の1本のPRを出す（2026-07-23 にユーザーが決定）。作業ブランチとタスク単位のPRは作らない。レビューはタスクごとのサブエージェント審査＋最後の全体レビュー＋`/code-review` で担保する。`main` へ直接コミットしない。
 - **マイグレーション番号は `000010`**。`main` は `000008` までで、`000009_add_menu_role` は未マージの `feature/menu-role` にのみ存在する。**`feature/premium` → `main` のPRを出す前に `000009` が `main` に入っていることを確認する。** 先に `000010` を本番へ適用すると、後から来る `000009` は golang-migrate に永久に無視される。
 - **プランごとの上限**: free = 10件（現行維持）、premium = 50件。既存利用者の体験を削らない。
 - **上限値はコードに持つ**。DBにもAPIレスポンスにも置かない。
@@ -2442,7 +2442,7 @@ git commit -m "docs: プレミアムプランを仕様に反映"
 
 1. `make test` と `make test-e2e` が全て緑であることを確認する
 2. **`/code-review` を走らせる**。指摘はその場で直し、直したもの・見送ったものを理由つきで報告する
-3. 作業ブランチ → `feature/premium` のPRを出す。CIが緑なら自分でマージする
+3. `feature/premium` → `main` のPRを1本出す（タスク単位のPRは作らない）
 4. **`feature/premium` → `main` のPRを出す前に `000009_add_menu_role` が `main` に入っていることを確認する**（Global Constraints）。入っていなければ待つか採番し直す
 5. `feature/premium` → `main` のPRを作成したら `/code-review:code-review` を走らせ、**ユーザーのマージを待つ**
 
