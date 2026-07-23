@@ -43,6 +43,7 @@
 | `backend/cmd/grant/main.go` | 新規。付与・取消のCLI |
 | `backend/cmd/server/main.go` | 変更。配線 |
 | `api/openapi.yaml` | 変更。`User` に `plan` を追加 |
+| `frontend/src/api/schema.d.ts` | `make gen-api` の生成物。`User` に `plan` が入る |
 | `frontend/src/features/auth/AuthMenu.tsx` | 変更。premium バッジ |
 | `frontend/e2e/premium.spec.ts` | 新規。E2E |
 | `spec.md` | 変更。2.11 / 4.2 / 15章 |
@@ -2018,7 +2019,7 @@ git commit -m "feat: 週間献立の保存上限をプラン由来にする"
 - Modify: `api/openapi.yaml`（`User` スキーマ）
 - Modify: `backend/internal/handler/auth.go`（`userDTO` / `toUserDTO` / `Me`）
 - Modify: `backend/cmd/server/main.go`（`NewAuthHandler` の配線）
-- Modify: `frontend/src/api/types.ts`（`make gen-api` で再生成）
+- Modify: `frontend/src/api/schema.d.ts`（`make gen-api` が生成。手で編集しない）
 - Test: `backend/internal/handler/auth_test.go`
 
 **Interfaces:**
@@ -2193,7 +2194,8 @@ Expected: PASS（契約テスト `internal/handler/contract_test.go` を含む�
 - [ ] **Step 7: TS の型を再生成する**
 
 Run: `make gen-api`
-Expected: `frontend/src/api/types.ts` に `plan` が入る（差分が出る）
+Expected: `frontend/src/api/schema.d.ts` の `User` に `plan` が入る（差分が出る）。
+`frontend/src/api/types.ts` は `User = Schemas['User']` の別名なので変更不要。
 
 Run: `cd frontend && npx tsc -b`
 Expected: 型エラーなし
@@ -2202,7 +2204,7 @@ Expected: 型エラーなし
 
 ```bash
 git add api/openapi.yaml backend/internal/handler/auth.go backend/internal/handler/auth_test.go \
-        backend/cmd/server/main.go frontend/src/api/types.ts
+        backend/cmd/server/main.go frontend/src/api/schema.d.ts
 git commit -m "feat: /auth/me がプランを返す"
 ```
 
