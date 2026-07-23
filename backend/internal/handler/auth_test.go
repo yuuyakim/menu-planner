@@ -512,6 +512,38 @@ func TestMe_プランを返す(t *testing.T) {
 	}
 }
 
+func TestLogin_プランを返す(t *testing.T) {
+	t.Parallel()
+
+	// フロントエンドはこのログインレスポンスでキャッシュ中のユーザー状態を初期化する。
+	// ここでプランを取り違えると、有料ユーザーがログイン直後だけ無料と表示され、
+	// 何かが再取得を強制するまでその誤りが解消されない。
+	for _, tt := range []struct {
+		name string
+		plan domain.Plan
+		want string
+	}{
+		{"free", domain.PlanFree, `"plan":"free"`},
+		{"premium", domain.PlanPremium, `"plan":"premium"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &fakeAuthService{loginUser: newTestUser(t, "plan@example.com")}
+			e, _ := newAuthAppWithPlan(t, svc, tt.plan)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+				strings.NewReader(`{"email":"plan@example.com","password":"supersecret"}`))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			assert.Contains(t, rec.Body.String(), tt.want)
+		})
+	}
+}
+
 func TestMe_RefreshTokenRejected(t *testing.T) {
 	t.Parallel()
 
