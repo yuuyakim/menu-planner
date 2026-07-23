@@ -104,10 +104,19 @@ DB に置くと変更のたびにマイグレーションが必要になり、�
 - `plan` と `status` は CHECK 制約ではなくアプリ側で検証する。
   既存テーブル（`menus.role` ほか）の流儀に合わせる。
 
-### 4.2 マイグレーション番号の衝突に注意
+### 4.2 マイグレーション番号と適用順序（重要）
 
-`000009_add_menu_role` まで採番済み。並行して進んでいる `feature/menu-role` 系の作業が
-`000010` を採る可能性がある。着手時に採番済み番号を確認し、衝突していれば振り直す。
+**`main` は `000008_create_saved_weekly_menus` までしか持たない。**
+`000009_add_menu_role` は未マージの `feature/menu-role` 側にのみ存在する。
+そのため本設計は `000009` を空けて **`000010` を採る**。
+
+**適用順序に事故の余地がある。** golang-migrate は適用済みバージョンを1つの数値で持ち、
+`up` は現在値より大きいものだけを適用する。仮に `feature/premium` が先に `main` へ入り、
+本番へ `000010` を適用してしまうと、**後から `main` に入る `000009` は永久に適用されない**。
+
+したがって `feature/premium` → `main` のPRを出す前に、
+**`000009` が既に `main` に入っていることを確認する**。入っていなければ、
+`feature/menu-role` の `main` へのマージを待つか、本設計の migration を採番し直す。
 
 ## 5. ドメイン層
 
@@ -153,7 +162,9 @@ type SubscriptionStore interface {
 }
 ```
 
-該当が無ければ `repository.ErrSubscriptionNotFound` を返す。
+該当が無ければ `service.ErrSubscriptionNotFound` を返す。
+エラーはインターフェースの持ち主である service 側で定義し、repository がそれを返す
+（`ErrEmailTaken` / `ErrUserNotFound` と同じ扱い。`ports.go` 冒頭の方針）。
 
 ### 6.2 `service.EntitlementService`
 
@@ -185,7 +196,11 @@ CLI と将来の Webhook の**両方がここを通る**ことで、状態遷移
 **引数はメールアドレスではなく `UserID` を取る。** CLI は人が使うのでメールアドレスで指定したいが、
 将来の Webhook が決済事業者から受け取るのは顧客IDであってメールアドレスではない。
 サービスをメールアドレス起点にすると Webhook 側が不自然な逆引きを強いられるため、
-**メールアドレスから `UserID` への解決は CLI の責務**とする（既存の `UserStore` を使う）。
+**メールアドレスから `UserID` への解決は CLI の責務**とする。
+
+このために `UserRepository` に `FindByEmail` を足す必要がある。既存の
+`FindPasswordCredential` は `auth_identities` を内部結合するため、
+**Google 認証のみの利用者を引けず**、この用途には使えない。
 
 `Grant` は `provider = manual` で upsert する。`Revoke` は `status = canceled` に遷移させる。
 いずれも既存の構造化ログ（`logctx`）に付与・取消を記録する。
@@ -347,12 +362,13 @@ E2E 用のプレミアムユーザーは `docker compose exec backend go run ./c
 1. `domain.Plan` / `domain.Entitlement` / `domain.Subscription`
 2. マイグレーション `000010` とスキーマ検査テスト
 3. `repository.SubscriptionRepository`
-4. `service.EntitlementService`
-5. `service.SubscriptionService` と `cmd/grant`、Makefile ターゲット
-6. `SavedWeeklyMenuService` を上限のプラン依存へ変更（エラー型の置き換えを含む）
-7. `openapi.yaml` に `plan` を追加、`/auth/me` の実装と型再生成
-8. フロントエンドへの反映と E2E
-9. `spec.md` の更新（2.11 プレミアムプラン / 4.2 subscriptions / 15. 有料化の前提条件）
+4. `UserRepository.FindByEmail`（CLI がメールから利用者を解決するため）
+5. `service.EntitlementService`
+6. `service.SubscriptionService` と `cmd/grant`、Makefile ターゲット
+7. `SavedWeeklyMenuService` を上限のプラン依存へ変更（エラー型の置き換えを含む）
+8. `openapi.yaml` に `plan` を追加、`/auth/me` の実装と型再生成
+9. フロントエンドへの反映と E2E
+10. `spec.md` の更新（2.11 プレミアムプラン / 4.2 subscriptions / 15. 有料化の前提条件）
 
 ## 14. 未決事項
 
