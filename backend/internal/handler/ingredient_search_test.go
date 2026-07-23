@@ -30,7 +30,7 @@ func TestSearchByIngredients_候補と不足を返す(t *testing.T) {
 	catalog := &fakeIngredientCatalog{matches: []service.MenuMatch{{
 		Menu: domain.Menu{
 			ID: domain.NewMenuID(), Name: "肉じゃが", NameKana: "にくじゃが",
-			Genre: domain.GenreJapanese, Difficulty: domain.DifficultyEasy,
+			Genre: domain.GenreJapanese, Difficulty: domain.DifficultyEasy, Role: domain.RoleMain,
 			Description: "説明",
 		},
 		Matched: []domain.Ingredient{{

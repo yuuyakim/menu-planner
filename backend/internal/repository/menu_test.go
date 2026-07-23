@@ -18,18 +18,34 @@ func ptr[T any](v T) *T { return &v }
 func insertMenu(t *testing.T, pool *pgxpool.Pool, name string, g domain.Genre, d domain.Difficulty) domain.Menu {
 	t.Helper()
 
+	return insertMenuWithRole(t, pool, name, g, d, domain.RoleMain)
+}
+
+// insertMenuWithRole は役割を指定して献立を1件入れる。
+//
+// **role は明示して INSERT する。** DBの DEFAULT 任せにすると、
+// 戻り値の domain.Menu だけ Role が空になり、読み取り結果と突き合わせる
+// テストが「両方とも空」で通ってしまう。
+func insertMenuWithRole(
+	t *testing.T, pool *pgxpool.Pool,
+	name string, g domain.Genre, d domain.Difficulty, r domain.Role,
+) domain.Menu {
+	t.Helper()
+
 	m := domain.Menu{
 		ID:          domain.NewMenuID(),
 		Name:        name,
 		NameKana:    name + "かな",
 		Genre:       g,
 		Difficulty:  d,
+		Role:        r,
 		Description: name + "の説明",
 	}
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO menus (id, name, name_kana, genre, difficulty, description)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		m.ID.String(), m.Name, m.NameKana, m.Genre.String(), m.Difficulty.String(), m.Description)
+		`INSERT INTO menus (id, name, name_kana, genre, difficulty, role, description)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		m.ID.String(), m.Name, m.NameKana, m.Genre.String(), m.Difficulty.String(),
+		m.Role.String(), m.Description)
 	require.NoError(t, err)
 	return m
 }
@@ -268,4 +284,52 @@ func TestMenuRepository_FindByIDs_重複したIDは1件にまとまる(t *testin
 
 	require.NoError(t, err)
 	assert.Len(t, got, 1, "同じ献立が何度指定されても1件")
+}
+
+func TestMenuRepository_FindByFilter_roleのみ指定(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+
+	insertMenuWithRole(t, pool, "親子丼", domain.GenreJapanese, domain.DifficultyEasy, domain.RoleMain)
+	insertMenuWithRole(t, pool, "ポテトサラダ", domain.GenreWestern, domain.DifficultyEasy, domain.RoleSide)
+	insertMenuWithRole(t, pool, "わかめスープ", domain.GenreChinese, domain.DifficultyEasy, domain.RoleSoup)
+
+	got, err := repo.FindByFilter(context.Background(), domain.MenuFilter{
+		Role: ptr(domain.RoleSide),
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "ポテトサラダ", got[0].Name)
+}
+
+// nil は「絞り込まない」。既定を主菜に倒すのは入力を解釈する層の仕事で、
+// repository までは持ち込まない（spec.md 2.10）。
+func TestMenuRepository_FindByFilter_roleがnilなら全役割(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+
+	insertMenuWithRole(t, pool, "親子丼", domain.GenreJapanese, domain.DifficultyEasy, domain.RoleMain)
+	insertMenuWithRole(t, pool, "ポテトサラダ", domain.GenreWestern, domain.DifficultyEasy, domain.RoleSide)
+	insertMenuWithRole(t, pool, "わかめスープ", domain.GenreChinese, domain.DifficultyEasy, domain.RoleSoup)
+
+	got, err := repo.FindByFilter(context.Background(), domain.MenuFilter{})
+	require.NoError(t, err)
+	assert.Len(t, got, 3)
+}
+
+func TestMenuRepository_FindByFilter_roleと他の軸を併用(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewMenuRepository(pool)
+
+	insertMenuWithRole(t, pool, "ほうれん草のおひたし", domain.GenreJapanese, domain.DifficultyEasy, domain.RoleSide)
+	insertMenuWithRole(t, pool, "ポテトサラダ", domain.GenreWestern, domain.DifficultyEasy, domain.RoleSide)
+	insertMenuWithRole(t, pool, "親子丼", domain.GenreJapanese, domain.DifficultyEasy, domain.RoleMain)
+
+	got, err := repo.FindByFilter(context.Background(), domain.MenuFilter{
+		Genre: ptr(domain.GenreJapanese),
+		Role:  ptr(domain.RoleSide),
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "ほうれん草のおひたし", got[0].Name)
 }

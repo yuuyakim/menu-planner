@@ -16,6 +16,7 @@ const oyakodon: Menu = {
   name: '親子丼',
   genre: 'japanese',
   difficulty: 'easy',
+  role: 'main',
   description: '鶏肉と卵の定番。',
 }
 

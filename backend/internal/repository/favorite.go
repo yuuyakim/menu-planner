@@ -84,7 +84,7 @@ func isUnknownMenu(err error) bool {
 func (r *FavoriteRepository) List(ctx context.Context, userID domain.UserID) ([]domain.Favorite, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT f.created_at,
-		        m.id, m.name, m.name_kana, m.genre, m.difficulty, m.description
+		        `+joinedMenuColumns+`
 		   FROM favorites f
 		   JOIN menus m ON m.id = f.menu_id
 		  WHERE f.user_id = $1
@@ -130,15 +130,15 @@ func (r *FavoriteRepository) Delete(ctx context.Context, userID domain.UserID, m
 // scanFavorite は1行を Favorite に読む。
 func scanFavorite(row pgx.Row) (domain.Favorite, error) {
 	var (
-		createdAt                                 time.Time
-		menuID, name, kana, genre, diff, descript string
+		createdAt                                       time.Time
+		menuID, name, kana, genre, diff, role, descript string
 	)
 	if err := row.Scan(&createdAt,
-		&menuID, &name, &kana, &genre, &diff, &descript); err != nil {
+		&menuID, &name, &kana, &genre, &diff, &role, &descript); err != nil {
 		return domain.Favorite{}, fmt.Errorf("お気に入りの読み取りに失敗しました: %w", err)
 	}
 
-	menu, err := hydrateMenu(menuID, name, kana, genre, diff, descript)
+	menu, err := hydrateMenu(menuID, name, kana, genre, diff, role, descript)
 	if err != nil {
 		return domain.Favorite{}, err
 	}

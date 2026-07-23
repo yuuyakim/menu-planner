@@ -26,7 +26,17 @@ func NewMenuRepository(pool *pgxpool.Pool) *MenuRepository {
 	return &MenuRepository{pool: pool}
 }
 
-const menuColumns = `id, name, name_kana, genre, difficulty, description`
+const menuColumns = `id, name, name_kana, genre, difficulty, role, description`
+
+// joinedMenuColumns は menus を JOIN して献立を一緒に読むときの列。
+//
+// **列を足したらここも直す。** 履歴・お気に入り・保存した週間献立は
+// それぞれ独自のクエリで menus を JOIN しており、以前は同じ列リストを
+// 3箇所にコピーしていた。role を足したとき menu.go だけ直して
+// 3経路が取り残され、Menu.Role が空のまま返る状態になった。
+// 定数にまとめて、次に列が増えたときに1箇所で済むようにしている。
+// 読み取りは hydrateMenu が受け持つ（順序はこの並びと一致させること）。
+const joinedMenuColumns = `m.id, m.name, m.name_kana, m.genre, m.difficulty, m.role, m.description`
 
 // FindByID はIDで献立を1件取得する。存在しない場合は ErrMenuNotFound を返す。
 func (r *MenuRepository) FindByID(ctx context.Context, id domain.MenuID) (*domain.Menu, error) {
@@ -79,12 +89,15 @@ func (r *MenuRepository) FindByFilter(ctx context.Context, f domain.MenuFilter) 
 
 	// pgx は $1 に nil を渡すと NULL になる。
 	// "$1 IS NULL OR genre = $1" とすることで、条件の有無を1つのSQLで表現する。
-	var genre, difficulty *string
+	var genre, difficulty, role *string
 	if f.Genre != nil {
 		genre = ptrTo(f.Genre.String())
 	}
 	if f.Difficulty != nil {
 		difficulty = ptrTo(f.Difficulty.String())
+	}
+	if f.Role != nil {
+		role = ptrTo(f.Role.String())
 	}
 
 	excludeIDs := make([]string, 0, len(f.ExcludeIDs))
@@ -97,9 +110,10 @@ func (r *MenuRepository) FindByFilter(ctx context.Context, f domain.MenuFilter) 
 		   FROM menus
 		  WHERE ($1::text IS NULL OR genre = $1)
 		    AND ($2::text IS NULL OR difficulty = $2)
-		    AND NOT (id = ANY($3::uuid[]))
+		    AND ($3::text IS NULL OR role = $3)
+		    AND NOT (id = ANY($4::uuid[]))
 		  ORDER BY name`,
-		genre, difficulty, excludeIDs)
+		genre, difficulty, role, excludeIDs)
 	if err != nil {
 		return nil, fmt.Errorf("献立の検索に失敗しました: %w", err)
 	}
@@ -132,9 +146,9 @@ type scanner interface {
 
 func scanMenu(s scanner) (domain.Menu, error) {
 	var (
-		id, name, kana, genre, difficulty, description string
+		id, name, kana, genre, difficulty, role, description string
 	)
-	if err := s.Scan(&id, &name, &kana, &genre, &difficulty, &description); err != nil {
+	if err := s.Scan(&id, &name, &kana, &genre, &difficulty, &role, &description); err != nil {
 		return domain.Menu{}, err
 	}
 
@@ -150,6 +164,10 @@ func scanMenu(s scanner) (domain.Menu, error) {
 	if err != nil {
 		return domain.Menu{}, fmt.Errorf("DBの難易度が不正です: %w", err)
 	}
+	r, err := domain.ParseRole(role)
+	if err != nil {
+		return domain.Menu{}, fmt.Errorf("DBの役割が不正です: %w", err)
+	}
 
 	return domain.Menu{
 		ID:          menuID,
@@ -157,6 +175,7 @@ func scanMenu(s scanner) (domain.Menu, error) {
 		NameKana:    kana,
 		Genre:       g,
 		Difficulty:  d,
+		Role:        r,
 		Description: description,
 	}, nil
 }

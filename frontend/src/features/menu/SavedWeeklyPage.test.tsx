@@ -16,6 +16,7 @@ function menu(n: number): Menu {
     name: `献立${n}`,
     genre: 'japanese',
     difficulty: 'easy',
+    role: 'main',
     description: `説明${n}`,
   }
 }
@@ -121,7 +122,10 @@ describe('保存した週間献立', () => {
 
     await screen.findByRole('heading', { name: '1週間の献立' })
     // 保存に条件は含まれない。無関係な条件で引き直させない。
-    expect(sessionStorage.getItem('menu-planner:weekly.filter')).toBe('{}')
+    // 役割だけは既定の主菜が入る（未指定にすると省略時の解釈がサーバ任せになる）。
+    expect(sessionStorage.getItem('menu-planner:weekly.filter')).toBe(
+      JSON.stringify({ role: 'main' }),
+    )
   })
 
   it('開いた週は本物の週間献立画面でそのまま続けられる', async () => {

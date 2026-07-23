@@ -270,6 +270,7 @@ func TestSavedWeeklyMenus_List_中身の7日分を含めて返す(t *testing.T) 
 			NameKana:    "こんだて",
 			Genre:       domain.GenreJapanese,
 			Difficulty:  domain.DifficultyEasy,
+			Role:        domain.RoleMain,
 			Description: "説明",
 		}})
 	}

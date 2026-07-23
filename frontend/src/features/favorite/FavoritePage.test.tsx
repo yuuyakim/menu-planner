@@ -15,6 +15,7 @@ function item(n: number): FavoriteItem {
       name: `献立${n}`,
       genre: 'japanese',
       difficulty: 'easy',
+      role: 'main',
       description: `説明${n}`,
     },
     createdAt: `2026-07-2${n}T10:00:00Z`,
@@ -149,4 +150,18 @@ describe('お気に入り画面', () => {
 
     expect(await screen.findByRole('alert')).toBeVisible()
   })
+})
+
+// 「すべて」で引けば副菜・汁物もお気に入りにできる（spec.md 2.10）。
+// 一覧で役割が分からないと、詳細を開くまで何の一品か判別できない。
+it('一覧に役割を出す', async () => {
+  const side: FavoriteItem = {
+    ...item(1),
+    menu: { ...item(1).menu, name: 'ポテトサラダ', role: 'side' },
+  }
+  respondFavorites(side)
+  renderWithProviders(<FavoritePage />)
+
+  const row = await screen.findByRole('listitem', { name: 'ポテトサラダ' })
+  expect(within(row).getByText('副菜')).toBeVisible()
 })

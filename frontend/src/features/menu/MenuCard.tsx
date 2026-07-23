@@ -1,4 +1,9 @@
-import { difficultyLabels, genreLabels, type Menu } from '../../api/types'
+import {
+  difficultyLabels,
+  genreLabels,
+  roleLabels,
+  type Menu,
+} from '../../api/types'
 import { FavoriteButton } from '../favorite/FavoriteButton'
 
 type Props = {
@@ -29,7 +34,15 @@ export function MenuCard({ menu, headingLevel = 2 }: Props) {
         >
           {menu.name}
         </Heading>
-        <div className="mt-2 flex gap-2 text-sm">
+        <div className="mt-2 flex flex-wrap gap-2 text-sm">
+          {/* 役割を先頭に置く。「すべて」で引くと主菜以外も混ざるため、
+              まず何の一品なのかが分かるようにする（spec.md 2.10）。
+              **見た目はジャンル・難易度と揃える。** 役割も献立の属性であって
+              状態ではない。kon-leaf/20 はナビの現在地と選択中のラジオに
+              使っている色なので、ここで流用すると「選択されている」と読める。 */}
+          <span className="rounded-full bg-kon-cream px-3 py-0.5 text-kon-ink/80">
+            {roleLabels[menu.role]}
+          </span>
           <span className="rounded-full bg-kon-cream px-3 py-0.5 text-kon-ink/80">
             {genreLabels[menu.genre]}
           </span>
