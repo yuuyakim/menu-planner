@@ -102,3 +102,30 @@ func TestSubscriptionRepository_決済IDを保持する(t *testing.T) {
 	require.Equal(t, "stripe", got.Provider)
 	require.Equal(t, "sub_XYZ", got.ProviderSubscriptionID)
 }
+
+func TestSubscriptionRepository_決済IDが空でも複数ユーザーがUpsertできる(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := repository.NewSubscriptionRepository(pool)
+
+	// Upsert は決済IDが空文字なら NULL に変換して保存する。もしこの変換が退行して
+	// 空文字のまま書き込まれると、部分UNIQUE索引は空文字を同一値とみなすため、
+	// 手動付与できるのはDB全体で1人だけになり、2人目以降のUpsertがunique制約違反で失敗する。
+	u1 := createUser(t, pool, "sub-repo-empty-psid-1@example.com")
+	u2 := createUser(t, pool, "sub-repo-empty-psid-2@example.com")
+
+	require.NoError(t, repo.Upsert(ctx, domain.Subscription{
+		UserID:           u1.ID,
+		Plan:             domain.PlanPremium,
+		Status:           domain.SubscriptionActive,
+		CurrentPeriodEnd: time.Now().Add(time.Hour),
+		Provider:         domain.ProviderManual,
+	}))
+	require.NoError(t, repo.Upsert(ctx, domain.Subscription{
+		UserID:           u2.ID,
+		Plan:             domain.PlanPremium,
+		Status:           domain.SubscriptionActive,
+		CurrentPeriodEnd: time.Now().Add(time.Hour),
+		Provider:         domain.ProviderManual,
+	}))
+}
