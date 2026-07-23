@@ -39,6 +39,9 @@ var intentionallyUnmapped = map[string]string{
 	"service.ErrRecipeCacheMiss":      "キャッシュ不在は障害ではなく通常の制御フロー",
 	"service.ErrSubscriptionNotFound": "加入が無いのは free プランの通常の表現。entitlement service が free の加入に変換するため handler には届かない",
 
+	// 付与の月数の検証はCLIの引数に対して行う。HTTPの経路が無い。
+	"service.ErrInvalidGrantMonths": "CLI専用。リクエスト由来の経路が無い",
+
 	// JWT のクレーム由来。壊れていればセッション不正なので
 	// service が ErrUserNotFound（401）に変換する。
 	"domain.ErrInvalidUserID": "service が ErrUserNotFound に変換する",
