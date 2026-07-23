@@ -31,20 +31,52 @@ func NewSubscriptionService(store SubscriptionStore, now func() time.Time) *Subs
 
 // Grant は利用者に months か月のプレミアムを付与する。
 //
-// 期限は現在時刻から起算する。既存の加入があれば上書きするため、
-// 期限切れや取消済みの利用者にも再付与できる。
+// **有効な加入が残っていれば、その期末から積み増す。** 現在時刻から起算すると、
+// 残期間の長い利用者への再付与が期間の短縮になる（10か月残っている人に
+// 1か月足したつもりが1か月に縮む）。Upsert は同じ行を上書きするので履歴も残らず、
+// 利用者は理由の分からないまま突然 free に落ちる。期限切れ・取消済みの加入は
+// 積み増す残りが無いので、現在時刻から起算する。
 func (s *SubscriptionService) Grant(ctx context.Context, userID domain.UserID, months int) error {
 	if months < 1 {
 		return fmt.Errorf("%w: %d", ErrInvalidGrantMonths, months)
+	}
+
+	now := s.now()
+	base := now
+	sub, err := s.store.Find(ctx, userID)
+	switch {
+	case err == nil:
+		if sub.IsActiveAt(now) {
+			base = sub.CurrentPeriodEnd
+		}
+	case errors.Is(err, ErrSubscriptionNotFound):
+		// 初回付与。base は現在時刻のまま。
+	default:
+		return err
 	}
 
 	return s.store.Upsert(ctx, domain.Subscription{
 		UserID:           userID,
 		Plan:             domain.PlanPremium,
 		Status:           domain.SubscriptionActive,
-		CurrentPeriodEnd: s.now().AddDate(0, months, 0),
+		CurrentPeriodEnd: addMonths(base, months),
 		Provider:         domain.ProviderManual,
 	})
+}
+
+// addMonths は months か月後を返す。翌月に同じ日が無ければ月末に丸める。
+//
+// time.AddDate は 1/31 の1か月後を 3/3 に繰り上げてしまう。「1か月付与」が
+// 32〜34日になるため、月末に付与した利用者だけが得をする。決済を導入すると
+// 同じズレが「課金されていない数日間だけプレミアムが有効」として表に出る。
+func addMonths(t time.Time, months int) time.Time {
+	shifted := t.AddDate(0, months, 0)
+	// 繰り上がったかどうかは「日が変わったか」で分かる（1/31 → 3/3 は 31≠3）。
+	if shifted.Day() != t.Day() {
+		// 繰り上がり先の月初から1日戻せば、意図した月の末日になる。
+		return shifted.AddDate(0, 0, -shifted.Day())
+	}
+	return shifted
 }
 
 // Revoke は加入を即時失効させる。
