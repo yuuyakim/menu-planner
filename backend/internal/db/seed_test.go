@@ -34,25 +34,41 @@ func TestSeedSQL_冪等性のためON_CONFLICTを含む(t *testing.T) {
 		"修正が既存行にも反映されること")
 }
 
-// wantMenuCounts は (ジャンル, 難易度) ごとの期待件数。
+// wantMainCounts は (ジャンル, 難易度) ごとの**主菜**の期待件数。
 //
-// **easy / normal は各40件、elaborate は各10件が最終形**（合計360件）。
+// **easy / normal は各40件、elaborate は各10件**（主菜の合計360件）。
 // 2026-07-22 に「献立が少なすぎる。特に簡単・普通を増やしたい」という要望を受け、
 // 全ての組で10件だったものを easy / normal だけ40件に増やしている。
 // elaborate を据え置くのは、利用者レビューで「高価・入手困難なものが混ざる」と
 // 指摘されており（task.md「利用者レビューからの後続タスク」C）、
 // 日常的に作れる献立の比率を上げたいため。
 //
-// 投入はジャンル単位で分けているため、移行中は 40 と 10 が混在する。
-// 未投入のジャンルには「投入待ち」とコメントを付けている。
-func wantMenuCounts() map[[2]string]int {
+// **2026-07-23 に主菜だけを数えるよう変えた（フェーズ14）。**
+// **元の「各40件」には副菜・汁物が含まれていた。** 役割の列を入れて数え直すと
+// 主菜は 31〜37 件で、40 ではなかった（例: 洋食×簡単は40件中9件が副菜・汁物）。
+// **ここで守りたいのは既定の検索経路（role=main）が枯れないこと**なので、
+// 主菜の実数を表にする。週間献立が7日分を重複なく引けるのはこの件数に依る。
+//
+// 数を増やしたわけではなく、内訳を明らかにしただけ。増減があれば気付けるよう
+// 実数で固定する（下限だけの検査にすると、まとめて消えても通ってしまう）。
+func wantMainCounts() map[[2]string]int {
 	return map[[2]string]int{
-		{"japanese", "easy"}: 40, {"japanese", "normal"}: 40, {"japanese", "elaborate"}: 10,
-		{"western", "easy"}: 40, {"western", "normal"}: 40, {"western", "elaborate"}: 10,
-		{"chinese", "easy"}: 40, {"chinese", "normal"}: 40, {"chinese", "elaborate"}: 10,
-		{"other", "easy"}: 40, {"other", "normal"}: 40, {"other", "elaborate"}: 10,
+		{"japanese", "easy"}: 37, {"japanese", "normal"}: 32, {"japanese", "elaborate"}: 10,
+		{"western", "easy"}: 31, {"western", "normal"}: 36, {"western", "elaborate"}: 10,
+		{"chinese", "easy"}: 32, {"chinese", "normal"}: 35, {"chinese", "elaborate"}: 10,
+		{"other", "easy"}: 36, {"other", "normal"}: 37, {"other", "elaborate"}: 10,
 	}
 }
+
+// minMainPerCell は (ジャンル, 難易度) ごとに確保する主菜の下限。
+//
+// シードの冒頭が掲げる「最低10件」と同じ値。週間献立は7日分を重複なく引くため、
+// ジャンルと難易度を両方指定されても7件は要る。3件の余裕を持たせている。
+//
+// **役割を入れたとき和食×手が込んだ が9件に落ちた**（土瓶蒸しを汁物にしたため）。
+// 主菜を1件補って戻している。実数の表だけだと、この種の目減りが
+// 「表を書き換えれば通る」で見逃されるため、下限も別に検査する。
+const minMainPerCell = 10
 
 func TestSeedSQL_期待件数のINSERTがある(t *testing.T) {
 	t.Parallel()
@@ -60,8 +76,10 @@ func TestSeedSQL_期待件数のINSERTがある(t *testing.T) {
 	sql, err := db.SeedSQL()
 	require.NoError(t, err)
 
+	// 総数は役割ごとの期待値の合計。ジャンル×難易度の表は主菜しか数えないため、
+	// そちらを足しても副菜・汁物の分が抜ける。
 	want := 0
-	for _, n := range wantMenuCounts() {
+	for _, n := range wantRoleCounts() {
 		want += n
 	}
 
@@ -71,30 +89,65 @@ func TestSeedSQL_期待件数のINSERTがある(t *testing.T) {
 	assert.Equal(t, want, got, "献立は%d件であること", want)
 }
 
-func TestSeedSQL_ジャンルと難易度ごとの件数(t *testing.T) {
+func TestSeedSQL_ジャンルと難易度ごとの主菜の件数(t *testing.T) {
 	t.Parallel()
 
 	sql, err := db.SeedSQL()
 	require.NoError(t, err)
 
-	for key, want := range wantMenuCounts() {
+	for key, want := range wantMainCounts() {
 		genre, difficulty := key[0], key[1]
-		// "'japanese', 'easy'" の形で出現する
-		pattern := "'" + genre + "', '" + difficulty + "'"
+		// "'japanese', 'easy', 'main'," の形で出現する
+		pattern := "'" + genre + "', '" + difficulty + "', 'main',"
 		got := strings.Count(sql, pattern)
-		assert.Equal(t, want, got, "%s × %s は%d件であること", genre, difficulty, want)
+		assert.Equal(t, want, got, "%s × %s の主菜は%d件であること", genre, difficulty, want)
+		assert.GreaterOrEqual(t, got, minMainPerCell,
+			"%s × %s の主菜は%d件以上あること（週間献立が7日分を重複なく引けない）",
+			genre, difficulty, minMainPerCell)
+	}
+}
+
+// 副菜・汁物のジャンル単位の下限（spec.md 2.10）。
+//
+// **難易度まで含めた全マスの下限は設けない。** 満たすには副菜・汁物だけで
+// 4ジャンル × 3難易度 × 2役割 × 10 = 240件が要り、手の込んだ副菜の需要も薄い。
+// 難易度で絞ったときの枯渇は週間献立の緩和ルール（spec.md 2.2）で吸収する。
+const (
+	minSidePerGenre = 10
+	minSoupPerGenre = 5
+)
+
+func TestSeedSQL_ジャンルごとに副菜と汁物が足りている(t *testing.T) {
+	t.Parallel()
+
+	sql, err := db.SeedSQL()
+	require.NoError(t, err)
+
+	for _, genre := range []string{"japanese", "western", "chinese", "other"} {
+		for _, tt := range []struct {
+			role string
+			min  int
+		}{
+			{"side", minSidePerGenre},
+			{"soup", minSoupPerGenre},
+		} {
+			got := 0
+			for _, d := range []string{"easy", "normal", "elaborate"} {
+				got += strings.Count(sql, "'"+genre+"', '"+d+"', '"+tt.role+"',")
+			}
+			assert.GreaterOrEqual(t, got, tt.min,
+				"%s の %s は%d件以上あること（絞ると枯れて同じ献立が繰り返し出る）",
+				genre, tt.role, tt.min)
+		}
 	}
 }
 
 // wantRoleCounts は役割ごとの期待件数（spec.md 2.10）。
 //
-// **14-B 時点の値。既存360件を分類しただけで、拡充はしていない。**
-// 副菜31件・汁物15件は全体の13%で、ジャンル×難易度で絞ると1桁になる。
-// この状態で side を選べるようにしても同じ献立が繰り返し出るため、
-// 14-C で side を各ジャンル10件以上・soup を各ジャンル5件以上まで増やす。
-// **増やしたらこの表も更新すること。**
+// **14-C で副菜・汁物を +19件した後の値**（side 30→42 / soup 15→22）。
+// 主菜の +1 は和食×手が込んだ の穴埋め（minMainPerCell を参照）。
 func wantRoleCounts() map[string]int {
-	return map[string]int{"main": 315, "side": 30, "soup": 15}
+	return map[string]int{"main": 316, "side": 42, "soup": 22}
 }
 
 func TestSeedSQL_役割ごとの件数(t *testing.T) {
