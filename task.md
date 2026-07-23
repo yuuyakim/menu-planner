@@ -1767,8 +1767,10 @@ Aのお気に入りが表示されたままになる（履歴も同じ）。
       役割の付け替えが ON CONFLICT で既存行に反映される
 - [x] 🟢 マイグレーション `000009_add_menu_role`（`NOT NULL DEFAULT 'main'` + CHECK + 索引）
 - [x] 🟢 `domain.Role`、`Menu.Role`、repository の scan / columns
+- [x] 🔴 テスト: 履歴・お気に入り・保存した週間献立の各経路で `Role` が復元される
+- [x] 🟢 `joinedMenuColumns` に集約（履歴・お気に入り・保存した週間献立の3経路）
 - [x] 🟢 `ErrInvalidRole` の problem 写像（400 `invalid-role`）
-- [x] 🔧 既存360件への役割付与（seeds/menus.sql）。**main 314 / side 31 / soup 15**
+- [x] 🔧 既存360件への役割付与（seeds/menus.sql）。**main 315 / side 30 / soup 15**
 
 > **`ParseRole` は `all` を弾く。** APIの絞り込みで使う `all` は「絞り込まない」ことを
 > 示す値で、献立が持つ役割ではない（spec.md 5.1）。ここで通すと CHECK 制約と食い違う。
@@ -1778,6 +1780,14 @@ Aのお気に入りが表示されたままになる（履歴も同じ）。
 
 > **`role` を ON CONFLICT の更新対象に含めた。** 分類は主観が入り後から見直す前提なので、
 > 含めないとシード済みのDB（本番）では初回の分類のまま固定されてしまう。
+
+> **JOIN 経路3つが取り残されていた（コードレビューで発覚）。** 履歴・お気に入り・
+> 保存した週間献立は `menus` を独自に JOIN しており、献立の列リストを**3箇所にコピー**していた。
+> `repository/menu.go` だけ `role` を足したため、この3経路は `Menu.Role` が空のまま返っていた。
+> **静かに通っていた**理由は3つ: ①`menuDTO` がまだ `role` を出さない ②読み取り経路で
+> `Menu.Validate()` を呼ばない ③SELECT と Scan の列数は揃うのでテストが落ちない。
+> `joinedMenuColumns` に集約し、3経路それぞれに `Role` の検証を足した。
+> 検証は `side` で行う（`main` だと DBの DEFAULT と区別が付かない）。
 
 > **写像漏れ検査が `ErrInvalidRole` を捕まえた。** #129 で入れた仕組みで、
 > **同型の見落としはこれで3度目**（フェーズ12の保存ID・13の食材ID・今回の役割）。

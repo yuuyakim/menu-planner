@@ -28,6 +28,16 @@ func NewMenuRepository(pool *pgxpool.Pool) *MenuRepository {
 
 const menuColumns = `id, name, name_kana, genre, difficulty, role, description`
 
+// joinedMenuColumns は menus を JOIN して献立を一緒に読むときの列。
+//
+// **列を足したらここも直す。** 履歴・お気に入り・保存した週間献立は
+// それぞれ独自のクエリで menus を JOIN しており、以前は同じ列リストを
+// 3箇所にコピーしていた。role を足したとき menu.go だけ直して
+// 3経路が取り残され、Menu.Role が空のまま返る状態になった。
+// 定数にまとめて、次に列が増えたときに1箇所で済むようにしている。
+// 読み取りは hydrateMenu が受け持つ（順序はこの並びと一致させること）。
+const joinedMenuColumns = `m.id, m.name, m.name_kana, m.genre, m.difficulty, m.role, m.description`
+
 // FindByID はIDで献立を1件取得する。存在しない場合は ErrMenuNotFound を返す。
 func (r *MenuRepository) FindByID(ctx context.Context, id domain.MenuID) (*domain.Menu, error) {
 	row := r.pool.QueryRow(ctx,

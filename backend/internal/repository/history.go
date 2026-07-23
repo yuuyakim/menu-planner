@@ -68,7 +68,7 @@ func (r *HistoryRepository) RecordWithLimit(ctx context.Context, userID domain.U
 func (r *HistoryRepository) List(ctx context.Context, userID domain.UserID) ([]domain.HistoryEntry, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT h.id, h.search_mode, h.searched_at,
-		        m.id, m.name, m.name_kana, m.genre, m.difficulty, m.description
+		        `+joinedMenuColumns+`
 		   FROM search_histories h
 		   JOIN menus m ON m.id = h.menu_id
 		  WHERE h.user_id = $1
@@ -162,11 +162,11 @@ func (r *HistoryRepository) DeleteAll(ctx context.Context, userID domain.UserID)
 func scanHistoryEntry(row pgx.Row) (domain.HistoryEntry, error) {
 	var (
 		histID, mode                              string
-		searchedAt                                time.Time
-		menuID, name, kana, genre, diff, descript string
+		searchedAt                                      time.Time
+		menuID, name, kana, genre, diff, role, descript string
 	)
 	if err := row.Scan(&histID, &mode, &searchedAt,
-		&menuID, &name, &kana, &genre, &diff, &descript); err != nil {
+		&menuID, &name, &kana, &genre, &diff, &role, &descript); err != nil {
 		return domain.HistoryEntry{}, fmt.Errorf("履歴の読み取りに失敗しました: %w", err)
 	}
 
@@ -178,7 +178,7 @@ func scanHistoryEntry(row pgx.Row) (domain.HistoryEntry, error) {
 	if err != nil {
 		return domain.HistoryEntry{}, fmt.Errorf("DBの検索種別が不正です: %w", err)
 	}
-	menu, err := hydrateMenu(menuID, name, kana, genre, diff, descript)
+	menu, err := hydrateMenu(menuID, name, kana, genre, diff, role, descript)
 	if err != nil {
 		return domain.HistoryEntry{}, err
 	}
@@ -186,7 +186,8 @@ func scanHistoryEntry(row pgx.Row) (domain.HistoryEntry, error) {
 }
 
 // hydrateMenu は献立の各カラムからドメインの Menu を組み立てる。
-func hydrateMenu(id, name, kana, genre, diff, descript string) (domain.Menu, error) {
+// 引数の並びは joinedMenuColumns と一致させること。
+func hydrateMenu(id, name, kana, genre, diff, role, descript string) (domain.Menu, error) {
 	menuID, err := domain.ParseMenuID(id)
 	if err != nil {
 		return domain.Menu{}, fmt.Errorf("DBの献立IDが不正です: %w", err)
@@ -199,7 +200,14 @@ func hydrateMenu(id, name, kana, genre, diff, descript string) (domain.Menu, err
 	if err != nil {
 		return domain.Menu{}, fmt.Errorf("DBの難易度が不正です: %w", err)
 	}
-	return domain.Menu{ID: menuID, Name: name, NameKana: kana, Genre: g, Difficulty: d, Description: descript}, nil
+	r, err := domain.ParseRole(role)
+	if err != nil {
+		return domain.Menu{}, fmt.Errorf("DBの役割が不正です: %w", err)
+	}
+	return domain.Menu{
+		ID: menuID, Name: name, NameKana: kana,
+		Genre: g, Difficulty: d, Role: r, Description: descript,
+	}, nil
 }
 
 // RecordManyWithLimit は複数の献立を一括で記録し、最新 limit 件に保つ。
