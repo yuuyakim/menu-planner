@@ -14,6 +14,7 @@ const menuA: Menu = {
   name: 'Aの親子丼',
   genre: 'japanese',
   difficulty: 'easy',
+  role: 'main',
   description: 'アカウントAのデータ。',
 }
 const menuB: Menu = {
@@ -21,6 +22,7 @@ const menuB: Menu = {
   name: 'Bのカレー',
   genre: 'western',
   difficulty: 'easy',
+  role: 'main',
   description: 'アカウントBのデータ。',
 }
 

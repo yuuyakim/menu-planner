@@ -16,6 +16,7 @@ function menu(n: number): Menu {
     name: `献立${n}`,
     genre: 'japanese',
     difficulty: 'easy',
+    role: 'main',
     description: `説明${n}`,
   }
 }
