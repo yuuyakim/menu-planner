@@ -66,6 +66,7 @@ func validMenu() domain.Menu {
 		NameKana:    "おやこどん",
 		Genre:       domain.GenreJapanese,
 		Difficulty:  domain.DifficultyEasy,
+		Role:        domain.RoleMain,
 		Description: "鶏肉と卵を甘辛い出汁でとじた定番の丼もの",
 	}
 }
@@ -88,6 +89,8 @@ func TestMenu_Validate_必須項目の欠落(t *testing.T) {
 		"ジャンルが空":         func(m *domain.Menu) { m.Genre = "" },
 		"難易度が不正":         func(m *domain.Menu) { m.Difficulty = domain.Difficulty("hard") },
 		"難易度が空":          func(m *domain.Menu) { m.Difficulty = "" },
+		"役割が不正":          func(m *domain.Menu) { m.Role = domain.Role("dessert") },
+		"役割が空":           func(m *domain.Menu) { m.Role = "" },
 		"説明が空":           func(m *domain.Menu) { m.Description = "" },
 		"名前が長すぎる(101文字)": func(m *domain.Menu) { m.Name = strings.Repeat("あ", 101) },
 	}

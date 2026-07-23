@@ -43,6 +43,7 @@ var problemMapping = []struct {
 }{
 	{domain.ErrInvalidGenre, http.StatusBadRequest, "invalid-genre", "不正なジャンルです"},
 	{domain.ErrInvalidDifficulty, http.StatusBadRequest, "invalid-difficulty", "不正な難易度です"},
+	{domain.ErrInvalidRole, http.StatusBadRequest, "invalid-role", "不正な役割です"},
 	{domain.ErrInvalidMenuID, http.StatusBadRequest, "invalid-menu-id", "不正な献立IDです"},
 	{domain.ErrInvalidHistoryID, http.StatusBadRequest, "invalid-history-id", "不正な履歴IDです"},
 	{domain.ErrInvalidSavedWeeklyMenuID, http.StatusBadRequest, "invalid-saved-weekly-menu-id", "不正な保存IDです"},

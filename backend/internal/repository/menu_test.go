@@ -18,18 +18,34 @@ func ptr[T any](v T) *T { return &v }
 func insertMenu(t *testing.T, pool *pgxpool.Pool, name string, g domain.Genre, d domain.Difficulty) domain.Menu {
 	t.Helper()
 
+	return insertMenuWithRole(t, pool, name, g, d, domain.RoleMain)
+}
+
+// insertMenuWithRole は役割を指定して献立を1件入れる。
+//
+// **role は明示して INSERT する。** DBの DEFAULT 任せにすると、
+// 戻り値の domain.Menu だけ Role が空になり、読み取り結果と突き合わせる
+// テストが「両方とも空」で通ってしまう。
+func insertMenuWithRole(
+	t *testing.T, pool *pgxpool.Pool,
+	name string, g domain.Genre, d domain.Difficulty, r domain.Role,
+) domain.Menu {
+	t.Helper()
+
 	m := domain.Menu{
 		ID:          domain.NewMenuID(),
 		Name:        name,
 		NameKana:    name + "かな",
 		Genre:       g,
 		Difficulty:  d,
+		Role:        r,
 		Description: name + "の説明",
 	}
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO menus (id, name, name_kana, genre, difficulty, description)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		m.ID.String(), m.Name, m.NameKana, m.Genre.String(), m.Difficulty.String(), m.Description)
+		`INSERT INTO menus (id, name, name_kana, genre, difficulty, role, description)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		m.ID.String(), m.Name, m.NameKana, m.Genre.String(), m.Difficulty.String(),
+		m.Role.String(), m.Description)
 	require.NoError(t, err)
 	return m
 }

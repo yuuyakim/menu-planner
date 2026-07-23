@@ -92,6 +92,10 @@ func TestFavoriteRepository_List_NewestFirst(t *testing.T) {
 	require.Equal(t, "カレー", got[0].Menu.Name, "新しい順に返るべき")
 	require.Equal(t, "親子丼", got[1].Menu.Name)
 	require.False(t, got[0].CreatedAt.IsZero())
+	// 役割まで復元されること。menus を JOIN する経路は献立の列を
+	// 独自に並べており、列を足したときに取り残されやすい。
+	require.Equal(t, newer.Role, got[0].Menu.Role)
+	require.True(t, got[0].Menu.Role.Valid(), "役割が空のまま返っていないこと")
 }
 
 func TestFavoriteRepository_List_OnlyOwn(t *testing.T) {
