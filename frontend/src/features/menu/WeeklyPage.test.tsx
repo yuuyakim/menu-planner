@@ -169,7 +169,7 @@ describe('週間献立', () => {
     await user.click(create())
 
     await screen.findAllByRole('listitem')
-    expect(bodies[0]).toEqual({ genre: 'chinese', difficulty: undefined })
+    expect(bodies[0]).toEqual({ genre: 'chinese', difficulty: undefined, role: 'main' })
   })
 
   it('作成に失敗したらメッセージを出す', async () => {

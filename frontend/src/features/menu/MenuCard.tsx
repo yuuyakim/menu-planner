@@ -1,4 +1,9 @@
-import { difficultyLabels, genreLabels, type Menu } from '../../api/types'
+import {
+  difficultyLabels,
+  genreLabels,
+  roleLabels,
+  type Menu,
+} from '../../api/types'
 import { FavoriteButton } from '../favorite/FavoriteButton'
 
 type Props = {
@@ -29,7 +34,12 @@ export function MenuCard({ menu, headingLevel = 2 }: Props) {
         >
           {menu.name}
         </Heading>
-        <div className="mt-2 flex gap-2 text-sm">
+        <div className="mt-2 flex flex-wrap gap-2 text-sm">
+          {/* 役割を先頭に置く。「すべて」で引くと主菜以外も混ざるため、
+              まず何の一品なのかが分かるようにする（spec.md 2.10）。 */}
+          <span className="rounded-full bg-kon-leaf/20 px-3 py-0.5 font-medium text-kon-ink">
+            {roleLabels[menu.role]}
+          </span>
           <span className="rounded-full bg-kon-cream px-3 py-0.5 text-kon-ink/80">
             {genreLabels[menu.genre]}
           </span>
