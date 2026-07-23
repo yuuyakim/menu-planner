@@ -197,6 +197,32 @@ func (r *UserRepository) FindByID(ctx context.Context, id domain.UserID) (domain
 	return domain.User{ID: userID, Email: addr, DisplayName: displayName}, nil
 }
 
+// FindByEmail はメールでユーザーを取得する。
+// 存在しない場合は service.ErrUserNotFound を返す。
+func (r *UserRepository) FindByEmail(ctx context.Context, email domain.Email) (domain.User, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT id, email, display_name FROM users WHERE email = $1`, email.String())
+
+	var rawID, mail, displayName string
+	if err := row.Scan(&rawID, &mail, &displayName); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, service.ErrUserNotFound
+		}
+		return domain.User{}, fmt.Errorf("ユーザーの取得に失敗しました: %w", err)
+	}
+
+	userID, err := domain.ParseUserID(rawID)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("DBのユーザーIDが不正です: %w", err)
+	}
+	addr, err := domain.NewEmail(mail)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("DBのメールが不正です: %w", err)
+	}
+
+	return domain.User{ID: userID, Email: addr, DisplayName: displayName}, nil
+}
+
 // FindPasswordCredential はメールに対応するパスワード認証を返す。
 // ユーザーが居ない、または Google 認証のみでパスワードを持たない場合は
 // service.ErrCredentialNotFound を返す（JOIN が1行も返さない）。

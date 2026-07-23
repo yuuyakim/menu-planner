@@ -139,6 +139,13 @@ type UserRepository interface {
 	// FindByID はIDでユーザーを取得する。存在しない場合は ErrUserNotFound を返す。
 	FindByID(ctx context.Context, id domain.UserID) (domain.User, error)
 
+	// FindByEmail はメールでユーザーを取得する。存在しない場合は ErrUserNotFound を返す。
+	//
+	// FindPasswordCredential は auth_identities を内部結合するため Google 認証のみの
+	// 利用者を引けない。認証方式によらずユーザーを特定したい用途（CLI の付与対象の
+	// 解決など）ではこちらを使う。
+	FindByEmail(ctx context.Context, email domain.Email) (domain.User, error)
+
 	// FindOrCreateGoogleUser は Google 認証のユーザーを取得または作成する。
 	//  1. (provider=google, provider_uid=sub) が既にあればそのユーザー。
 	//  2. 無ければ email で既存ユーザーを探し、あれば google の identity を足す
