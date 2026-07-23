@@ -1,8 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
   <!-- マスコット「こんたてん」の顔。タブの 16px でも形が残るよう、
        輪郭を太めにし、要素はコック帽・葉っぱ・顔だけに絞っている。
-       色は src/index.css の --color-kon-* と同じ値。ただし口だけは
-       トークンに無い色で、キャラクターシートの口の色から採っている。 -->
+       色は src/index.css のカラートークン（kon-leaf, kon-cream など）と
+       同じ値。ただし口だけはトークンに無い色で、キャラクターシートの
+       口の色から採っている。
+       XMLコメントに "-" を2つ連ねると単体のSVGとしてパースに失敗するため、
+       トークン名は変数名そのままでは書かない。 -->
   <rect width="32" height="32" rx="7" fill="#abbc69"/>
   <g transform="translate(1.6 1.6) scale(.9)">
     <g stroke="#724e2d" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round">
