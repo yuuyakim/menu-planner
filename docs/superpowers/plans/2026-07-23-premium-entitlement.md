@@ -20,6 +20,7 @@
 - **ローカルの `go test` に `-race` は付けない**（cgo=gcc が必要。CI の Linux では有効）。
 - **`api/openapi.yaml` が API 仕様の正**。変更したら `make gen-api` で TS 型を再生成してコミットする（CIが差分で落とす）。
 - **エラーはインターフェースの持ち主である `service` 側で定義**し、`repository` がそれを返す（`ports.go` 冒頭の方針）。
+- **新しく `domain` / `service` / `auth` に公開エラーを足したら、`backend/internal/handler/problem_coverage_test.go` に対応が要る。** このテストは、公開エラーが `problem.go` の写像表に載っているか、`intentionallyUnmapped` に**理由つきで**書かれているかのどちらかであることを強制する。どちらでもないとテストが落ちる。HTTP応答にしないエラー（内部で変換される、DBの値の解釈失敗、CLI専用など）は除外リスト側に書く。
 - **PR を出す前に `/code-review` を必ず走らせる**。指摘はその場で直す。
 - **コメントは既存コードに合わせて「なぜそうしたか」を書く**。何をしているかの逐語訳は書かない。
 
@@ -1598,10 +1599,23 @@ func (s *SubscriptionService) Revoke(ctx context.Context, userID domain.UserID) 
 Run: `cd backend && go test ./internal/service/ -run TestSubscriptionService -v`
 Expected: PASS（6テスト）
 
+- [ ] **Step 4.5: 写像漏れ検査に除外を足す**
+
+`service.ErrInvalidGrantMonths` は新しい公開エラーなので、`problem_coverage_test.go` の
+`intentionallyUnmapped` に理由つきで追記しないとテストが落ちる（Global Constraints 参照）。
+
+```go
+	// 付与の月数の検証はCLIの引数に対して行う。HTTPの経路が無い。
+	"service.ErrInvalidGrantMonths": "CLI専用。リクエスト由来の経路が無い",
+```
+
+Run: `cd backend && go test ./internal/handler/ -run TestProblemMapping -v`
+Expected: PASS（2テスト）
+
 - [ ] **Step 5: コミット**
 
 ```bash
-git add backend/internal/service/subscription.go backend/internal/service/subscription_test.go
+git add backend/internal/service/subscription.go backend/internal/service/subscription_test.go         backend/internal/handler/problem_coverage_test.go
 git commit -m "feat: 加入の付与と取消をサービスに集約する"
 ```
 
