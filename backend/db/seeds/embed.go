@@ -3,7 +3,7 @@ package seeds
 
 import _ "embed"
 
-// MenusSQL は献立マスタ360件の INSERT 文。
+// MenusSQL は献立マスタ380件の INSERT 文。
 // name の UNIQUE 制約と ON CONFLICT DO NOTHING により再実行しても重複しない。
 //
 //go:embed menus.sql

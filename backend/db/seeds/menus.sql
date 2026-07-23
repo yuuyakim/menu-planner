@@ -441,7 +441,7 @@ INSERT INTO menus (id, name, name_kana, genre, difficulty, role, description) VA
 (gen_random_uuid(), 'きのこのソテー',   'きのこのそてー',     'western', 'normal', 'side', '数種のきのこをバターとにんにくで炒める'),
 
 -- 中華（side +3）
-(gen_random_uuid(), '中華風冷奴',      'ちゅうかひややっこ',  'chinese', 'easy', 'side', '豆腐に薬味とザーサイをのせる。火を使わない'),
+(gen_random_uuid(), '中華風冷奴',      'ちゅうかふうひややっこ', 'chinese', 'easy', 'side', '豆腐に薬味とザーサイをのせる。火を使わない'),
 (gen_random_uuid(), 'もやしの中華和え',  'もやしのちゅうかあえ', 'chinese', 'easy', 'side', '茹でたもやしを香味だれで和える。安く量が作れる'),
 (gen_random_uuid(), '干し椎茸とチンゲン菜の煮浸し', 'ほししいたけとちんげんさいのにびたし', 'chinese', 'normal', 'side', '戻し汁ごと煮含める。干し椎茸の戻しに時間がいる'),
 
