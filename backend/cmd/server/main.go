@@ -112,8 +112,11 @@ func run() error {
 	favoriteSvc := service.NewFavoriteService(favoriteRepo)
 	favoriteHandler := handler.NewFavoriteHandler(favoriteSvc, tokens)
 
+	subscriptionRepo := repository.NewSubscriptionRepository(pool)
+	entitlementSvc := service.NewEntitlementService(subscriptionRepo, time.Now)
+
 	savedWeeklyRepo := repository.NewSavedWeeklyMenuRepository(pool)
-	savedWeeklySvc := service.NewSavedWeeklyMenuService(savedWeeklyRepo)
+	savedWeeklySvc := service.NewSavedWeeklyMenuService(savedWeeklyRepo, entitlementSvc)
 	savedWeeklyHandler := handler.NewSavedWeeklyMenuHandler(savedWeeklySvc, tokens)
 
 	ingredientRepo := repository.NewIngredientRepository(pool)

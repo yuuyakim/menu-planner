@@ -189,3 +189,14 @@ type SubscriptionStore interface {
 	// 取消は行の削除ではなく status の遷移で表すため、Delete は設けない。
 	Upsert(ctx context.Context, sub domain.Subscription) error
 }
+
+// Entitlements は利用者が使える範囲の問い合わせを抽象化する。
+// 実装は同じ service パッケージの EntitlementService。
+//
+// インターフェースを挟むのは、上限を使う側（保存や履歴）が
+// 加入の保存方法を知らずに済むようにするため。
+type Entitlements interface {
+	// For は利用者のエンタイトルメントを返す。
+	// userID が空（未認証）でもエラーにせず free を返す。
+	For(ctx context.Context, userID string) (domain.Entitlement, error)
+}

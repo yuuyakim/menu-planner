@@ -76,9 +76,12 @@ var problemMapping = []struct {
 	{service.ErrEmailTaken, http.StatusConflict, "email-taken", "メールアドレスは既に登録されています"},
 	// お気に入りの重複も同様に 409。既にある状態との競合であって入力の誤りではない。
 	{service.ErrFavoriteExists, http.StatusConflict, "favorite-exists", "この献立は既にお気に入りに登録されています"},
-	// 保存した週間献立が上限（10件）に達している。履歴のように押し出さず断るため、
+	// 保存した週間献立が上限に達している。履歴のように押し出さず断るため、
 	// 入力の誤り（400）ではなく今の状態との競合（409）にする（spec.md 2.8）。
-	{service.ErrSavedWeeklyMenuLimitReached, http.StatusConflict, "saved-weekly-menu-limit-reached", "保存できる週間献立は10件までです"},
+	//
+	// 上限はプランによって変わるため title に件数を書かない。
+	// 実際の件数は Detail（err.Error()）が持つ。
+	{service.ErrSavedWeeklyMenuLimitReached, http.StatusConflict, "saved-weekly-menu-limit-reached", "保存できる週間献立の上限に達しました"},
 	// 認証失敗。存在しないメールもパスワード違いも同じ 401 に丸める。
 	{service.ErrInvalidCredentials, http.StatusUnauthorized, "invalid-credentials", "メールアドレスまたはパスワードが正しくありません"},
 	// トークンが無効（欠落・期限切れ・改竄・種別違い）。内訳は明かさず一律 401。
