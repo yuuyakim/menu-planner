@@ -161,7 +161,7 @@ func (r *HistoryRepository) DeleteAll(ctx context.Context, userID domain.UserID)
 // scanHistoryEntry は1行を HistoryEntry に読む。
 func scanHistoryEntry(row pgx.Row) (domain.HistoryEntry, error) {
 	var (
-		histID, mode                              string
+		histID, mode                                    string
 		searchedAt                                      time.Time
 		menuID, name, kana, genre, diff, role, descript string
 	)

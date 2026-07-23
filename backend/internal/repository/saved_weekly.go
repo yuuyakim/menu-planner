@@ -172,7 +172,7 @@ func (r *SavedWeeklyMenuRepository) fillDays(
 // scanSavedDay は1行を「どの週の何日目のどの献立か」に読む。
 func scanSavedDay(row pgx.Row) (string, int, domain.Menu, error) {
 	var (
-		weekID                                    string
+		weekID                                          string
 		day                                             int16
 		menuID, name, kana, genre, diff, role, descript string
 	)
