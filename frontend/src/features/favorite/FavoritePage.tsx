@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 
 import type { FavoriteItem } from '../../api/types'
-import { difficultyLabels, genreLabels } from '../../api/types'
+import { difficultyLabels, genreLabels, roleLabels } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
@@ -78,7 +78,12 @@ function FavoriteRow({ favorite, onRemove, isRemoving }: RowProps) {
     >
       <div className="min-w-0 flex-1">
         <p className="font-medium text-kon-ink">{menu.name}</p>
-        <p className="mt-1 flex gap-2 text-sm text-kon-ink/60">
+        <p className="mt-1 flex flex-wrap gap-2 text-sm text-kon-ink/60">
+          {/* 「すべて」で引けば副菜・汁物もお気に入りにできる（spec.md 2.10）。
+              一覧で役割が分からないと、詳細を開くまで何の一品か判別できない。 */}
+          <span className="rounded-full bg-kon-cream px-2 py-0.5">
+            {roleLabels[menu.role]}
+          </span>
           <span className="rounded-full bg-kon-cream px-2 py-0.5">
             {genreLabels[menu.genre]}
           </span>
