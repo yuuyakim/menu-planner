@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/auth"
+	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
 )
 
@@ -24,7 +25,8 @@ func doGoogleStart(t *testing.T, google *auth.GoogleOAuth) *httptest.ResponseRec
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(&fakeAuthService{}, tokens, google, testFrontendURL).RegisterRoutes(e)
+	handler.NewAuthHandler(&fakeAuthService{}, tokens, google, testFrontendURL,
+		fakeEntitlements{plan: domain.PlanFree}).RegisterRoutes(e)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google", nil)
 	rec := httptest.NewRecorder()

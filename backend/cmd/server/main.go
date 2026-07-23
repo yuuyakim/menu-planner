@@ -102,7 +102,13 @@ func run() error {
 
 	userRepo := repository.NewUserRepository(pool)
 	authSvc := service.NewAuthService(userRepo, auth.Hasher{})
-	authHandler := handler.NewAuthHandler(authSvc, tokens, googleOAuth, frontendOrigin)
+
+	// entitlementSvc は authHandler（/auth/me がプランを返す）と
+	// savedWeeklySvc（保存上限のチェック）の両方が使うため、両者より前に定義する。
+	subscriptionRepo := repository.NewSubscriptionRepository(pool)
+	entitlementSvc := service.NewEntitlementService(subscriptionRepo, time.Now)
+
+	authHandler := handler.NewAuthHandler(authSvc, tokens, googleOAuth, frontendOrigin, entitlementSvc)
 
 	historyRepo := repository.NewHistoryRepository(pool)
 	historySvc := service.NewHistoryService(historyRepo)
@@ -111,9 +117,6 @@ func run() error {
 	favoriteRepo := repository.NewFavoriteRepository(pool)
 	favoriteSvc := service.NewFavoriteService(favoriteRepo)
 	favoriteHandler := handler.NewFavoriteHandler(favoriteSvc, tokens)
-
-	subscriptionRepo := repository.NewSubscriptionRepository(pool)
-	entitlementSvc := service.NewEntitlementService(subscriptionRepo, time.Now)
 
 	savedWeeklyRepo := repository.NewSavedWeeklyMenuRepository(pool)
 	savedWeeklySvc := service.NewSavedWeeklyMenuService(savedWeeklyRepo, entitlementSvc)

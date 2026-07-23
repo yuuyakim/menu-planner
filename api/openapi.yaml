@@ -917,7 +917,7 @@ components:
 
     User:
       type: object
-      required: [id, email, displayName]
+      required: [id, email, displayName, plan]
       properties:
         id:
           type: string
@@ -927,6 +927,12 @@ components:
           format: email
         displayName:
           type: string
+        plan:
+          type: string
+          enum: [free, premium]
+          description: |
+            契約プラン。上限そのものは返さない。フロントが件数を持つと
+            サーバとの二重管理になるため、上限に達したことは 409 の本文で伝える。
 
     UserResponse:
       type: object

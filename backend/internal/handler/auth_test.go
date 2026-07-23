@@ -113,15 +113,31 @@ func testGoogleOAuth() *auth.GoogleOAuth {
 	)
 }
 
+// fakeEntitlements は常に同じプランを返す。
+type fakeEntitlements struct{ plan domain.Plan }
+
+func (f fakeEntitlements) For(context.Context, string) (domain.Entitlement, error) {
+	return domain.NewEntitlement(f.plan), nil
+}
+
 // newAuthApp は AuthHandler を登録した echo アプリと、そのトークン発行器を返す。
 func newAuthApp(t *testing.T, svc handler.AuthUseCase, opts ...auth.JWTOption) (*echo.Echo, *auth.JWT) {
+	t.Helper()
+	return newAuthAppWithPlan(t, svc, domain.PlanFree, opts...)
+}
+
+// newAuthAppWithPlan はプランを指定してアプリを組む。
+func newAuthAppWithPlan(
+	t *testing.T, svc handler.AuthUseCase, plan domain.Plan, opts ...auth.JWTOption,
+) (*echo.Echo, *auth.JWT) {
 	t.Helper()
 	tokens, err := auth.NewJWT([]byte(authTestSecret), opts...)
 	require.NoError(t, err)
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(svc, tokens, testGoogleOAuth(), testFrontendURL).RegisterRoutes(e)
+	handler.NewAuthHandler(svc, tokens, testGoogleOAuth(), testFrontendURL,
+		fakeEntitlements{plan: plan}).RegisterRoutes(e)
 	return e, tokens
 }
 
@@ -462,6 +478,38 @@ func TestMe_InvalidTokenUnauthorized(t *testing.T) {
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Zero(t, svc.currentCalls)
+}
+
+func TestMe_プランを返す(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		plan domain.Plan
+		want string
+	}{
+		{"free", domain.PlanFree, `"plan":"free"`},
+		{"premium", domain.PlanPremium, `"plan":"premium"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			user := newTestUser(t, "plan@example.com")
+			svc := &fakeAuthService{currentUser: user}
+			e, tokens := newAuthAppWithPlan(t, svc, tt.plan)
+
+			access, err := tokens.Issue(user.ID.String())
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+			req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			assert.Contains(t, rec.Body.String(), tt.want)
+		})
+	}
 }
 
 func TestMe_RefreshTokenRejected(t *testing.T) {

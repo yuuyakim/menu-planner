@@ -1251,6 +1251,12 @@ export interface components {
             /** Format: email */
             email: string;
             displayName: string;
+            /**
+             * @description 契約プラン。上限そのものは返さない。フロントが件数を持つと
+             *     サーバとの二重管理になるため、上限に達したことは 409 の本文で伝える。
+             * @enum {string}
+             */
+            plan: "free" | "premium";
         };
         UserResponse: {
             user: components["schemas"]["User"];
