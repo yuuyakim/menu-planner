@@ -139,6 +139,13 @@ type UserRepository interface {
 	// FindByID はIDでユーザーを取得する。存在しない場合は ErrUserNotFound を返す。
 	FindByID(ctx context.Context, id domain.UserID) (domain.User, error)
 
+	// FindByEmail はメールでユーザーを取得する。存在しない場合は ErrUserNotFound を返す。
+	//
+	// FindPasswordCredential は auth_identities を内部結合するため Google 認証のみの
+	// 利用者を引けない。認証方式によらずユーザーを特定したい用途（CLI の付与対象の
+	// 解決など）ではこちらを使う。
+	FindByEmail(ctx context.Context, email domain.Email) (domain.User, error)
+
 	// FindOrCreateGoogleUser は Google 認証のユーザーを取得または作成する。
 	//  1. (provider=google, provider_uid=sub) が既にあればそのユーザー。
 	//  2. 無ければ email で既存ユーザーを探し、あれば google の identity を足す
@@ -164,4 +171,32 @@ type PasswordHasher interface {
 type Randomizer interface {
 	// Intn は [0, n) の整数を返す。n が 1 未満の場合はエラーを返す。
 	Intn(n int) (int, error)
+}
+
+// ErrSubscriptionNotFound は利用者に加入が無いことを表す。
+//
+// 障害ではなく「free である」という通常の結果を意味する。
+// インターフェースの持ち主である service 側で定義し、repository がこれを返す。
+var ErrSubscriptionNotFound = errors.New("加入が見つかりません")
+
+// SubscriptionStore は有料プランの加入の永続化を抽象化する。
+// 実装は internal/repository にある。
+type SubscriptionStore interface {
+	// Find は利用者の加入を返す。該当が無い場合は ErrSubscriptionNotFound を返す。
+	Find(ctx context.Context, userID domain.UserID) (domain.Subscription, error)
+
+	// Upsert は加入を保存する。既にあれば上書きする。
+	// 取消は行の削除ではなく status の遷移で表すため、Delete は設けない。
+	Upsert(ctx context.Context, sub domain.Subscription) error
+}
+
+// Entitlements は利用者が使える範囲の問い合わせを抽象化する。
+// 実装は同じ service パッケージの EntitlementService。
+//
+// インターフェースを挟むのは、上限を使う側（保存や履歴）が
+// 加入の保存方法を知らずに済むようにするため。
+type Entitlements interface {
+	// For は利用者のエンタイトルメントを返す。
+	// userID が空（未認証）でもエラーにせず free を返す。
+	For(ctx context.Context, userID string) (domain.Entitlement, error)
 }

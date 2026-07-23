@@ -209,6 +209,30 @@ func TestUserRepository_FindPasswordCredential_GoogleOnly(t *testing.T) {
 	require.ErrorIs(t, err, service.ErrCredentialNotFound)
 }
 
+func TestUserRepository_FindByEmail_メールで引ける(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := repository.NewUserRepository(pool)
+
+	u := createUser(t, pool, "find-by-email@example.com")
+
+	got, err := repo.FindByEmail(ctx, u.Email)
+	require.NoError(t, err)
+	require.Equal(t, u.ID, got.ID)
+	require.Equal(t, u.Email, got.Email)
+}
+
+func TestUserRepository_FindByEmail_居なければErrUserNotFound(t *testing.T) {
+	pool := newTestPool(t)
+	repo := repository.NewUserRepository(pool)
+
+	addr, err := domain.NewEmail("nobody-here@example.com")
+	require.NoError(t, err)
+
+	_, err = repo.FindByEmail(context.Background(), addr)
+	require.ErrorIs(t, err, service.ErrUserNotFound)
+}
+
 func TestUserRepository_CreateWithPassword_Atomicity(t *testing.T) {
 	pool := newTestPool(t)
 	repo := repository.NewUserRepository(pool)

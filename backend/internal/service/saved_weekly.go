@@ -8,16 +8,13 @@ import (
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
 
-// SavedWeeklyMenuLimit は1ユーザーが保存できる週間献立の件数（spec.md 2.8）。
-//
-// 履歴のように FIFO で押し出さないため、上限は「静かに消える件数」ではなく
-// 「保存を断る境目」になる。保存は利用者の明示的な操作であり、
-// 黙って消えると保存という行為の意味が壊れる。
-const SavedWeeklyMenuLimit = 10
-
 // ErrSavedWeeklyMenuLimitReached は保存の上限に達していることを表す（409）。
-// 古いものを消してもらうため、押し出さずに断る。
-var ErrSavedWeeklyMenuLimitReached = errors.New("保存できる週間献立は10件までです。古いものを削除してください")
+//
+// 上限はプランによって変わるため、件数は fmt.Errorf("%w: …") でラップして足す
+// （同ファイルの toSavedDays が ErrInvalidWeek に対して取っているのと同じ形）。
+// handler は Detail に err.Error() を入れるので、利用者には自分のプランの件数と
+// 次に取るべき行動がそのまま届く。
+var ErrSavedWeeklyMenuLimitReached = errors.New("保存できる週間献立の上限に達しました")
 
 // ErrSavedWeeklyMenuNotFound は指定の保存が見つからないことを表す（404）。
 //
@@ -52,12 +49,15 @@ type SavedDayInput struct {
 
 // SavedWeeklyMenuService は週間献立の保存を担う。
 type SavedWeeklyMenuService struct {
-	store SavedWeeklyMenuStore
+	store        SavedWeeklyMenuStore
+	entitlements Entitlements
 }
 
 // NewSavedWeeklyMenuService は SavedWeeklyMenuService を生成する。
-func NewSavedWeeklyMenuService(store SavedWeeklyMenuStore) *SavedWeeklyMenuService {
-	return &SavedWeeklyMenuService{store: store}
+func NewSavedWeeklyMenuService(
+	store SavedWeeklyMenuStore, entitlements Entitlements,
+) *SavedWeeklyMenuService {
+	return &SavedWeeklyMenuService{store: store, entitlements: entitlements}
 }
 
 // Save は認証済みユーザーの週間献立を1件保存する。
@@ -78,19 +78,30 @@ func (s *SavedWeeklyMenuService) Save(
 		return domain.SavedWeeklyMenuID{}, err
 	}
 
+	// 上限はプランによって変わる（設計 3.1）。
+	// free は現行の10件を据え置き、premium が上回る。既存利用者の体験は削らない。
+	ent, err := s.entitlements.For(ctx, userID)
+	if err != nil {
+		return domain.SavedWeeklyMenuID{}, err
+	}
+	limit := ent.SavedWeeklyMenuLimit()
+
 	// 上限は保存の直前に見る（spec.md 2.8）。
 	//
 	// **数えてから書くまでの間に別のリクエストが割り込む余地は残る。**
-	// 同一利用者が同時に保存を送ると 11 件目が通りうるが、上限は課金や
-	// 権限の境目ではなく「際限なく溜めない」ための目安なので、
-	// そこまでの厳密さは要らないと判断した。DB制約で締めるには
-	// 件数を数えるトリガか排他ロックが要り、割に合わない。
+	// 同一利用者が同時に保存を送ると上限+1件目が通りうるが、上限は
+	// 「際限なく溜めない」ための目安であり、そこまでの厳密さは要らないと判断した。
+	// DB制約で締めるには件数を数えるトリガか排他ロックが要り、割に合わない。
 	count, err := s.store.Count(ctx, uid)
 	if err != nil {
 		return domain.SavedWeeklyMenuID{}, err
 	}
-	if count >= SavedWeeklyMenuLimit {
-		return domain.SavedWeeklyMenuID{}, ErrSavedWeeklyMenuLimitReached
+	if count >= limit {
+		// 文言はここで組み立てきる。フロントが件数を持つとプランごとに二重管理になり、
+		// premium の利用者に「10件まで」と出るような食い違いが起きる（spec.md 2.11）。
+		return domain.SavedWeeklyMenuID{}, fmt.Errorf(
+			"%w: 保存できるのは%d件までです。「保存した週間献立」から古いものを削除してください",
+			ErrSavedWeeklyMenuLimitReached, limit)
 	}
 
 	return s.store.Save(ctx, uid, days)
@@ -98,7 +109,7 @@ func (s *SavedWeeklyMenuService) Save(
 
 // List は認証済みユーザーの保存を新しい順に、中身の7日分も含めて返す。
 //
-// 上限が10件と小さいので全件返す。ページングは設けない。
+// 上限は最大でも50件と小さいので全件返す。ページングは設けない。
 func (s *SavedWeeklyMenuService) List(
 	ctx context.Context, userID string,
 ) ([]domain.SavedWeeklyMenu, error) {

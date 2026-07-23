@@ -3,6 +3,7 @@ package handler_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -113,15 +114,52 @@ func testGoogleOAuth() *auth.GoogleOAuth {
 	)
 }
 
+// fakeEntitlements は常に同じプランを返す。err が非nilならそれを返す。
+type fakeEntitlements struct {
+	plan domain.Plan
+	err  error
+}
+
+func (f fakeEntitlements) For(context.Context, string) (domain.Entitlement, error) {
+	if f.err != nil {
+		return domain.Entitlement{}, f.err
+	}
+	return domain.NewEntitlement(f.plan), nil
+}
+
+// newAuthAppWithEntitlements はプランの問い合わせ自体を差し替えたアプリを組む。
+// 障害時（subscriptions が無い・引けない）の振る舞いを見るために使う。
+func newAuthAppWithEntitlements(
+	t *testing.T, svc handler.AuthUseCase, ent fakeEntitlements,
+) (*echo.Echo, *auth.JWT) {
+	t.Helper()
+	tokens, err := auth.NewJWT([]byte(authTestSecret))
+	require.NoError(t, err)
+
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewAuthHandler(svc, tokens, testGoogleOAuth(), testFrontendURL, ent).RegisterRoutes(e)
+	return e, tokens
+}
+
 // newAuthApp は AuthHandler を登録した echo アプリと、そのトークン発行器を返す。
 func newAuthApp(t *testing.T, svc handler.AuthUseCase, opts ...auth.JWTOption) (*echo.Echo, *auth.JWT) {
+	t.Helper()
+	return newAuthAppWithPlan(t, svc, domain.PlanFree, opts...)
+}
+
+// newAuthAppWithPlan はプランを指定してアプリを組む。
+func newAuthAppWithPlan(
+	t *testing.T, svc handler.AuthUseCase, plan domain.Plan, opts ...auth.JWTOption,
+) (*echo.Echo, *auth.JWT) {
 	t.Helper()
 	tokens, err := auth.NewJWT([]byte(authTestSecret), opts...)
 	require.NoError(t, err)
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(svc, tokens, testGoogleOAuth(), testFrontendURL).RegisterRoutes(e)
+	handler.NewAuthHandler(svc, tokens, testGoogleOAuth(), testFrontendURL,
+		fakeEntitlements{plan: plan}).RegisterRoutes(e)
 	return e, tokens
 }
 
@@ -462,6 +500,115 @@ func TestMe_InvalidTokenUnauthorized(t *testing.T) {
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Zero(t, svc.currentCalls)
+}
+
+func TestMe_プランを返す(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		plan domain.Plan
+		want string
+	}{
+		{"free", domain.PlanFree, `"plan":"free"`},
+		{"premium", domain.PlanPremium, `"plan":"premium"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			user := newTestUser(t, "plan@example.com")
+			svc := &fakeAuthService{currentUser: user}
+			e, tokens := newAuthAppWithPlan(t, svc, tt.plan)
+
+			access, err := tokens.Issue(user.ID.String())
+			require.NoError(t, err)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+			req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			assert.Contains(t, rec.Body.String(), tt.want)
+		})
+	}
+}
+
+// プランを引けないことで認証そのものを落とさない。
+// マイグレーションは手で流す運用（DEPLOY.md 手順1）なので、subscriptions が
+// 無い状態でコードだけが本番に出ることは起こりうる。そこで全員がログイン不能に
+// なるより、バッジが一時的に出ないほうが軽い（spec.md 2.11）。
+func TestMe_プランを引けなくてもfreeで返す(t *testing.T) {
+	t.Parallel()
+
+	user := newTestUser(t, "plan@example.com")
+	svc := &fakeAuthService{currentUser: user}
+	e, tokens := newAuthAppWithEntitlements(t, svc,
+		fakeEntitlements{err: errors.New("relation \"subscriptions\" does not exist")})
+
+	access, err := tokens.Issue(user.ID.String())
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"plan":"free"`)
+}
+
+func TestLogin_プランを引けなくてもログインは成立する(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeAuthService{loginUser: newTestUser(t, "plan@example.com")}
+	e, _ := newAuthAppWithEntitlements(t, svc,
+		fakeEntitlements{err: errors.New("relation \"subscriptions\" does not exist")})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+		strings.NewReader(`{"email":"plan@example.com","password":"supersecret"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	// 500 を返すと、Cookie だけ入って画面は失敗表示という食い違いが起きる。
+	// フロントは onSuccess に入らないため queryClient.clear() も走らず、
+	// 共有端末で前の利用者のキャッシュが残る（Issue #78 の再発）。
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"plan":"free"`)
+	assert.NotNil(t, findCookie(rec, "access_token"), "認証は成立しているべき")
+}
+
+func TestLogin_プランを返す(t *testing.T) {
+	t.Parallel()
+
+	// フロントエンドはこのログインレスポンスでキャッシュ中のユーザー状態を初期化する。
+	// ここでプランを取り違えると、有料ユーザーがログイン直後だけ無料と表示され、
+	// 何かが再取得を強制するまでその誤りが解消されない。
+	for _, tt := range []struct {
+		name string
+		plan domain.Plan
+		want string
+	}{
+		{"free", domain.PlanFree, `"plan":"free"`},
+		{"premium", domain.PlanPremium, `"plan":"premium"`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := &fakeAuthService{loginUser: newTestUser(t, "plan@example.com")}
+			e, _ := newAuthAppWithPlan(t, svc, tt.plan)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login",
+				strings.NewReader(`{"email":"plan@example.com","password":"supersecret"}`))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			assert.Contains(t, rec.Body.String(), tt.want)
+		})
+	}
 }
 
 func TestMe_RefreshTokenRejected(t *testing.T) {

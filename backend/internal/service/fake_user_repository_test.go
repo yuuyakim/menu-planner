@@ -66,6 +66,14 @@ func (r *fakeUserRepository) FindByID(_ context.Context, id domain.UserID) (doma
 	return domain.User{}, service.ErrUserNotFound
 }
 
+func (r *fakeUserRepository) FindByEmail(_ context.Context, email domain.Email) (domain.User, error) {
+	cred, ok := r.credentials[email.String()]
+	if !ok {
+		return domain.User{}, service.ErrUserNotFound
+	}
+	return cred.User, nil
+}
+
 func (r *fakeUserRepository) CreateWithPassword(_ context.Context, u domain.User, hash string) error {
 	r.calls++
 	if r.err != nil {
