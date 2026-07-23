@@ -98,7 +98,7 @@ func TestParsePlan_未知の値は拒否する(t *testing.T) {
 	}
 }
 
-func TestPlan_String はDBに入る値を返す(t *testing.T) {
+func TestPlan_StringはDBに入る値を返す(t *testing.T) {
 	require.Equal(t, "free", domain.PlanFree.String())
 	require.Equal(t, "premium", domain.PlanPremium.String())
 }
@@ -110,7 +110,7 @@ func TestPlan_Valid(t *testing.T) {
 	require.False(t, domain.Plan("pro").Valid())
 }
 
-func TestErrInvalidPlan は sentinel として使える(t *testing.T) {
+func TestErrInvalidPlan_sentinelとして使える(t *testing.T) {
 	_, err := domain.ParsePlan("pro")
 	require.True(t, errors.Is(err, domain.ErrInvalidPlan))
 }
@@ -222,7 +222,7 @@ func TestEntitlement_プランごとの保存上限(t *testing.T) {
 
 // ゼロ値が free に落ちることは、この設計の安全装置そのもの。
 // 上限をフィールドで持つと 0 件になり、既存利用者が1件も保存できなくなる。
-func TestEntitlement_ゼロ値は free として振る舞う(t *testing.T) {
+func TestEntitlement_ゼロ値はfreeとして振る舞う(t *testing.T) {
 	var zero domain.Entitlement
 
 	require.Equal(t, domain.PlanFree, zero.Plan())
@@ -230,7 +230,7 @@ func TestEntitlement_ゼロ値は free として振る舞う(t *testing.T) {
 		"ゼロ値の上限が0だと既存利用者が保存できなくなる")
 }
 
-func TestEntitlement_未知のプランも free に落ちる(t *testing.T) {
+func TestEntitlement_未知のプランもfreeに落ちる(t *testing.T) {
 	// DBに想定外の値が入っていた場合でも、締め出すのではなく free として扱う。
 	e := domain.NewEntitlement(domain.Plan("pro"))
 
@@ -238,7 +238,7 @@ func TestEntitlement_未知のプランも free に落ちる(t *testing.T) {
 	require.Equal(t, 10, e.SavedWeeklyMenuLimit())
 }
 
-func TestEntitlement_Plan を返す(t *testing.T) {
+func TestEntitlement_Planを返す(t *testing.T) {
 	require.Equal(t, domain.PlanPremium,
 		domain.NewEntitlement(domain.PlanPremium).Plan())
 	require.Equal(t, domain.PlanFree,
@@ -724,6 +724,7 @@ git commit -m "feat: subscriptions テーブルを追加"
 **Files:**
 - Modify: `backend/internal/service/ports.go`（末尾に追加）
 - Create: `backend/internal/repository/subscription.go`
+- Modify: `backend/internal/repository/interface_test.go`（適合検査を1行追加）
 - Test: `backend/internal/repository/subscription_test.go`
 
 **Interfaces:**
@@ -749,7 +750,7 @@ import (
 	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
-func TestSubscriptionRepository_無ければ ErrSubscriptionNotFound(t *testing.T) {
+func TestSubscriptionRepository_無ければErrSubscriptionNotFound(t *testing.T) {
 	pool := newTestPool(t)
 	repo := repository.NewSubscriptionRepository(pool)
 
@@ -788,7 +789,7 @@ func TestSubscriptionRepository_保存して取り出せる(t *testing.T) {
 	require.Empty(t, got.ProviderSubscriptionID, "手動付与は決済IDを持たない")
 }
 
-func TestSubscriptionRepository_Upsert は上書きする(t *testing.T) {
+func TestSubscriptionRepository_Upsertは上書きする(t *testing.T) {
 	pool := newTestPool(t)
 	ctx := context.Background()
 	repo := repository.NewSubscriptionRepository(pool)
@@ -1029,7 +1030,7 @@ func TestUserRepository_FindByEmail_メールで引ける(t *testing.T) {
 	require.Equal(t, u.Email, got.Email)
 }
 
-func TestUserRepository_FindByEmail_居なければ ErrUserNotFound(t *testing.T) {
+func TestUserRepository_FindByEmail_居なければErrUserNotFound(t *testing.T) {
 	pool := newTestPool(t)
 	repo := repository.NewUserRepository(pool)
 
@@ -1208,7 +1209,7 @@ func newEntitlementSvc(store service.SubscriptionStore) *service.EntitlementServ
 	return service.NewEntitlementService(store, func() time.Time { return fixedNow })
 }
 
-func TestEntitlementService_未認証は free(t *testing.T) {
+func TestEntitlementService_未認証はfree(t *testing.T) {
 	svc := newEntitlementSvc(newFakeSubscriptionStore())
 
 	// 未認証でも献立検索は使えるため、userID が空でもエラーにしない。
@@ -1217,7 +1218,7 @@ func TestEntitlementService_未認証は free(t *testing.T) {
 	require.Equal(t, domain.PlanFree, ent.Plan())
 }
 
-func TestEntitlementService_加入が無ければ free(t *testing.T) {
+func TestEntitlementService_加入が無ければfree(t *testing.T) {
 	svc := newEntitlementSvc(newFakeSubscriptionStore())
 
 	u := domain.NewUserID()
@@ -1226,7 +1227,7 @@ func TestEntitlementService_加入が無ければ free(t *testing.T) {
 	require.Equal(t, domain.PlanFree, ent.Plan())
 }
 
-func TestEntitlementService_有効な加入は premium(t *testing.T) {
+func TestEntitlementService_有効な加入はpremium(t *testing.T) {
 	store := newFakeSubscriptionStore()
 	u := domain.NewUserID()
 	require.NoError(t, store.Upsert(context.Background(), domain.Subscription{
@@ -1243,7 +1244,7 @@ func TestEntitlementService_有効な加入は premium(t *testing.T) {
 	require.Equal(t, 50, ent.SavedWeeklyMenuLimit())
 }
 
-func TestEntitlementService_期限切れは free(t *testing.T) {
+func TestEntitlementService_期限切れはfree(t *testing.T) {
 	store := newFakeSubscriptionStore()
 	u := domain.NewUserID()
 	require.NoError(t, store.Upsert(context.Background(), domain.Subscription{
@@ -1266,7 +1267,7 @@ func TestEntitlementService_期限切れは free(t *testing.T) {
 		"参照は加入の状態を書き換えてはいけない")
 }
 
-func TestEntitlementService_canceled と past_due は free(t *testing.T) {
+func TestEntitlementService_canceledとpast_dueはfree(t *testing.T) {
 	for _, status := range []domain.SubscriptionStatus{
 		domain.SubscriptionCanceled,
 		domain.SubscriptionPastDue,
@@ -1287,7 +1288,7 @@ func TestEntitlementService_canceled と past_due は free(t *testing.T) {
 	}
 }
 
-func TestEntitlementService_壊れたIDは free(t *testing.T) {
+func TestEntitlementService_壊れたIDはfree(t *testing.T) {
 	// トークンが壊れている場合でも、エンタイトルメントの判定は締め出しではなく
 	// free への縮退で応じる。認証の失敗は認証ミドルウェアの仕事。
 	ent, err := newEntitlementSvc(newFakeSubscriptionStore()).
@@ -1486,7 +1487,7 @@ func TestSubscriptionService_Grant_期限切れの加入を再付与できる(t 
 	require.Equal(t, fixedNow.AddDate(0, 1, 0), sub.CurrentPeriodEnd)
 }
 
-func TestSubscriptionService_Revoke_行を消さず canceled にする(t *testing.T) {
+func TestSubscriptionService_Revoke_行を消さずcanceledにする(t *testing.T) {
 	store := newFakeSubscriptionStore()
 	u := domain.NewUserID()
 	svc := newSubscriptionSvc(store)
@@ -1797,7 +1798,7 @@ func (f fakeEntitlements) For(context.Context, string) (domain.Entitlement, erro
 	return domain.NewEntitlement(f.plan), nil
 }
 
-func TestSavedWeekly_free は10件で断る(t *testing.T) {
+func TestSavedWeekly_freeは10件で断る(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{count: 10}
@@ -1810,7 +1811,7 @@ func TestSavedWeekly_free は10件で断る(t *testing.T) {
 	assert.Zero(t, store.saveCalls, "上限に達したら保存を呼ばない")
 }
 
-func TestSavedWeekly_premium は10件でも保存できる(t *testing.T) {
+func TestSavedWeekly_premiumは10件でも保存できる(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{count: 10}
@@ -1821,7 +1822,7 @@ func TestSavedWeekly_premium は10件でも保存できる(t *testing.T) {
 	assert.Equal(t, 1, store.saveCalls)
 }
 
-func TestSavedWeekly_premium は50件で断る(t *testing.T) {
+func TestSavedWeekly_premiumは50件で断る(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{count: 50}
@@ -1834,7 +1835,7 @@ func TestSavedWeekly_premium は50件で断る(t *testing.T) {
 
 // 既存の errors.Is による判定を壊していないことの担保。
 // handler のエラー写像は sentinel との一致で動いている。
-func TestSavedWeeklyMenuLimitError_sentinel と一致する(t *testing.T) {
+func TestSavedWeeklyMenuLimitError_sentinelと一致する(t *testing.T) {
 	t.Parallel()
 
 	err := &service.SavedWeeklyMenuLimitError{Limit: 50}
