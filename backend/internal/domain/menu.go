@@ -60,6 +60,7 @@ type Menu struct {
 	NameKana    string
 	Genre       Genre
 	Difficulty  Difficulty
+	Role        Role
 	Description string
 }
 
@@ -83,6 +84,9 @@ func (m Menu) Validate() error {
 	if !m.Difficulty.Valid() {
 		return fmt.Errorf("%w: 難易度が不正です(%q)", ErrInvalidMenu, m.Difficulty)
 	}
+	if !m.Role.Valid() {
+		return fmt.Errorf("%w: 役割が不正です(%q)", ErrInvalidMenu, m.Role)
+	}
 	if strings.TrimSpace(m.Description) == "" {
 		return fmt.Errorf("%w: 説明が空です", ErrInvalidMenu)
 	}
@@ -90,16 +94,25 @@ func (m Menu) Validate() error {
 }
 
 // MenuFilter は献立検索の絞り込み条件。
-// Genre / Difficulty が nil の場合はその軸で絞り込まない。
+// Genre / Difficulty / Role が nil の場合はその軸で絞り込まない。
 type MenuFilter struct {
 	Genre      *Genre
 	Difficulty *Difficulty
+	// Role は献立の役割での絞り込み（spec.md 2.10）。
+	//
+	// **nil は「絞り込まない」であって「既定」ではない。** 未指定を主菜に
+	// 倒すのは入力を解釈する時点の仕事で、ParseRoleFilter が担う。
+	// ここまで来た nil は、利用者が明示的に "all" を選んだ状態を指す。
+	Role *Role
 	// ExcludeIDs は候補から除外する献立ID（直近の履歴などに使う）。
 	ExcludeIDs []MenuID
 }
 
 // IsEmpty はジャンル・難易度いずれの絞り込みも指定されていないことを返す。
 // ExcludeIDs は絞り込みの軸ではないため判定に含めない。
+//
+// Role も含めない。既定が主菜で常に値が入るため、含めると事実上いつも false になり、
+// 「条件なしで引いたか」を表せなくなる。
 func (f MenuFilter) IsEmpty() bool {
 	return f.Genre == nil && f.Difficulty == nil
 }
@@ -111,6 +124,9 @@ func (f MenuFilter) Validate() error {
 	}
 	if f.Difficulty != nil && !f.Difficulty.Valid() {
 		return fmt.Errorf("%w: %q", ErrInvalidDifficulty, *f.Difficulty)
+	}
+	if f.Role != nil && !f.Role.Valid() {
+		return fmt.Errorf("%w: %q", ErrInvalidRole, *f.Role)
 	}
 	return nil
 }

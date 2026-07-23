@@ -49,6 +49,9 @@ func TestSavedWeeklyRepository_保存した週が7日分そのまま戻る(t *te
 		assert.Equal(t, want.Day, saved.Days[i].Day)
 		assert.Equal(t, want.Menu.ID, saved.Days[i].Menu.ID)
 		assert.Equal(t, want.Menu.Name, saved.Days[i].Menu.Name)
+		// 役割まで復元されること（JOIN 経路の列の取り残し検出）。
+		assert.Equal(t, want.Menu.Role, saved.Days[i].Menu.Role)
+		assert.True(t, saved.Days[i].Menu.Role.Valid(), "役割が空のまま返っていないこと")
 	}
 	assert.False(t, saved.CreatedAt.IsZero())
 }

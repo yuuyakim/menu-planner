@@ -174,6 +174,7 @@ func favoriteOf(name string, at time.Time) domain.Favorite {
 			NameKana:    name + "かな",
 			Genre:       domain.GenreJapanese,
 			Difficulty:  domain.DifficultyEasy,
+			Role:        domain.RoleMain,
 			Description: name + "の説明",
 		},
 		CreatedAt: at,

@@ -51,6 +51,7 @@ describe('検索フォーム', () => {
     expect(onSubmit).toHaveBeenCalledWith({
       genre: undefined,
       difficulty: undefined,
+      role: 'main',
     })
   })
 
@@ -66,6 +67,7 @@ describe('検索フォーム', () => {
     expect(onSubmit).toHaveBeenCalledWith({
       genre: 'japanese',
       difficulty: 'easy',
+      role: 'main',
     })
   })
 
@@ -80,6 +82,7 @@ describe('検索フォーム', () => {
     expect(onSubmit).toHaveBeenCalledWith({
       genre: 'chinese',
       difficulty: undefined,
+      role: 'main',
     })
   })
 
@@ -95,6 +98,7 @@ describe('検索フォーム', () => {
     expect(onSubmit).toHaveBeenCalledWith({
       genre: undefined,
       difficulty: undefined,
+      role: 'main',
     })
   })
 
@@ -102,5 +106,63 @@ describe('検索フォーム', () => {
     renderWithProviders(<SearchForm onSubmit={vi.fn()} isPending />)
 
     expect(screen.getByRole('button', { name: '検索中…' })).toBeDisabled()
+  })
+})
+
+// 役割の絞り込み（spec.md 2.10）。
+// ジャンル・難易度と違い、既定が「すべて」ではなく「主菜」であることが要。
+describe('検索フォーム: 役割', () => {
+  it('役割3種と「すべて」を表示する', () => {
+    renderWithProviders(<SearchForm onSubmit={vi.fn()} />)
+
+    const role = group('種類')
+    for (const label of ['主菜', '副菜', '汁物', 'すべて']) {
+      expect(role.getByRole('radio', { name: label })).toBeVisible()
+    }
+    expect(role.getAllByRole('radio')).toHaveLength(4)
+  })
+
+  it('初期状態は「主菜」が選ばれている', () => {
+    renderWithProviders(<SearchForm onSubmit={vi.fn()} />)
+
+    // 未指定で副菜が単品提案されるのを避けるため、既定を主菜に倒している。
+    expect(group('種類').getByRole('radio', { name: '主菜' })).toBeChecked()
+    expect(group('種類').getByRole('radio', { name: 'すべて' })).not.toBeChecked()
+  })
+
+  it('何も触らずに送ると主菜で検索する', async () => {
+    const onSubmit = vi.fn()
+    renderWithProviders(<SearchForm onSubmit={onSubmit} />)
+
+    await userEvent.click(screen.getByRole('button', { name: '献立を探す' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'main' }),
+    )
+  })
+
+  it('選んだ役割が検索条件に乗る', async () => {
+    const onSubmit = vi.fn()
+    renderWithProviders(<SearchForm onSubmit={onSubmit} />)
+
+    await userEvent.click(group('種類').getByRole('radio', { name: '副菜' }))
+    await userEvent.click(screen.getByRole('button', { name: '献立を探す' }))
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'side' }),
+    )
+  })
+
+  it('「すべて」を選ぶと all を送る', async () => {
+    const onSubmit = vi.fn()
+    renderWithProviders(<SearchForm onSubmit={onSubmit} />)
+
+    await userEvent.click(group('種類').getByRole('radio', { name: 'すべて' }))
+    await userEvent.click(screen.getByRole('button', { name: '献立を探す' }))
+
+    // undefined ではなく all を明示して送る。省略はサーバ側で主菜になるため。
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'all' }),
+    )
   })
 })

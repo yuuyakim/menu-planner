@@ -8,7 +8,7 @@ import type {
   SavedWeeklyMenu,
   ShoppingItem,
 } from '../../api/types'
-import type { MenuFilter } from './SearchForm'
+import { withDefaultRole, type MenuFilter } from './filter'
 
 // toQuery は絞り込み条件をクエリ文字列にする。
 // undefined（＝すべて）は載せない。空文字を送っても同じ結果になるが、
@@ -17,6 +17,9 @@ function toQuery(filter: MenuFilter): string {
   const params = new URLSearchParams()
   if (filter.genre) params.set('genre', filter.genre)
   if (filter.difficulty) params.set('difficulty', filter.difficulty)
+  // **role は常に載せる。** 省略はサーバ側で主菜になるため（spec.md 2.10）、
+  // 「すべて」を選んだのに載せないと主菜に絞られてしまう。
+  params.set('role', withDefaultRole(filter).role)
   const query = params.toString()
   return query ? `?${query}` : ''
 }
@@ -38,6 +41,7 @@ export async function suggestWeekly(filter: MenuFilter): Promise<DayMenu[]> {
   const res = await apiPost<{ week: DayMenu[] }>('/menus/suggest-weekly', {
     genre: filter.genre,
     difficulty: filter.difficulty,
+    role: withDefaultRole(filter).role,
   })
   return res.week
 }
@@ -56,6 +60,7 @@ export async function rerollDay(
     week: week.map((d) => d.menu.id),
     genre: filter.genre,
     difficulty: filter.difficulty,
+    role: withDefaultRole(filter).role,
   })
   return res.menu
 }

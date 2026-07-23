@@ -141,7 +141,7 @@ func (r *SavedWeeklyMenuRepository) fillDays(
 ) error {
 	rows, err := r.pool.Query(ctx,
 		`SELECT d.saved_weekly_menu_id, d.day,
-		        m.id, m.name, m.name_kana, m.genre, m.difficulty, m.description
+		        `+joinedMenuColumns+`
 		   FROM saved_weekly_menu_days d
 		   JOIN menus m ON m.id = d.menu_id
 		  WHERE d.saved_weekly_menu_id = ANY($1::uuid[])
@@ -172,16 +172,16 @@ func (r *SavedWeeklyMenuRepository) fillDays(
 // scanSavedDay は1行を「どの週の何日目のどの献立か」に読む。
 func scanSavedDay(row pgx.Row) (string, int, domain.Menu, error) {
 	var (
-		weekID                                    string
-		day                                       int16
-		menuID, name, kana, genre, diff, descript string
+		weekID                                          string
+		day                                             int16
+		menuID, name, kana, genre, diff, role, descript string
 	)
 	if err := row.Scan(&weekID, &day,
-		&menuID, &name, &kana, &genre, &diff, &descript); err != nil {
+		&menuID, &name, &kana, &genre, &diff, &role, &descript); err != nil {
 		return "", 0, domain.Menu{},
 			fmt.Errorf("保存した週間献立の中身の読み取りに失敗しました: %w", err)
 	}
-	menu, err := hydrateMenu(menuID, name, kana, genre, diff, descript)
+	menu, err := hydrateMenu(menuID, name, kana, genre, diff, role, descript)
 	if err != nil {
 		return "", 0, domain.Menu{}, err
 	}

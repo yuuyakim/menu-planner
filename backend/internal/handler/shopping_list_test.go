@@ -46,6 +46,7 @@ func shoppingTestMenu(name string) domain.Menu {
 		NameKana:    name,
 		Genre:       domain.GenreJapanese,
 		Difficulty:  domain.DifficultyEasy,
+		Role:        domain.RoleMain,
 		Description: name + "の説明",
 	}
 }

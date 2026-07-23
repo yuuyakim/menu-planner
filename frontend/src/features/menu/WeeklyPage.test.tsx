@@ -17,6 +17,7 @@ function menu(n: number): Menu {
     name: `献立${n}`,
     genre: 'japanese',
     difficulty: 'easy',
+    role: 'main',
     description: `説明${n}`,
   }
 }
@@ -168,7 +169,7 @@ describe('週間献立', () => {
     await user.click(create())
 
     await screen.findAllByRole('listitem')
-    expect(bodies[0]).toEqual({ genre: 'chinese', difficulty: undefined })
+    expect(bodies[0]).toEqual({ genre: 'chinese', difficulty: undefined, role: 'main' })
   })
 
   it('作成に失敗したらメッセージを出す', async () => {

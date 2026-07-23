@@ -10,7 +10,8 @@ import { useCurrentUser } from '../auth/useCurrentUser'
 import { historiesQueryKey } from '../history/api'
 import { rerollDay, saveWeeklyMenu, savedWeeklyMenusQueryKey, suggestWeekly } from './api'
 import { MenuCard } from './MenuCard'
-import { SearchForm, type MenuFilter } from './SearchForm'
+import { SearchForm } from './SearchForm'
+import { emptyMenuFilter, type MenuFilter } from './filter'
 
 const weekdays = ['日', '月', '火', '水', '木', '金', '土'] as const
 
@@ -51,7 +52,7 @@ type Props = {
 // WeeklyPage は1週間分の献立を作り、日ごとに引き直せる画面。
 export function WeeklyPage({ today = new Date() }: Props) {
   // 引き直しには週と絞り込み条件の両方が要るので、どちらも保持する。
-  const [filter, setFilter] = useSessionState<MenuFilter>(filterKey, {})
+  const [filter, setFilter] = useSessionState<MenuFilter>(filterKey, emptyMenuFilter)
   const [week, setWeek] = useSessionState<DayMenu[] | null>(weekKey, null)
 
   const queryClient = useQueryClient()
