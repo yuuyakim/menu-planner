@@ -310,11 +310,16 @@ func TestSavedWeekly_premiumは50件で断る(t *testing.T) {
 	assert.Contains(t, err.Error(), "50件")
 }
 
-// 既存の errors.Is による判定を壊していないことの担保。
-// handler のエラー写像は sentinel との一致で動いている。
-func TestSavedWeeklyMenuLimitError_sentinelと一致する(t *testing.T) {
+// 上限の文言は「次に何をすればよいか」まで含めてサーバが組み立てる。
+// フロントは detail をそのまま出すだけなので、ここが唯一の情報源になる
+// （フロントが件数を持つと premium に「10件まで」と出る。spec.md 2.11）。
+func TestSavedWeekly_上限の文言に次の行動が入る(t *testing.T) {
 	t.Parallel()
 
-	err := &service.SavedWeeklyMenuLimitError{Limit: 50}
-	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuLimitReached)
+	store := &fakeSavedWeeklyStore{count: 50}
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanPremium})
+
+	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "「保存した週間献立」から古いものを削除してください")
 }

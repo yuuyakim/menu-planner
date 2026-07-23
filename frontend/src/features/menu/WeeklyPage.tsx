@@ -37,9 +37,13 @@ function dayLabel(day: number, today: Date): string {
 // 409 だけ特別に扱う。上限に達したときサーバは押し出さずに断るため
 // （spec.md 2.8）、利用者が次に取るべき行動は「古いものを消す」であって
 // 「もう一度試す」ではない。それを伝えないと、押し直して失敗し続ける。
+//
+// **件数はここに書かない。** 上限はプランで変わる（free 10件 / premium 50件、
+// spec.md 2.11）ため、こちらで固定すると premium の利用者に「10件まで」と
+// 表示される。サーバが detail にプラン由来の件数を入れて返すので、それを出す。
 function saveErrorText(error: Error): string {
   if (error instanceof ApiError && error.status === 409) {
-    return '保存できるのは10件までです。「保存した週間献立」から古いものを削除してください。'
+    return error.detail ?? '保存できる件数の上限に達しました。古いものを削除してください。'
   }
   return error.message
 }

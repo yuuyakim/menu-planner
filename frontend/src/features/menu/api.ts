@@ -71,8 +71,9 @@ export const savedWeeklyMenusQueryKey = ['saved-weekly-menus'] as const
 /**
  * saveWeeklyMenu は組み立てた1週間分をサーバに保存する（spec.md 2.8）。
  *
- * 保存できるのは10件まで。超過すると 409 が返る。押し出さずに断る仕様なので、
- * 呼び出し側は「古いものを消してもらう」案内をする必要がある。
+ * 保存できる件数はプランで決まる（free 10件 / premium 50件、spec.md 2.11）。
+ * 超過すると 409 が返る。押し出さずに断る仕様なので、呼び出し側は
+ * 「古いものを消してもらう」案内をする必要がある。件数はサーバが detail に入れて返す。
  */
 export async function saveWeeklyMenu(week: DayMenu[]): Promise<string> {
   const res = await apiPost<{ id: string }>('/weekly-menus', {
