@@ -270,6 +270,61 @@ func TestContract_ListFavorites(t *testing.T) {
 	assertMatchesSpec(t, v, req, "", rec)
 }
 
+// 認証APIの契約検証。
+//
+// フェーズ15で /auth/me と /auth/login の応答に `plan` が加わったが、
+// この検証は /auth/* を一切カバーしていなかった。ユーザーを返す2経路は
+// フロントが ['me'] キャッシュを組み立てる土台なので、仕様とズレると
+// 課金済みの利用者が無料表示になるなど、画面の表示が静かに壊れる。
+
+func TestContract_AuthMe(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	svc := &fakeAuthService{currentUser: newTestUser(t, "premium@example.com")}
+	e, tokens := newAuthAppWithPlan(t, svc, domain.PlanPremium)
+	access, err := tokens.Issue(svc.currentUser.ID.String())
+	require.NoError(t, err)
+
+	req := contractRequest(http.MethodGet, "/api/v1/auth/me", "")
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assertMatchesSpec(t, v, req, "", rec)
+}
+
+func TestContract_AuthMe_Unauthorized(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	// Cookie が無いときの 401 も仕様の一部。
+	e, _ := newAuthApp(t, &fakeAuthService{})
+	req := contractRequest(http.MethodGet, "/api/v1/auth/me", "")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	assertResponseMatchesSpec(t, v, req, rec)
+}
+
+func TestContract_AuthLogin(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	svc := &fakeAuthService{loginUser: newTestUser(t, "premium@example.com")}
+	e, _ := newAuthAppWithPlan(t, svc, domain.PlanPremium)
+
+	body := `{"email":"premium@example.com","password":"correct-horse-battery"}`
+	req := contractRequest(http.MethodPost, "/api/v1/auth/login", body)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assertMatchesSpec(t, v, req, body, rec)
+}
+
 // newContractShoppingApp は買い物リスト・食材の契約検証用アプリを組み立てる。
 func newContractShoppingApp(shopping handler.ShoppingListUseCase, ing handler.MenuIngredientsUseCase) *echo.Echo {
 	e := echo.New()
