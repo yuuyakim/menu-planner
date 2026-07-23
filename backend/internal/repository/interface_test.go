@@ -12,6 +12,9 @@ import (
 // 実行時ではなくビルド時に気付ける。
 var _ service.MenuRepository = (*repository.MenuRepository)(nil)
 
+// SubscriptionRepository が service.SubscriptionStore を満たすことをコンパイル時に保証する。
+var _ service.SubscriptionStore = (*repository.SubscriptionRepository)(nil)
+
 func TestMenuRepository_serviceのインターフェースを満たす(t *testing.T) {
 	t.Parallel()
 	// 上の var 宣言がコンパイルできれば満たしている。
