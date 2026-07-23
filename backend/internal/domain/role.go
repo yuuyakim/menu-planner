@@ -41,6 +41,36 @@ func ParseRole(s string) (Role, error) {
 	return r, nil
 }
 
+// RoleFilterAll は検索で「役割を絞り込まない」ことを表すクエリの値（spec.md 5.1）。
+// 献立が取る値ではないため Role の定数にはしない。
+const RoleFilterAll = "all"
+
+// ParseRoleFilter は検索の絞り込みに使う役割を解釈する（spec.md 2.10 / 5.1）。
+//
+// 返り値の nil は「絞り込まない」を表す。
+//
+//   - 未指定（空文字）… 主菜に絞る。**ジャンル・難易度と意味が違う。**
+//     あちらの未指定は「すべて」だが、役割の未指定は「主菜」。
+//     未指定のときに一番起きてほしくないのが副菜の単品提案なので安全側に倒す。
+//     既定を「すべて」にすると、この機能を入れても既定の体験が変わらない。
+//   - "all" … 絞り込まない。従来どおり全役割から引く
+//   - "main" / "side" / "soup" … その役割に絞る
+func ParseRoleFilter(s string) (*Role, error) {
+	switch s {
+	case "":
+		r := RoleMain
+		return &r, nil
+	case RoleFilterAll:
+		return nil, nil
+	default:
+		r, err := ParseRole(s)
+		if err != nil {
+			return nil, err
+		}
+		return &r, nil
+	}
+}
+
 // Valid は定義済みの役割かどうかを返す。
 func (r Role) Valid() bool {
 	switch r {

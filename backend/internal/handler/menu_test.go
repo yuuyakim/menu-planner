@@ -153,6 +153,7 @@ func testMenu() *domain.Menu {
 		NameKana:    "おやこどん",
 		Genre:       domain.GenreJapanese,
 		Difficulty:  domain.DifficultyEasy,
+		Role:        domain.RoleMain,
 		Description: "鶏肉と卵を甘辛い出汁でとじた定番の丼もの",
 	}
 }
@@ -209,7 +210,7 @@ func TestSuggest_レスポンスに余分な項目を含めない(t *testing.T) 
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 
 	assert.ElementsMatch(t,
-		[]string{"id", "name", "genre", "difficulty", "description"},
+		[]string{"id", "name", "genre", "difficulty", "role", "description"},
 		keysOf(body.Menu))
 }
 
@@ -365,7 +366,7 @@ func TestGet_レスポンスの形はsuggestと同じ(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 
 	assert.ElementsMatch(t,
-		[]string{"id", "name", "genre", "difficulty", "description"},
+		[]string{"id", "name", "genre", "difficulty", "role", "description"},
 		keysOf(body.Menu))
 }
 
@@ -660,7 +661,7 @@ func TestSuggestWeekly_献立の項目はsuggestと同じ(t *testing.T) {
 	require.NotEmpty(t, body.Week)
 
 	assert.ElementsMatch(t,
-		[]string{"id", "name", "genre", "difficulty", "description"},
+		[]string{"id", "name", "genre", "difficulty", "role", "description"},
 		keysOf(body.Week[0].Menu))
 }
 
@@ -846,7 +847,7 @@ func TestRerollDay_200と引き直した献立(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, "親子丼", body.Menu["name"])
 	assert.ElementsMatch(t,
-		[]string{"id", "name", "genre", "difficulty", "description"},
+		[]string{"id", "name", "genre", "difficulty", "role", "description"},
 		keysOf(body.Menu))
 
 	assert.Equal(t, 3, s.lastRerollDay, "day が service に渡ること")
@@ -960,4 +961,122 @@ func TestRerollDay_未知のエラーは500で詳細を漏らさない(t *testin
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.NotContains(t, rec.Body.String(), "password")
+}
+
+// 役割の絞り込み（spec.md 2.10 / 5.1）。
+// 未指定の既定が main なのはジャンル・難易度と意味が違うので、明示的に固定する。
+func TestSuggest_役割の既定は主菜(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{menu: testMenu()}
+	rec := doSuggest(t, s, "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, s.lastFilter.Role, "未指定でも役割で絞ること")
+	assert.Equal(t, domain.RoleMain, *s.lastFilter.Role)
+}
+
+func TestSuggest_allなら役割で絞らない(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{menu: testMenu()}
+	rec := doSuggest(t, s, "role=all")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Nil(t, s.lastFilter.Role, "all は絞り込まないこと")
+}
+
+func TestSuggest_役割を指定できる(t *testing.T) {
+	t.Parallel()
+
+	for _, r := range domain.AllRoles() {
+		t.Run(r.String(), func(t *testing.T) {
+			t.Parallel()
+
+			s := &fakeMenuService{menu: testMenu()}
+			rec := doSuggest(t, s, "role="+r.String())
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.NotNil(t, s.lastFilter.Role)
+			assert.Equal(t, r, *s.lastFilter.Role)
+		})
+	}
+}
+
+func TestSuggest_未知の役割は400(t *testing.T) {
+	t.Parallel()
+
+	for _, v := range []string{"dessert", "ALL", "主菜"} {
+		t.Run(v, func(t *testing.T) {
+			t.Parallel()
+
+			s := &fakeMenuService{menu: testMenu()}
+			rec := doSuggest(t, s, "role="+v)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Zero(t, s.calls, "弾いた条件でサービスを呼ばないこと")
+		})
+	}
+}
+
+func TestSuggest_応答に役割が含まれる(t *testing.T) {
+	t.Parallel()
+
+	m := testMenu()
+	m.Role = domain.RoleSide
+	rec := doSuggest(t, &fakeMenuService{menu: m}, "role=side")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), `"role":"side"`)
+}
+
+func TestSuggestWeekly_役割の既定は主菜(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{menu: testMenu()}
+	rec := doSuggestWeekly(t, s, `{"genre":null,"difficulty":null}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, s.lastWeeklyFilter.Role, "週間献立でも既定は主菜であること")
+	assert.Equal(t, domain.RoleMain, *s.lastWeeklyFilter.Role)
+}
+
+func TestSuggestWeekly_未知の役割は400(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{menu: testMenu()}
+	rec := doSuggestWeekly(t, s, `{"role":"dessert"}`)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestRerollDay_役割の既定は主菜(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{menu: testMenu(), week: testWeek()}
+	rec := doRerollDay(t, s, `{"day":1,"week":`+weekIDsJSON(testWeekIDs())+`}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, s.lastRerollFilter.Role, "引き直しでも既定は主菜であること")
+	assert.Equal(t, domain.RoleMain, *s.lastRerollFilter.Role)
+}
+
+func TestRerollDay_役割を指定できる(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{menu: testMenu(), week: testWeek()}
+	rec := doRerollDay(t, s, `{"day":1,"role":"all","week":`+weekIDsJSON(testWeekIDs())+`}`)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Nil(t, s.lastRerollFilter.Role, "all は絞り込まないこと")
+}
+
+func TestRerollDay_未知の役割は400(t *testing.T) {
+	t.Parallel()
+
+	s := &fakeMenuService{menu: testMenu(), week: testWeek()}
+	rec := doRerollDay(t, s, `{"day":1,"role":"dessert","week":`+weekIDsJSON(testWeekIDs())+`}`)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Zero(t, s.rerollCalls, "弾いた条件でサービスを呼ばないこと")
 }

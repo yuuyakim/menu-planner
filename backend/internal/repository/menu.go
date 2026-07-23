@@ -89,12 +89,15 @@ func (r *MenuRepository) FindByFilter(ctx context.Context, f domain.MenuFilter) 
 
 	// pgx は $1 に nil を渡すと NULL になる。
 	// "$1 IS NULL OR genre = $1" とすることで、条件の有無を1つのSQLで表現する。
-	var genre, difficulty *string
+	var genre, difficulty, role *string
 	if f.Genre != nil {
 		genre = ptrTo(f.Genre.String())
 	}
 	if f.Difficulty != nil {
 		difficulty = ptrTo(f.Difficulty.String())
+	}
+	if f.Role != nil {
+		role = ptrTo(f.Role.String())
 	}
 
 	excludeIDs := make([]string, 0, len(f.ExcludeIDs))
@@ -107,9 +110,10 @@ func (r *MenuRepository) FindByFilter(ctx context.Context, f domain.MenuFilter) 
 		   FROM menus
 		  WHERE ($1::text IS NULL OR genre = $1)
 		    AND ($2::text IS NULL OR difficulty = $2)
-		    AND NOT (id = ANY($3::uuid[]))
+		    AND ($3::text IS NULL OR role = $3)
+		    AND NOT (id = ANY($4::uuid[]))
 		  ORDER BY name`,
-		genre, difficulty, excludeIDs)
+		genre, difficulty, role, excludeIDs)
 	if err != nil {
 		return nil, fmt.Errorf("献立の検索に失敗しました: %w", err)
 	}

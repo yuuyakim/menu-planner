@@ -63,6 +63,8 @@ export interface paths {
                     genre?: components["parameters"]["GenreQuery"];
                     /** @description 未指定と空文字はどちらも「絞り込まない」。 */
                     difficulty?: components["parameters"]["DifficultyQuery"];
+                    /** @description **未指定は main（主菜）に絞る。** ジャンル・難易度と違い「すべて」ではない。 絞り込まない場合は all を明示する（spec.md 2.10）。 */
+                    role?: components["parameters"]["RoleQuery"];
                 };
                 header?: never;
                 path?: never;
@@ -1159,6 +1161,16 @@ export interface components {
         Genre: "japanese" | "western" | "chinese" | "other";
         /** @enum {string} */
         Difficulty: "easy" | "normal" | "elaborate";
+        /**
+         * @description 献立が一食の中で担う役割（spec.md 2.10）。
+         * @enum {string}
+         */
+        Role: "main" | "side" | "soup";
+        /**
+         * @description 検索での役割の絞り込み。all は「絞り込まない」。 **省略時は main**で、ジャンル・難易度（省略時はすべて）と意味が違う。
+         * @enum {string}
+         */
+        RoleFilter: "main" | "side" | "soup" | "all";
         /** @enum {string} */
         SearchMode: "single" | "weekly";
         Menu: {
@@ -1167,6 +1179,7 @@ export interface components {
             name: string;
             genre: components["schemas"]["Genre"];
             difficulty: components["schemas"]["Difficulty"];
+            role: components["schemas"]["Role"];
             description: string;
         };
         MenuResponse: {
@@ -1175,6 +1188,7 @@ export interface components {
         WeeklyRequest: {
             genre?: components["schemas"]["Genre"] | null;
             difficulty?: components["schemas"]["Difficulty"] | null;
+            role?: components["schemas"]["RoleFilter"] | null;
         };
         DayMenu: {
             day: number;
@@ -1190,6 +1204,7 @@ export interface components {
             week: string[];
             genre?: components["schemas"]["Genre"] | null;
             difficulty?: components["schemas"]["Difficulty"] | null;
+            role?: components["schemas"]["RoleFilter"] | null;
         };
         Recipe: {
             title: string;
@@ -1348,6 +1363,8 @@ export interface components {
         GenreQuery: components["schemas"]["Genre"];
         /** @description 未指定と空文字はどちらも「絞り込まない」。 */
         DifficultyQuery: components["schemas"]["Difficulty"];
+        /** @description **未指定は main（主菜）に絞る。** ジャンル・難易度と違い「すべて」ではない。 絞り込まない場合は all を明示する（spec.md 2.10）。 */
+        RoleQuery: components["schemas"]["RoleFilter"];
         /** @description 献立のID */
         MenuIDPath: string;
     };

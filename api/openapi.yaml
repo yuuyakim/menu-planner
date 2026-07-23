@@ -55,6 +55,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/GenreQuery'
         - $ref: '#/components/parameters/DifficultyQuery'
+        - $ref: '#/components/parameters/RoleQuery'
       responses:
         '200':
           description: 提案された献立
@@ -679,6 +680,15 @@ components:
       description: 未指定と空文字はどちらも「絞り込まない」。
       schema:
         $ref: '#/components/schemas/Difficulty'
+    RoleQuery:
+      name: role
+      in: query
+      required: false
+      description: >-
+        **未指定は main（主菜）に絞る。** ジャンル・難易度と違い「すべて」ではない。
+        絞り込まない場合は all を明示する（spec.md 2.10）。
+      schema:
+        $ref: '#/components/schemas/RoleFilter'
     MenuIDPath:
       name: id
       in: path
@@ -723,13 +733,23 @@ components:
     Difficulty:
       type: string
       enum: [easy, normal, elaborate]
+    Role:
+      type: string
+      description: 献立が一食の中で担う役割（spec.md 2.10）。
+      enum: [main, side, soup]
+    RoleFilter:
+      type: string
+      description: >-
+        検索での役割の絞り込み。all は「絞り込まない」。
+        **省略時は main**で、ジャンル・難易度（省略時はすべて）と意味が違う。
+      enum: [main, side, soup, all]
     SearchMode:
       type: string
       enum: [single, weekly]
 
     Menu:
       type: object
-      required: [id, name, genre, difficulty, description]
+      required: [id, name, genre, difficulty, role, description]
       properties:
         id:
           type: string
@@ -740,6 +760,8 @@ components:
           $ref: '#/components/schemas/Genre'
         difficulty:
           $ref: '#/components/schemas/Difficulty'
+        role:
+          $ref: '#/components/schemas/Role'
         description:
           type: string
 
@@ -760,6 +782,10 @@ components:
         difficulty:
           oneOf:
             - $ref: '#/components/schemas/Difficulty'
+            - type: 'null'
+        role:
+          oneOf:
+            - $ref: '#/components/schemas/RoleFilter'
             - type: 'null'
 
     DayMenu:
@@ -806,6 +832,10 @@ components:
         difficulty:
           oneOf:
             - $ref: '#/components/schemas/Difficulty'
+            - type: 'null'
+        role:
+          oneOf:
+            - $ref: '#/components/schemas/RoleFilter'
             - type: 'null'
 
     Recipe:
