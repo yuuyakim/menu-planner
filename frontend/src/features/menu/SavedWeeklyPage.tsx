@@ -17,6 +17,7 @@ import { emptyMenuFilter, type MenuFilter } from './filter'
 // 「開く」はここへ書き戻すだけで済む（spec.md 5.3）。
 const weekKey = 'weekly.week'
 const filterKey = 'weekly.filter'
+const savedIdKey = 'weekly.savedId'
 
 // formatSavedAt は保存日時を見出しにする。名前を付けない仕様（spec.md 2.8）のため、
 // これと中身の献立名が識別の手がかりになる。
@@ -44,6 +45,9 @@ export function SavedWeeklyPage() {
   // （一覧の応答に7日分が入っている）。
   const [, setWeek] = useSessionState<DayMenu[] | null>(weekKey, null)
   const [, setFilter] = useSessionState<MenuFilter>(filterKey, emptyMenuFilter)
+  // 開いた週の保存IDを持つ。買い物リストがこのIDで永続化経路
+  // （GET /weekly-menus/:id/shopping-list）を使うようになる。
+  const [, setSavedId] = useSessionState<string | null>(savedIdKey, null)
 
   const {
     data: saved,
@@ -66,6 +70,7 @@ export function SavedWeeklyPage() {
     // 絞り込み条件は保存していない。前回の条件を引き継ぐと、
     // この週とは無関係な条件で引き直すことになるため空に戻す。
     setFilter(emptyMenuFilter)
+    setSavedId(week.id)
     void navigate('/weekly')
   }
 
