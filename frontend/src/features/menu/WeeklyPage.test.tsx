@@ -11,6 +11,24 @@ import { WeeklyPage } from './WeeklyPage'
 // 2026-07-20 は月曜。起点を固定して曜日表示を確かめられるようにする。
 const monday = new Date(2026, 6, 20)
 
+// respondMe は現在のユーザーの応答を仕込む（AuthMenu.test.tsx / PremiumLock.test.tsx
+// と同じ流儀）。未ログインは test/handlers.ts の既定（401）に任せるため呼ばなくてよい。
+function respondMe(plan?: 'free' | 'premium') {
+  if (!plan) return
+  server.use(
+    http.get('/api/v1/auth/me', () =>
+      HttpResponse.json({
+        user: {
+          id: '018f0000-0000-7000-8000-000000000001',
+          email: 'user@example.com',
+          displayName: 'ユーザー',
+          plan,
+        },
+      }),
+    ),
+  )
+}
+
 function menu(n: number): Menu {
   return {
     id: `018f0000-0000-7000-8000-00000000000${n}`,
@@ -59,9 +77,39 @@ function dayItem(day: number) {
   return within(screen.getByRole('listitem', { name: new RegExp(`^${day}日目`) }))
 }
 
+describe('プレミアムゲート', () => {
+  it('free は週間の生成UIを出さずロックを出す', async () => {
+    respondMe('free')
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    expect(await screen.findByText(/1週間まとめて/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /1週間分を作る/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('premium は生成UIを出す', async () => {
+    respondMe('premium')
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    expect(
+      await screen.findByRole('button', { name: /1週間分を作る/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('未ログインはロック（ログイン導線）', async () => {
+    renderWithProviders(<WeeklyPage today={monday} />)
+
+    expect(
+      await screen.findByRole('link', { name: /ログイン/ }),
+    ).toBeInTheDocument()
+  })
+})
+
 describe('週間献立', () => {
   it('7日分が表示される', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
@@ -75,6 +123,7 @@ describe('週間献立', () => {
 
   it('当日起点で日付と曜日を表示する', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
@@ -87,6 +136,7 @@ describe('週間献立', () => {
 
   it('各日から引き直せる', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
     await user.click(create())
@@ -112,6 +162,7 @@ describe('週間献立', () => {
 
   it('引き直しに失敗しても他の日は残る', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
     await user.click(create())
@@ -144,6 +195,7 @@ describe('週間献立', () => {
 
   it('各日からレシピへ遷移できる', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
@@ -155,12 +207,14 @@ describe('週間献立', () => {
   })
 
   it('作成前は献立を表示しない', () => {
+    respondMe('premium')
     renderWithProviders(<WeeklyPage today={monday} />)
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
   })
 
   it('絞り込み条件を本文で送る', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     const bodies = respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
@@ -174,6 +228,7 @@ describe('週間献立', () => {
 
   it('作成に失敗したらメッセージを出す', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     server.use(
       http.post('/api/v1/menus/suggest-weekly', () =>
         HttpResponse.json(
@@ -200,6 +255,7 @@ describe('週間献立', () => {
 
   it('画面を離れて戻ってきても作った週が残る', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     const first = renderWithProviders(<WeeklyPage today={monday} />)
 
@@ -217,6 +273,7 @@ describe('週間献立', () => {
 
   it('引き直した結果も画面を離れて戻ると残る', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     const first = renderWithProviders(<WeeklyPage today={monday} />)
     await user.click(create())
@@ -235,6 +292,7 @@ describe('週間献立', () => {
 
   it('作り直せば新しい週に置き換わる', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     const first = renderWithProviders(<WeeklyPage today={monday} />)
     await user.click(create())
@@ -262,6 +320,7 @@ describe('週間献立', () => {
 
   it('引き直しは復帰後の週に対しても正しい状態を送る', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     const first = renderWithProviders(<WeeklyPage today={monday} />)
     await user.click(create())
@@ -287,6 +346,7 @@ describe('週間献立', () => {
 describe('買い物リストへの導線（11-G）', () => {
   it('週間献立を作ると買い物リストへのリンクが出る', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
@@ -305,7 +365,8 @@ describe('買い物リストへの導線（11-G）', () => {
 
 describe('週間献立の保存', () => {
   // 既定のハンドラは /auth/me に 401 を返す（＝未ログイン）。
-  // 保存は認証が要るため、ログイン済みの場合だけ差し替える。
+  // 保存には認証が要り、かつ WeeklyPage 自体が premium ゲートの内側にある
+  // ため、ログイン済み・premium の場合だけ差し替える。
   function signedIn() {
     server.use(
       http.get('/api/v1/auth/me', () =>
@@ -314,6 +375,7 @@ describe('週間献立の保存', () => {
             id: '018f0000-0000-7000-8000-0000000000ff',
             email: 'user@example.com',
             displayName: 'ユーザー',
+            plan: 'premium',
           },
         }),
       ),
@@ -352,21 +414,11 @@ describe('週間献立の保存', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('未ログインなら保存ボタンではなくログイン導線を出す', async () => {
-    const user = userEvent.setup()
-    respondWeekly()
-    renderWithProviders(<WeeklyPage today={monday} />)
-
-    await user.click(create())
-    await screen.findAllByRole('listitem')
-
-    // 押せないボタンを見せるより、何をすれば保存できるかを示す。
-    const link = await screen.findByRole('link', { name: 'ログインして保存する' })
-    expect(link).toHaveAttribute('href', '/login')
-    expect(
-      screen.queryByRole('button', { name: 'この週を保存する' }),
-    ).not.toBeInTheDocument()
-  })
+  // 「未ログインなら保存ボタンではなくログイン導線を出す」というケースは、
+  // premium ゲート導入により到達不能になった（未ログインは user?.plan !==
+  // 'premium' で PremiumLock に止められ、この画面の生成UIへは進めない。
+  // ログイン導線そのものは「プレミアムゲート」describe の
+  // 「未ログインはロック（ログイン導線）」でカバーする）。
 
   it('ログイン済みなら7日分を送って保存し、知らせを出す', async () => {
     const user = userEvent.setup()
