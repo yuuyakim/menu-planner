@@ -5,6 +5,7 @@ import type {
   Menu,
   MenuMatch,
   Recipe,
+  SavedShoppingItem,
   SavedWeeklyMenu,
   ShoppingItem,
 } from '../../api/types'
@@ -146,5 +147,25 @@ export async function fetchShoppingList(
   const res = await apiPost<{ items: ShoppingItem[] }>('/shopping-list', {
     menuIds,
   })
+  return res.items
+}
+
+/** savedShoppingListQueryKey は保存済み週の買い物リストのキャッシュキー。 */
+export function savedShoppingListQueryKey(savedId: string) {
+  return ['saved-shopping-list', savedId] as const
+}
+
+/**
+ * fetchSavedShoppingList は保存済み週の買い物リストを取得する。
+ *
+ * 未保存の週と違いサーバ側に状態があるため、チェック済みや手動追加も含めて
+ * 差分適用後の形で返る（spec.md 14.5）。
+ */
+export async function fetchSavedShoppingList(
+  savedId: string,
+): Promise<SavedShoppingItem[]> {
+  const res = await apiGet<{ items: SavedShoppingItem[] }>(
+    `/weekly-menus/${savedId}/shopping-list`,
+  )
   return res.items
 }

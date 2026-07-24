@@ -52,6 +52,12 @@ function withWeek(menus: Menu[]) {
   )
 }
 
+// 保存済みの週を開いている状態にする。ShoppingListPage はこのIDが
+// 有れば GET /weekly-menus/:id/shopping-list を使う。
+function withSavedId(id: string) {
+  sessionStorage.setItem('menu-planner:weekly.savedId', JSON.stringify(id))
+}
+
 describe('ShoppingListPage', () => {
   it('週間献立の食材を、どの献立で使うか付きで並べる', async () => {
     withWeek([nikujaga, oyakodon])
@@ -107,5 +113,42 @@ describe('ShoppingListPage', () => {
     renderWithProviders(<ShoppingListPage />)
 
     expect(await screen.findByRole('alert')).toBeVisible()
+  })
+
+  it('保存済みの週を開くと GET /weekly-menus/:id/shopping-list を使う', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+
+    let hit = false
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () => {
+        hit = true
+        return HttpResponse.json({
+          items: [
+            {
+              name: 'にんじん',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              usedIn: [{ id: nikujaga.id, name: nikujaga.name }],
+            },
+          ],
+        })
+      }),
+    )
+
+    renderWithProviders(<ShoppingListPage />)
+    expect(await screen.findByText('にんじん')).toBeInTheDocument()
+    expect(hit).toBe(true)
+  })
+
+  it('未保存の週は従来どおり POST /shopping-list を使う', async () => {
+    withWeek([nikujaga]) // savedId は設定しない
+    const bodies = respondShoppingList([item('たまねぎ', 'vegetable', [nikujaga])])
+
+    renderWithProviders(<ShoppingListPage />)
+    expect(await screen.findByText('たまねぎ')).toBeInTheDocument()
+    expect(bodies[0]).toEqual({ menuIds: [nikujaga.id] })
   })
 })
