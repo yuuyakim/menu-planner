@@ -68,8 +68,10 @@ function respondReroll(replacement: Menu) {
   return bodies
 }
 
+// premium 判定（/auth/me）が解決するまでは MascotStatus が出て生成ボタンは
+// まだ無いため、findByRole で判定後の描画を待つ。
 function create() {
-  return screen.getByRole('button', { name: '1週間分を作る' })
+  return screen.findByRole('button', { name: '1週間分を作る' })
 }
 
 // dayItem は指定の日の領域を返す。日ごとにボタンが並ぶため、絞らないと取り違える。
@@ -113,7 +115,7 @@ describe('週間献立', () => {
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
-    await user.click(create())
+    await user.click(await create())
 
     const items = await screen.findAllByRole('listitem')
     expect(items).toHaveLength(7)
@@ -127,7 +129,7 @@ describe('週間献立', () => {
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
-    await user.click(create())
+    await user.click(await create())
 
     // 起点は「今日」。7日目は6日後の日曜。
     expect(await screen.findByText(/1日目.*7\/20\(月\).*今日/)).toBeVisible()
@@ -139,7 +141,7 @@ describe('週間献立', () => {
     respondMe('premium')
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
 
     const replaced: Menu = { ...menu(9), name: '差し替え後' }
@@ -165,7 +167,7 @@ describe('週間献立', () => {
     respondMe('premium')
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
 
     server.use(
@@ -199,7 +201,7 @@ describe('週間献立', () => {
     respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
 
     const link = dayItem(2).getByRole('link', { name: /レシピ/ })
@@ -218,9 +220,9 @@ describe('週間献立', () => {
     const bodies = respondWeekly()
     renderWithProviders(<WeeklyPage today={monday} />)
 
-    const genre = within(screen.getByRole('group', { name: 'ジャンル' }))
+    const genre = within(await screen.findByRole('group', { name: 'ジャンル' }))
     await user.click(genre.getByRole('radio', { name: '中華' }))
-    await user.click(create())
+    await user.click(await create())
 
     await screen.findAllByRole('listitem')
     expect(bodies[0]).toEqual({ genre: 'chinese', difficulty: undefined, role: 'main' })
@@ -246,7 +248,7 @@ describe('週間献立', () => {
     )
     renderWithProviders(<WeeklyPage today={monday} />)
 
-    await user.click(create())
+    await user.click(await create())
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '条件に合う献立が足りません',
@@ -259,7 +261,7 @@ describe('週間献立', () => {
     respondWeekly()
     const first = renderWithProviders(<WeeklyPage today={monday} />)
 
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
 
     // 詳細画面へ遷移して戻る＝この画面はアンマウントされ、作り直される。
@@ -276,7 +278,7 @@ describe('週間献立', () => {
     respondMe('premium')
     respondWeekly()
     const first = renderWithProviders(<WeeklyPage today={monday} />)
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
 
     respondReroll({ ...menu(9), name: '差し替え後' })
@@ -295,7 +297,7 @@ describe('週間献立', () => {
     respondMe('premium')
     respondWeekly()
     const first = renderWithProviders(<WeeklyPage today={monday} />)
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
     first.unmount()
 
@@ -312,7 +314,7 @@ describe('週間献立', () => {
     renderWithProviders(<WeeklyPage today={monday} />)
     await screen.findByText('献立1')
 
-    await user.click(create())
+    await user.click(await create())
 
     expect(await screen.findByText('新献立1')).toBeVisible()
     expect(screen.queryByText('献立1')).not.toBeInTheDocument()
@@ -323,7 +325,7 @@ describe('週間献立', () => {
     respondMe('premium')
     respondWeekly()
     const first = renderWithProviders(<WeeklyPage today={monday} />)
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
     first.unmount()
 
@@ -355,7 +357,7 @@ describe('買い物リストへの導線（11-G）', () => {
       screen.queryByRole('link', { name: '買い物リストを見る' }),
     ).not.toBeInTheDocument()
 
-    await user.click(create())
+    await user.click(await create())
 
     expect(
       await screen.findByRole('link', { name: '買い物リストを見る' }),
@@ -427,7 +429,7 @@ describe('週間献立の保存', () => {
     const bodies = respondSave()
     renderWithProviders(<WeeklyPage today={monday} />)
 
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
 
     await user.click(await screen.findByRole('button', { name: 'この週を保存する' }))
@@ -461,7 +463,7 @@ describe('週間献立の保存', () => {
     )
     renderWithProviders(<WeeklyPage today={monday} />)
 
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
     await user.click(await screen.findByRole('button', { name: 'この週を保存する' }))
 
@@ -479,7 +481,7 @@ describe('週間献立の保存', () => {
     respondSave()
     renderWithProviders(<WeeklyPage today={monday} />)
 
-    await user.click(create())
+    await user.click(await create())
     await screen.findAllByRole('listitem')
     await user.click(await screen.findByRole('button', { name: 'この週を保存する' }))
     expect(await screen.findByRole('status')).toHaveTextContent('保存しました')

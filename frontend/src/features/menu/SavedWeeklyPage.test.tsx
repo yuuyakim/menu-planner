@@ -38,6 +38,24 @@ function respondList(weeks: SavedWeeklyMenu[]) {
   )
 }
 
+// respondMe は現在のユーザーの応答を仕込む（WeeklyPage.test.tsx と同じ流儀）。
+// 本物の WeeklyPage は premium ゲートの内側にあるため、そこに載せ替える
+// テストだけ premium で応答させる。
+function respondMe(plan: 'free' | 'premium') {
+  server.use(
+    http.get('/api/v1/auth/me', () =>
+      HttpResponse.json({
+        user: {
+          id: '018f0000-0000-7000-8000-000000000001',
+          email: 'user@example.com',
+          displayName: 'ユーザー',
+          plan,
+        },
+      }),
+    ),
+  )
+}
+
 // 週間献立画面の代わりを置き、「開く」でそこへ移ったことと
 // 開いた週が出ていることを確かめられるようにする。
 function renderPage() {
@@ -130,6 +148,7 @@ describe('保存した週間献立', () => {
 
   it('開いた週は本物の週間献立画面でそのまま続けられる', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     // スタブではなく本物の WeeklyPage に載せ替える。
     // 「開く」が sessionStorage に書き戻すだけで済む、という設計（spec.md 5.3）が

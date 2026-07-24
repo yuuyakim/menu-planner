@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRef } from 'react'
 import { Link } from 'react-router'
 
 import { ApiError } from '../../api/client'
@@ -8,6 +9,7 @@ import { MascotStatus } from '../../components/MascotStatus'
 import { useSessionState } from '../../hooks/useSessionState'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { historiesQueryKey } from '../history/api'
+import { PremiumLock } from '../premium/PremiumLock'
 import { rerollDay, saveWeeklyMenu, savedWeeklyMenusQueryKey, suggestWeekly } from './api'
 import { MenuCard } from './MenuCard'
 import { SearchForm } from './SearchForm'
@@ -92,7 +94,17 @@ export function WeeklyPage({ today = new Date() }: Props) {
   })
 
   // 保存は認証が要る（spec.md 2.8）。未ログインなら押させずログインへ誘う。
-  const { user } = useCurrentUser()
+  const { user, isLoading } = useCurrentUser()
+
+  // 一度でも判定が付いたら、以後の一瞬の isLoading への戻りではローディング
+  // 表示に戻さない。<PremiumLock> も同じ /auth/me を内部で問い合わせるため、
+  // それがマウントした直後にバックグラウンドの再取得が走り、未ログイン時は
+  // （まだ一度も成功していないクエリのため）isLoading が一瞬 true に戻る。
+  // ここでガードせずに毎回 isLoading を信じると、その一瞬で <PremiumLock> が
+  // アンマウントされ→再取得完了で再マウント→また再取得…と無限に往復して
+  // /auth/me と /auth/refresh を延々叩き続けてしまう（実際に確認済み）。
+  const hasResolvedRef = useRef(false)
+  if (!isLoading) hasResolvedRef.current = true
 
   const save = useMutation({
     mutationFn: () => saveWeeklyMenu(week ?? []),
@@ -111,6 +123,19 @@ export function WeeklyPage({ today = new Date() }: Props) {
   }
 
   const error = create.error ?? reroll.error
+
+  // 週間献立の作成・保存は premium 限定（フックはここより上ですべて呼び終えている）。
+  if (isLoading && !hasResolvedRef.current) {
+    return <MascotStatus>読み込み中…</MascotStatus>
+  }
+  if (user?.plan !== 'premium') {
+    return (
+      <PremiumLock
+        title="1週間まとめて計画"
+        description="プレミアムプランなら、1週間分の献立をまとめて作って保存し、買い物リストも週単位で使えます。"
+      />
+    )
+  }
 
   return (
     <section className="space-y-6">
