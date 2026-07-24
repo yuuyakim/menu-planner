@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Menu, ShoppingItem } from '../../api/types'
 import { renderWithProviders } from '../../test/render'
@@ -77,6 +77,10 @@ function withSavedId(id: string) {
 }
 
 describe('ShoppingListPage', () => {
+  // 「一度きり」フラグは localStorage に残るため、他のテストへ漏れないよう消す。
+  // 共通の setup.ts は sessionStorage しか消していない。
+  afterEach(() => localStorage.clear())
+
   it('週間献立の食材を、どの献立で使うか付きで並べる', async () => {
     withWeek([nikujaga, oyakodon])
     const bodies = respondShoppingList([
@@ -256,5 +260,70 @@ describe('ShoppingListPage', () => {
       await screen.findByRole('checkbox', { name: /にんじん/ }),
     ).toBeChecked()
     expect(put).toBe(false)
+  })
+
+  it('free が初めてチェックすると案内が1回だけ出る', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+    respondMe('free')
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              name: 'にんじん',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              usedIn: [],
+            },
+          ],
+        }),
+      ),
+    )
+
+    renderWithProviders(<ShoppingListPage />)
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: /にんじん/ }),
+    )
+    expect(await screen.findByText(/プレミアム/)).toBeInTheDocument()
+
+    // 閉じてもう一度チェックしても出ない
+    await userEvent.click(screen.getByRole('button', { name: /閉じる/ }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: /にんじん/ }),
+    )
+    expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
+  })
+
+  it('premium にはチェックしても案内を出さない', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+    respondMe('premium')
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              name: 'にんじん',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              usedIn: [],
+            },
+          ],
+        }),
+      ),
+      http.put(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        new HttpResponse(null, { status: 204 }),
+      ),
+    )
+    renderWithProviders(<ShoppingListPage />)
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: /にんじん/ }),
+    )
+    expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
   })
 })
