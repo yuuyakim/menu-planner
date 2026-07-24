@@ -111,29 +111,58 @@ export function ShoppingListPage() {
   // という Task 11 の要件のため、未保存の週（サーバ側に checked が無い）
   // でも状態を持てるようにローカルが正になる。
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  // manual は手動追加した品目（premium×保存済みのみ）。hidden は非表示にした
+  // 導出品目の key。どちらもローカルが正で、PUT のたびに overlay 全体へ含める。
+  const [manual, setManual] = useState<
+    { name: string; category: IngredientCategory }[]
+  >([])
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
   useEffect(() => {
     setChecked(new Set(items.filter((it) => it.checked).map((it) => it.key)))
+    // manual はサーバが返す origin==='manual' の品目から作り直す。
+    // 非表示（hidden）は差分適用後の GET には現れない設計（Task 8）ため、
+    // ここでは再現できない。再取得のたびに空へ戻る点は Task 13 の既知の制約。
+    setManual(
+      items
+        .filter((it) => it.origin === 'manual')
+        .map((it) => ({ name: it.name, category: it.category })),
+    )
     // items ではなく取得結果そのもの（saved.data / derived.data）を依存にする。
     // items は毎レンダー新しい配列を作るため、それを依存にすると
     // チェック操作のたびにローカル state がサーバの値へ巻き戻ってしまう。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saved.data, derived.data])
 
+  // buildOverlay は「今の画面状態」から overlay 全体を組み立てる（一括置換）。
+  // PUT は部分更新のAPIを持たないため、状態が変わるたびに全体を送り直す。
+  function buildOverlay(
+    nextChecked: Set<string>,
+    nextHidden: Set<string>,
+    nextManual: typeof manual,
+  ): ShoppingListOverride[] {
+    const derivedOverrides: ShoppingListOverride[] = items
+      .filter((it) => it.origin === 'derived')
+      .filter((it) => nextChecked.has(it.key) || nextHidden.has(it.key))
+      .map((it) => ({
+        name: it.name,
+        category: it.category,
+        origin: 'derived',
+        checked: nextChecked.has(it.key),
+        hidden: nextHidden.has(it.key),
+      }))
+    const manualOverrides: ShoppingListOverride[] = nextManual.map((m) => ({
+      name: m.name,
+      category: m.category,
+      origin: 'manual',
+      checked: nextChecked.has(m.name),
+      hidden: false,
+    }))
+    return [...derivedOverrides, ...manualOverrides]
+  }
+
   const persist = useMutation({
-    mutationFn: (next: Set<string>) => {
-      // PUT は overlay 全体の一括置換（部分更新のAPIを持たない）。
-      // 手動品目・非表示は Task 13 で overlay に加える。
-      const overrides: ShoppingListOverride[] = items
-        .filter((it) => next.has(it.key))
-        .map((it) => ({
-          name: it.name,
-          category: it.category,
-          origin: 'derived',
-          checked: true,
-          hidden: false,
-        }))
-      return saveShoppingListOverrides(savedId as string, overrides)
-    },
+    mutationFn: (overlay: ShoppingListOverride[]) =>
+      saveShoppingListOverrides(savedId as string, overlay),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: savedShoppingListQueryKey(savedId as string),
@@ -145,6 +174,12 @@ export function ShoppingListPage() {
   // プレミアムの案内を1回出す。端末に恒久的に記録し、以後は出さない。
   const [guidanceDone, markGuidance] = useOnceFlag('premium-shopping')
   const [showGuidance, setShowGuidance] = useState(false)
+
+  // 追加フォームの入力値。premium×保存済みのときだけ表示する。
+  const [draftName, setDraftName] = useState('')
+  const [draftCategory, setDraftCategory] = useState<IngredientCategory>(
+    categoryOrder[0],
+  )
 
   function toggle(key: string) {
     // setChecked に渡す updater 内で persist.mutate を呼ぶと、
@@ -161,13 +196,61 @@ export function ShoppingListPage() {
     }
     setChecked(next)
     if (canPersist) {
-      persist.mutate(next)
+      persist.mutate(buildOverlay(next, hidden, manual))
     } else if (adding && user?.plan !== 'premium' && !guidanceDone) {
       // user が undefined（未認証）も free 扱いにするための条件。
       setShowGuidance(true)
       markGuidance()
     }
   }
+
+  // addManual は入力欄の内容を手動品目として overlay に加える。
+  // 副作用（persist.mutate）は setManual の外で行う（toggle と同じ理由）。
+  function addManual() {
+    const name = draftName.trim()
+    if (!name) return
+    const nextManual = [...manual, { name, category: draftCategory }]
+    setManual(nextManual)
+    setDraftName('')
+    if (canPersist) {
+      persist.mutate(buildOverlay(checked, hidden, nextManual))
+    }
+  }
+
+  // remove は品目を消す。導出品目は非表示（hidden）に、手動品目は一覧から
+  // 取り除く。canPersist のときだけ呼ばれる（UI 側でボタンを出し分ける）。
+  function remove(it: ViewItem) {
+    if (it.origin === 'manual') {
+      const nextManual = manual.filter((m) => m.name !== it.name)
+      setManual(nextManual)
+      persist.mutate(buildOverlay(checked, hidden, nextManual))
+    } else {
+      const nextHidden = new Set(hidden)
+      nextHidden.add(it.key)
+      setHidden(nextHidden)
+      persist.mutate(buildOverlay(checked, nextHidden, manual))
+    }
+  }
+
+  // visibleItems は画面に出す一覧。導出品目は非表示にしたものを除き、
+  // 手動品目はローカルの manual を正として表示する
+  // （サーバへの再取得を待たず、即座に画面へ反映するため）。
+  const visibleItems: ViewItem[] =
+    savedId != null
+      ? [
+          ...items.filter(
+            (it) => it.origin === 'derived' && !hidden.has(it.key),
+          ),
+          ...manual.map((m) => ({
+            key: m.name,
+            name: m.name,
+            category: m.category,
+            usedIn: [],
+            checked: checked.has(m.name),
+            origin: 'manual' as const,
+          })),
+        ]
+      : items
 
   if (menuIds.length === 0) {
     return (
@@ -199,11 +282,11 @@ export function ShoppingListPage() {
         </p>
       </div>
 
-      {items.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <MascotEmpty>この献立には食材が登録されていません。</MascotEmpty>
       ) : (
         <div className="space-y-4">
-          {groupByCategory(items).map((group) => (
+          {groupByCategory(visibleItems).map((group) => (
             <div key={group.category} className="space-y-2">
               <h2 className="text-sm font-medium text-kon-ink/60">
                 {categoryLabels[group.category]}
@@ -212,7 +295,7 @@ export function ShoppingListPage() {
                 {group.items.map((it) => (
                   <li
                     key={it.key}
-                    className="rounded-xl border border-kon-leaf-soft bg-white px-4 py-2"
+                    className="flex items-center justify-between rounded-xl border border-kon-leaf-soft bg-white px-4 py-2"
                   >
                     <label className="flex items-center gap-2">
                       {/*
@@ -243,6 +326,17 @@ export function ShoppingListPage() {
                     <span className="ml-2 text-sm text-kon-ink/60">
                       {it.usedIn.map((m) => m.name).join('、')}
                     </span>
+                    {/* 品目の追加・削除は premium×保存済みのときだけ出す。 */}
+                    {canPersist && (
+                      <button
+                        type="button"
+                        onClick={() => remove(it)}
+                        aria-label={`${it.name}を消す`}
+                        className="ml-2 text-kon-ink/50 hover:text-kon-ink"
+                      >
+                        ×
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -250,6 +344,45 @@ export function ShoppingListPage() {
           ))}
         </div>
       )}
+
+      {canPersist && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            addManual()
+          }}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <input
+            aria-label="品目を追加"
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            className="rounded-lg border border-kon-leaf-soft px-3 py-1"
+          />
+          <select
+            aria-label="カテゴリ"
+            value={draftCategory}
+            onChange={(e) =>
+              setDraftCategory(e.target.value as IngredientCategory)
+            }
+            className="rounded-lg border border-kon-leaf-soft px-3 py-1"
+          >
+            {categoryOrder.map((c) => (
+              <option key={c} value={c}>
+                {categoryLabels[c]}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="rounded-full bg-kon-leaf px-4 py-1 font-medium text-white hover:bg-kon-leaf/90"
+          >
+            追加
+          </button>
+        </form>
+      )}
+
+      {persist.error && <ErrorMessage error={persist.error} />}
 
       {showGuidance && (
         <div role="status" className="rounded-lg bg-kon-leaf/10 p-3 text-sm">
