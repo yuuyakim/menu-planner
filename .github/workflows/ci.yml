@@ -222,7 +222,9 @@ jobs:
             -e SEARCH_API_PROVIDER='stub' \
             -p 8080:8080 \
             menu-planner-backend:ci
-          curl -fsS --retry 10 --retry-delay 2 http://localhost:8080/health
+          # --retry だけでは接続リセット/recv失敗を再試行せず、起動直後の listen 前の
+          # 一瞬に当たると1発で落ちる（flaky）。接続系エラーも再試行させる。
+          curl -fsS --retry 10 --retry-delay 2 --retry-connrefused --retry-all-errors http://localhost:8080/health
 
       - name: 失敗時のログ出力
         if: failure()
