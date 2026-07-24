@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 
@@ -6,6 +7,23 @@ import type { Menu, ShoppingItem } from '../../api/types'
 import { renderWithProviders } from '../../test/render'
 import { server } from '../../test/server'
 import { ShoppingListPage } from './ShoppingListPage'
+
+// respondMe は現在のユーザーの応答を仕込む。プランだけを差し替える
+// （AuthMenu.test.tsx と同じ流儀）。
+function respondMe(plan: 'free' | 'premium') {
+  server.use(
+    http.get('/api/v1/auth/me', () =>
+      HttpResponse.json({
+        user: {
+          id: '018f0000-0000-7000-8000-000000000001',
+          email: 'user@example.com',
+          displayName: 'ユーザー',
+          plan,
+        },
+      }),
+    ),
+  )
+}
 
 function menu(id: string, name: string): Menu {
   return {
@@ -150,5 +168,93 @@ describe('ShoppingListPage', () => {
     renderWithProviders(<ShoppingListPage />)
     expect(await screen.findByText('たまねぎ')).toBeInTheDocument()
     expect(bodies[0]).toEqual({ menuIds: [nikujaga.id] })
+  })
+
+  it('premium が保存済みの週でチェックすると PUT で永続化する', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+    respondMe('premium')
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              name: 'にんじん',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              usedIn: [],
+            },
+          ],
+        }),
+      ),
+    )
+
+    const puts: unknown[] = []
+    server.use(
+      http.put(
+        `/api/v1/weekly-menus/${savedId}/shopping-list`,
+        async ({ request }) => {
+          puts.push(await request.json())
+          return new HttpResponse(null, { status: 204 })
+        },
+      ),
+    )
+
+    renderWithProviders(<ShoppingListPage />)
+    const box = await screen.findByRole('checkbox', { name: /にんじん/ })
+    await userEvent.click(box)
+
+    await waitFor(() => expect(puts.length).toBe(1))
+    expect(puts[0]).toEqual({
+      items: [
+        {
+          name: 'にんじん',
+          category: 'vegetable',
+          origin: 'derived',
+          checked: true,
+          hidden: false,
+        },
+      ],
+    })
+  })
+
+  it('free はチェックしても PUT を投げない（その場限り）', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+    respondMe('free')
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              name: 'にんじん',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              usedIn: [],
+            },
+          ],
+        }),
+      ),
+    )
+    let put = false
+    server.use(
+      http.put(`/api/v1/weekly-menus/${savedId}/shopping-list`, () => {
+        put = true
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    renderWithProviders(<ShoppingListPage />)
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: /にんじん/ }),
+    )
+    expect(
+      await screen.findByRole('checkbox', { name: /にんじん/ }),
+    ).toBeChecked()
+    expect(put).toBe(false)
   })
 })
