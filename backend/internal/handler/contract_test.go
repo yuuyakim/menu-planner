@@ -37,7 +37,7 @@ const specPath = "../../../api/openapi.yaml"
 func newContractApp(s *fakeMenuService) *echo.Echo {
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 	return e
 }
 

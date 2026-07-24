@@ -164,7 +164,7 @@ func doSuggest(t *testing.T, s *fakeMenuService, query string) *httptest.Respons
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 
 	target := "/api/v1/menus/suggest"
 	if query != "" {
@@ -325,7 +325,7 @@ func doGet(t *testing.T, s *fakeMenuService, id string) *httptest.ResponseRecord
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/menus/"+id, nil))
@@ -457,7 +457,7 @@ func doGetRecipes(t *testing.T, s *fakeMenuService, id string) *httptest.Respons
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/menus/"+id+"/recipes", nil))
@@ -595,16 +595,21 @@ func TestRecipes_未知のエラーは500で詳細を漏らさない(t *testing.
 	assert.NotContains(t, rec.Body.String(), "password")
 }
 
-// doSuggestWeekly は POST /api/v1/menus/suggest-weekly をルーティング経由で叩く。
+// doSuggestWeekly は POST /api/v1/menus/suggest-weekly を premium 利用者として
+// ルーティング経由で叩く。週間献立は premium 限定になったため（Task 3）、
+// 挙動そのものを見たいテストは認証済み・premium で通す。
 func doSuggestWeekly(t *testing.T, s *fakeMenuService, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/suggest-weekly", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	access, err := menuTestTokens.Issue("user-777")
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -733,10 +738,15 @@ func TestSuggestWeekly_ボディが空でも200(t *testing.T) {
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
+
+	access, err := menuTestTokens.Issue("user-777")
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/suggest-weekly", nil)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
 
 	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/menus/suggest-weekly", nil))
+	e.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	assert.Nil(t, s.lastWeeklyFilter.Genre)
@@ -787,7 +797,7 @@ func TestSuggestWeekly_POST以外は受け付けない(t *testing.T) {
 			s := &fakeMenuService{week: testWeek()}
 			e := echo.New()
 			e.HTTPErrorHandler = handler.ErrorHandler()
-			handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+			handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, httptest.NewRequest(tt.method, "/api/v1/menus/suggest-weekly", nil))
@@ -798,16 +808,21 @@ func TestSuggestWeekly_POST以外は受け付けない(t *testing.T) {
 	}
 }
 
-// doRerollDay は POST /api/v1/menus/reroll-day をルーティング経由で叩く。
+// doRerollDay は POST /api/v1/menus/reroll-day を premium 利用者として
+// ルーティング経由で叩く。週間献立は premium 限定になったため（Task 3）、
+// 挙動そのものを見たいテストは認証済み・premium で通す。
 func doRerollDay(t *testing.T, s *fakeMenuService, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/reroll-day", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	access, err := menuTestTokens.Issue("user-777")
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -1079,4 +1094,110 @@ func TestRerollDay_未知の役割は400(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Zero(t, s.rerollCalls, "弾いた条件でサービスを呼ばないこと")
+}
+
+// 週間献立の認可（Task 3: suggest-weekly / reroll-day は premium 限定）。
+//
+// entitlements の問い合わせ自体は RequirePremium（Task 2）の責務なので、ここでは
+// 「ハンドラのルーティングにその2段（RequireAuth → RequirePremium）が実際に
+// 掛かっているか」だけを固定する。判定ロジック自体は middleware_test.go で見る。
+
+// doWeeklyAuthzRequest は POST /api/v1/menus/suggest-weekly を、指定したプラン・
+// 認証有無で叩く。認可の境界だけを見るため、body は固定で条件なしにする。
+func doWeeklyAuthzRequest(t *testing.T, s *fakeMenuService, ent fakeEntitlements, authed bool) *httptest.ResponseRecorder {
+	t.Helper()
+
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, ent).RegisterRoutes(e)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/suggest-weekly", strings.NewReader(`{}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	if authed {
+		access, err := menuTestTokens.Issue("user-777")
+		require.NoError(t, err)
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	}
+
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestSuggestWeekly_未ログインは401(t *testing.T) {
+	t.Parallel()
+
+	// entitlements は呼ばれる前に RequireAuth で弾かれる。
+	rec := doWeeklyAuthzRequest(t, &fakeMenuService{week: testWeek()},
+		fakeEntitlements{plan: domain.PlanPremium}, false)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestSuggestWeekly_freeは403(t *testing.T) {
+	t.Parallel()
+
+	rec := doWeeklyAuthzRequest(t, &fakeMenuService{week: testWeek()},
+		fakeEntitlements{plan: domain.PlanFree}, true)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestSuggestWeekly_premiumは200(t *testing.T) {
+	t.Parallel()
+
+	rec := doWeeklyAuthzRequest(t, &fakeMenuService{week: testWeek()},
+		fakeEntitlements{plan: domain.PlanPremium}, true)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+// doRerollDayAuthzRequest は POST /api/v1/menus/reroll-day を、指定したプラン・
+// 認証有無で叩く。認可の境界だけを見るため、body は day=1 固定にする。
+func doRerollDayAuthzRequest(t *testing.T, s *fakeMenuService, ent fakeEntitlements, authed bool) *httptest.ResponseRecorder {
+	t.Helper()
+
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, ent).RegisterRoutes(e)
+
+	body := `{"day":1,"week":` + weekIDsJSON(testWeekIDs()) + `}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/menus/reroll-day", strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	if authed {
+		access, err := menuTestTokens.Issue("user-777")
+		require.NoError(t, err)
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	}
+
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestRerollDay_未ログインは401(t *testing.T) {
+	t.Parallel()
+
+	rec := doRerollDayAuthzRequest(t, &fakeMenuService{rerolled: domain.DayMenu{Day: 1, Menu: *testMenu()}},
+		fakeEntitlements{plan: domain.PlanPremium}, false)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestRerollDay_freeは403(t *testing.T) {
+	t.Parallel()
+
+	rec := doRerollDayAuthzRequest(t, &fakeMenuService{rerolled: domain.DayMenu{Day: 1, Menu: *testMenu()}},
+		fakeEntitlements{plan: domain.PlanFree}, true)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestRerollDay_premiumは200(t *testing.T) {
+	t.Parallel()
+
+	rec := doRerollDayAuthzRequest(t, &fakeMenuService{rerolled: domain.DayMenu{Day: 1, Menu: *testMenu()}},
+		fakeEntitlements{plan: domain.PlanPremium}, true)
+
+	require.Equal(t, http.StatusOK, rec.Code)
 }
