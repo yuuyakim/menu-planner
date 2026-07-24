@@ -143,7 +143,8 @@ func run() error {
 	overrideRepo := repository.NewShoppingListOverrideRepository(pool)
 	savedShoppingListSvc := service.NewSavedShoppingListService(
 		shoppingSvc, savedWeeklyRepo, overrideRepo, entitlementSvc)
-	savedShoppingListHandler := handler.NewSavedShoppingListHandler(savedShoppingListSvc, tokens)
+	// GET/PUT の買い物リストも premium 限定のため entitlementSvc も渡す。
+	savedShoppingListHandler := handler.NewSavedShoppingListHandler(savedShoppingListSvc, tokens, entitlementSvc)
 
 	e := echo.New()
 	e.HideBanner = true
