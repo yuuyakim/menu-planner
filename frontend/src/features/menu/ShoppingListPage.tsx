@@ -297,6 +297,7 @@ export function ShoppingListPage() {
                       */}
                       <input
                         type="checkbox"
+                        className="accent-kon-leaf"
                         checked={checked.has(it.key)}
                         onChange={() => toggle(it.key)}
                         aria-label={it.name}
