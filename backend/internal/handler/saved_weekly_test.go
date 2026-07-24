@@ -61,15 +61,23 @@ func (s *fakeSavedWeeklyService) Save(
 	return s.id, nil
 }
 
-func savedWeeklyApp(t *testing.T, svc handler.SavedWeeklyMenuUseCase) (*echo.Echo, *auth.JWT) {
+// savedWeeklyApp は保存した週間献立APIのテスト用アプリを組む。
+// 保存/一覧/削除は premium 限定になった（Task 4）ため、ent を明示的に渡す。
+// 既存の呼び出しは premium を既定にして、従来の 200/201/204 の期待を保つ。
+func savedWeeklyApp(
+	t *testing.T, svc handler.SavedWeeklyMenuUseCase, ent fakeEntitlements,
+) (*echo.Echo, *auth.JWT) {
 	t.Helper()
 	tokens, err := auth.NewJWT([]byte(authTestSecret))
 	require.NoError(t, err)
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewSavedWeeklyMenuHandler(svc, tokens).RegisterRoutes(e)
+	handler.NewSavedWeeklyMenuHandler(svc, tokens, ent).RegisterRoutes(e)
 	return e, tokens
 }
+
+// premiumEnt は既存テスト（premium 前提の従来挙動）を保つための既定値。
+var premiumEnt = fakeEntitlements{plan: domain.PlanPremium}
 
 // postWeeklyMenu は認証つきで POST /weekly-menus を叩く。access が空なら未認証。
 func postWeeklyMenu(t *testing.T, e *echo.Echo, access, body string) *httptest.ResponseRecorder {
@@ -99,7 +107,7 @@ func TestSavedWeeklyMenus_Save_Created(t *testing.T) {
 
 	want := domain.NewSavedWeeklyMenuID()
 	svc := &fakeSavedWeeklyService{id: want}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -121,7 +129,7 @@ func TestSavedWeeklyMenus_Save_送った指定がそのままserviceに渡る(t 
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{id: domain.NewSavedWeeklyMenuID()}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -139,7 +147,7 @@ func TestSavedWeeklyMenus_Save_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{}
-	e, _ := savedWeeklyApp(t, svc)
+	e, _ := savedWeeklyApp(t, svc, premiumEnt)
 
 	rec := postWeeklyMenu(t, e, "", weekBody())
 
@@ -151,7 +159,7 @@ func TestSavedWeeklyMenus_Save_日数不正は400(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{err: service.ErrInvalidWeek}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -165,7 +173,7 @@ func TestSavedWeeklyMenus_Save_日の指定不正は400(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{err: service.ErrInvalidDay}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -179,7 +187,7 @@ func TestSavedWeeklyMenus_Save_壊れた献立IDは400(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{err: domain.ErrInvalidMenuID}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -195,7 +203,7 @@ func TestSavedWeeklyMenus_Save_存在しない献立は404(t *testing.T) {
 	// 献立の実在はDBの外部キーが判定し、repository がこのエラーに変換する。
 	// お気に入り・買い物リストと同じく「参照先が無い」ので 404 に揃える。
 	svc := &fakeSavedWeeklyService{err: repository.ErrMenuNotFound}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -210,7 +218,7 @@ func TestSavedWeeklyMenus_Save_上限超過は409(t *testing.T) {
 
 	// 押し出さずに断るため、入力の誤り（400）ではなく状態との競合（409）。
 	svc := &fakeSavedWeeklyService{err: service.ErrSavedWeeklyMenuLimitReached}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -224,7 +232,7 @@ func TestSavedWeeklyMenus_Save_壊れたJSONは400(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -279,7 +287,7 @@ func TestSavedWeeklyMenus_List_中身の7日分を含めて返す(t *testing.T) 
 	svc := &fakeSavedWeeklyService{saved: []domain.SavedWeeklyMenu{
 		{ID: id, Days: days, CreatedAt: created},
 	}}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -313,7 +321,7 @@ func TestSavedWeeklyMenus_List_0件でもnullではなく空配列(t *testing.T)
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{saved: nil}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -327,7 +335,7 @@ func TestSavedWeeklyMenus_List_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{}
-	e, _ := savedWeeklyApp(t, svc)
+	e, _ := savedWeeklyApp(t, svc, premiumEnt)
 
 	rec := getWeeklyMenus(t, e, "")
 
@@ -339,7 +347,7 @@ func TestSavedWeeklyMenus_Delete_NoContent(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -357,7 +365,7 @@ func TestSavedWeeklyMenus_Delete_他人のものは404(t *testing.T) {
 
 	// 403 だと他人が何を保存しているかを漏らすため、存在しない扱いにする。
 	svc := &fakeSavedWeeklyService{err: service.ErrSavedWeeklyMenuNotFound}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -371,7 +379,7 @@ func TestSavedWeeklyMenus_Delete_壊れたIDは400(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{err: domain.ErrInvalidSavedWeeklyMenuID}
-	e, tokens := savedWeeklyApp(t, svc)
+	e, tokens := savedWeeklyApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -385,10 +393,63 @@ func TestSavedWeeklyMenus_Delete_Unauthorized(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{}
-	e, _ := savedWeeklyApp(t, svc)
+	e, _ := savedWeeklyApp(t, svc, premiumEnt)
 
 	rec := deleteWeeklyMenu(t, e, "", domain.NewSavedWeeklyMenuID().String())
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Zero(t, svc.deleteCalls)
+}
+
+// 保存した週間献立の認可（Task 4: 保存/一覧/削除は premium 限定）。
+//
+// entitlements の問い合わせ自体は RequirePremium（Task 2）の責務なので、ここでは
+// 「ハンドラのルーティングに RequireAuth → RequirePremium が実際に掛かっているか」
+// だけを固定する。判定ロジック自体は middleware_test.go で見る。
+// 未認証401は既存の Unauthorized テストが既に固定しているため、ここでは
+// ログイン済み・freeの403だけを追加する（premiumの200/201/204は既存テストが
+// premiumEnt 既定になったことでそのまま担保する）。
+
+var freeEnt = fakeEntitlements{plan: domain.PlanFree}
+
+func TestSavedWeeklyMenus_Save_freeは403(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedWeeklyService{}
+	e, tokens := savedWeeklyApp(t, svc, freeEnt)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := postWeeklyMenu(t, e, access, weekBody())
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Zero(t, svc.saveCalls, "freeなら service を呼ばないべき")
+}
+
+func TestSavedWeeklyMenus_List_freeは403(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedWeeklyService{}
+	e, tokens := savedWeeklyApp(t, svc, freeEnt)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := getWeeklyMenus(t, e, access)
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Zero(t, svc.listCalls, "freeなら service を呼ばないべき")
+}
+
+func TestSavedWeeklyMenus_Delete_freeは403(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedWeeklyService{}
+	e, tokens := savedWeeklyApp(t, svc, freeEnt)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := deleteWeeklyMenu(t, e, access, domain.NewSavedWeeklyMenuID().String())
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Zero(t, svc.deleteCalls, "freeなら service を呼ばないべき")
 }
