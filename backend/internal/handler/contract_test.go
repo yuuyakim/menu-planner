@@ -414,6 +414,7 @@ func TestContract_SavedShoppingList(t *testing.T) {
 			UsedIn: []domain.Menu{menu},
 		},
 		{Name: "牛乳", Category: domain.CategoryDairyEgg, Origin: domain.OriginManual},
+		{Name: "にんじん", Category: domain.CategoryVegetable, Origin: domain.OriginDerived, Hidden: true},
 	}}
 	e, tokens := newContractSavedShoppingListApp(t, svc)
 	access, err := tokens.Issue("018f0000-0000-7000-8000-000000000001")

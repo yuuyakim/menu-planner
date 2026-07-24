@@ -93,6 +93,7 @@ type savedShoppingListResponseBody struct {
 		Category string `json:"category"`
 		Origin   string `json:"origin"`
 		Checked  bool   `json:"checked"`
+		Hidden   bool   `json:"hidden"`
 		UsedIn   []struct {
 			ID   string `json:"id"`
 			Name string `json:"name"`
@@ -112,6 +113,10 @@ func TestSavedShoppingListHandler_Get_200(t *testing.T) {
 		{
 			Name: "牛乳", Category: domain.CategoryDairyEgg, Origin: domain.OriginManual,
 		},
+		{
+			Name: "たまねぎ", Category: domain.CategoryVegetable, Origin: domain.OriginDerived,
+			Hidden: true,
+		},
 	}}
 	e, tokens := savedShoppingListApp(t, svc)
 	access, err := tokens.Issue("user-abc")
@@ -126,13 +131,14 @@ func TestSavedShoppingListHandler_Get_200(t *testing.T) {
 
 	var body savedShoppingListResponseBody
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	require.Len(t, body.Items, 2)
+	require.Len(t, body.Items, 3)
 
 	carrot := body.Items[0]
 	assert.Equal(t, "にんじん", carrot.Name)
 	assert.Equal(t, "vegetable", carrot.Category)
 	assert.Equal(t, "derived", carrot.Origin)
 	assert.True(t, carrot.Checked)
+	assert.False(t, carrot.Hidden)
 	require.Len(t, carrot.UsedIn, 1)
 	assert.Equal(t, menu.ID.String(), carrot.UsedIn[0].ID)
 	assert.Equal(t, "肉じゃが", carrot.UsedIn[0].Name)
@@ -142,7 +148,12 @@ func TestSavedShoppingListHandler_Get_200(t *testing.T) {
 	assert.Equal(t, "dairy_egg", milk.Category)
 	assert.Equal(t, "manual", milk.Origin)
 	assert.False(t, milk.Checked)
+	assert.False(t, milk.Hidden)
 	assert.Empty(t, milk.UsedIn, "手動品目の usedIn は空")
+
+	onion := body.Items[2]
+	assert.Equal(t, "たまねぎ", onion.Name)
+	assert.True(t, onion.Hidden, "hidden な導出品目も GET には含める（フロントが overlay を再構築するため）")
 }
 
 func TestSavedShoppingListHandler_Get_0件でもnullではなく空配列(t *testing.T) {

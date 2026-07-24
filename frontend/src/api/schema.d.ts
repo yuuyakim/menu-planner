@@ -1369,6 +1369,8 @@ export interface components {
             category: "vegetable" | "meat" | "seafood" | "dairy_egg" | "staple" | "other";
             origin: components["schemas"]["Origin"];
             checked: boolean;
+            /** @description 利用者が消した導出品目であることを表す。表示からは外すが、 次回 PUT で overlay 全体を再構築できるよう GET には含める。 */
+            hidden: boolean;
             /** @description その食材を使う献立。手動品目では空。 */
             usedIn: {
                 /** Format: uuid */

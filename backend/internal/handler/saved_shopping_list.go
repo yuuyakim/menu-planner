@@ -48,6 +48,7 @@ type savedShoppingItemDTO struct {
 	Category string                   `json:"category"`
 	Origin   string                   `json:"origin"`
 	Checked  bool                     `json:"checked"`
+	Hidden   bool                     `json:"hidden"`
 	UsedIn   []savedShoppingUsedInDTO `json:"usedIn"`
 }
 
@@ -84,6 +85,7 @@ func (h *SavedShoppingListHandler) Get(c echo.Context) error {
 			Category: it.Category.String(),
 			Origin:   it.Origin.String(),
 			Checked:  it.Checked,
+			Hidden:   it.Hidden,
 			UsedIn:   usedIn,
 		})
 	}

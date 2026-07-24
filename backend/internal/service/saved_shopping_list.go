@@ -26,6 +26,10 @@ type SavedShoppingItem struct {
 	Category domain.IngredientCategory
 	Origin   domain.Origin
 	Checked  bool
+	// Hidden は利用者が消した導出品目であることを表す。表示からは外すが、
+	// 次回 PUT で overlay 全体を組み立て直せるよう GET には含める（設計の穴の修正）。
+	// 手動品目は hidden にはならない（消すと overlay から取り除かれるため常に false）。
+	Hidden bool
 	// UsedIn はその食材を使う献立。手動品目では空。
 	UsedIn []domain.Menu
 }
@@ -109,8 +113,12 @@ func (s *SavedShoppingListService) For(
 
 // mergeOverlay は導出結果に差分を重ねる。
 //
-// 名前を項目の同一性とする。導出品目に同名の差分があればチェック/非表示を適用し、
-// 導出に無い名前の手動品目を足す。hidden は表示から外す。
+// 名前を項目の同一性とする。導出品目に同名の差分があればチェック/非表示を適用する。
+// hidden な導出品目も（Hidden=true のまま）含めて返す。PUT は overlay 全体を
+// 置き換える方式（設計 3.5）のため、フロントが次回 PUT で hidden 行を
+// 再構築できるよう GET に残しておく必要がある（表示から外すのは呼び出し側の仕事）。
+// 導出に無い名前の手動品目は足すが、hidden な手動品目は消えたものとして出さない
+// （手動品目は「消す」＝一覧から取り除く操作であり、非表示状態を持たない）。
 func mergeOverlay(base []SavedShoppingItem, overrides []domain.ShoppingListOverride) []SavedShoppingItem {
 	byName := make(map[string]domain.ShoppingListOverride, len(overrides))
 	for _, o := range overrides {
@@ -122,10 +130,8 @@ func mergeOverlay(base []SavedShoppingItem, overrides []domain.ShoppingListOverr
 	for _, it := range base {
 		baseNames[it.Name] = true
 		if o, ok := byName[it.Name]; ok {
-			if o.Hidden {
-				continue // 消された導出品目は出さない
-			}
 			it.Checked = o.Checked
+			it.Hidden = o.Hidden
 		}
 		out = append(out, it)
 	}

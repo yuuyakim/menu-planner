@@ -121,7 +121,8 @@ func TestSavedShoppingListService_For_premiumは差分を重ねる(t *testing.T)
 		byName[it.Name] = it
 	}
 	require.True(t, byName["にんじん"].Checked, "チェックが重なる")
-	require.NotContains(t, byName, "たまねぎ", "hidden は表示から外れる")
+	require.Contains(t, byName, "たまねぎ", "hidden な導出品目も再構築用にGETへ残す")
+	require.True(t, byName["たまねぎ"].Hidden, "hidden フラグが立つ")
 	require.Contains(t, byName, "牛乳", "手動品目が足される")
 	require.Equal(t, domain.OriginManual, byName["牛乳"].Origin)
 	require.Contains(t, byName, "豚肉", "差分の無い導出品目は残る")
