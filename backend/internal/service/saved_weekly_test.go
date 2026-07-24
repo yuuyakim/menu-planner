@@ -25,6 +25,14 @@ type fakeSavedWeeklyStore struct {
 	countErr     error
 	saveErr      error
 	deleteErr    error
+	byID         map[domain.SavedWeeklyMenuID]fakeSavedWeeklyEntry
+}
+
+// fakeSavedWeeklyEntry は fakeSavedWeeklyStore が Save で覚える1件（所有者と中身）。
+// Find で「他人のものは見せない」を再現するために持つ。
+type fakeSavedWeeklyEntry struct {
+	owner domain.UserID
+	menu  domain.SavedWeeklyMenu
 }
 
 func (s *fakeSavedWeeklyStore) Save(
@@ -36,7 +44,25 @@ func (s *fakeSavedWeeklyStore) Save(
 	if s.saveErr != nil {
 		return domain.SavedWeeklyMenuID{}, s.saveErr
 	}
-	return domain.NewSavedWeeklyMenuID(), nil
+	id := domain.NewSavedWeeklyMenuID()
+	if s.byID == nil {
+		s.byID = make(map[domain.SavedWeeklyMenuID]fakeSavedWeeklyEntry)
+	}
+	s.byID[id] = fakeSavedWeeklyEntry{
+		owner: userID,
+		menu:  domain.SavedWeeklyMenu{ID: id, Days: days},
+	}
+	return id, nil
+}
+
+func (s *fakeSavedWeeklyStore) Find(
+	_ context.Context, userID domain.UserID, id domain.SavedWeeklyMenuID,
+) (domain.SavedWeeklyMenu, error) {
+	e, ok := s.byID[id]
+	if !ok || e.owner != userID {
+		return domain.SavedWeeklyMenu{}, service.ErrSavedWeeklyMenuNotFound
+	}
+	return e.menu, nil
 }
 
 func (s *fakeSavedWeeklyStore) List(

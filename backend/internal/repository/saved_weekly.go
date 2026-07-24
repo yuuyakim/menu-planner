@@ -188,6 +188,39 @@ func scanSavedDay(row pgx.Row) (string, int, domain.Menu, error) {
 	return weekID, int(day), menu, nil
 }
 
+// Find は本人の保存を1件、中身の7日分も含めて返す。
+//
+// user_id でも絞るため、他人の行には構造上たどり着けない。
+// 見つからなければ「無い」と「他人のもの」を区別せず ErrSavedWeeklyMenuNotFound
+// を返す（区別すると他人の保存の存在を明かす。Delete と同じ扱い）。
+func (r *SavedWeeklyMenuRepository) Find(
+	ctx context.Context, userID domain.UserID, id domain.SavedWeeklyMenuID,
+) (domain.SavedWeeklyMenu, error) {
+	var createdAt time.Time
+	err := r.pool.QueryRow(ctx,
+		`SELECT created_at FROM saved_weekly_menus WHERE id = $1 AND user_id = $2`,
+		id.String(), userID.String()).Scan(&createdAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.SavedWeeklyMenu{}, service.ErrSavedWeeklyMenuNotFound
+		}
+		return domain.SavedWeeklyMenu{}, fmt.Errorf("保存した週間献立の取得に失敗しました: %w", err)
+	}
+
+	week := domain.SavedWeeklyMenu{
+		ID:        id,
+		Days:      make([]domain.DayMenu, 0, domain.WeekLength),
+		CreatedAt: createdAt,
+	}
+	// fillDays は複数週用だが、1件でもそのまま使える。
+	idStr := id.String()
+	saved := []domain.SavedWeeklyMenu{week}
+	if err := r.fillDays(ctx, []string{idStr}, map[string]int{idStr: 0}, saved); err != nil {
+		return domain.SavedWeeklyMenu{}, err
+	}
+	return saved[0], nil
+}
+
 // Count はユーザーの保存件数を返す。上限判定（spec.md 2.8）に使う。
 func (r *SavedWeeklyMenuRepository) Count(
 	ctx context.Context, userID domain.UserID,
