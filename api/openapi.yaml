@@ -76,7 +76,9 @@ paths:
     post:
       tags: [menus]
       summary: 1週間分（7日）の献立を提案する
-      security: []
+      description: |
+        premium 限定（spec.md 2.2 / 2.11、週間premium再編設計）。
+        未ログインは 401、ログイン済みの free は 403。
       requestBody:
         required: false
         content:
@@ -92,6 +94,14 @@ paths:
                 $ref: '#/components/schemas/WeeklyResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: プレミアムプランが必要
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
           description: 条件に合う献立が足りない
           content:
@@ -106,7 +116,9 @@ paths:
       description: |
         サーバは週の状態を持たない。現在の週の献立IDを呼び出し側が渡す。
         引き直した結果は履歴に記録しない（確定した献立ではないため）。
-      security: []
+
+        premium 限定（spec.md 2.2 / 2.11、週間premium再編設計）。
+        未ログインは 401、ログイン済みの free は 403。
       requestBody:
         required: true
         content:
@@ -122,6 +134,14 @@ paths:
                 $ref: '#/components/schemas/MenuResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: プレミアムプランが必要
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '422':
           description: 条件に合う献立が無い
           content:
@@ -565,6 +585,9 @@ paths:
       description: |
         中身の7日分を含めて返すため、「開く」ための個別取得は設けていない。
         上限が最大でも50件と小さいのでページングも設けず全件返す（spec.md 2.8 / 2.11 / 5.3）。
+
+        premium 限定（spec.md 2.8 / 2.11、週間premium再編設計）。free は保存済みの週が
+        残っていても一覧が 403 になる（grandfather しない）。
       responses:
         '200':
           description: 保存した週間献立
@@ -574,6 +597,12 @@ paths:
                 $ref: '#/components/schemas/SavedWeeklyMenusResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: プレミアムプランが必要
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
     post:
       tags: [weekly-menus]
       summary: 組み立てた1週間分の献立を保存する
@@ -587,6 +616,8 @@ paths:
         上限に達した状態での保存は、古いものを押し出さず 409 で断る。
         履歴（FIFO）と違い保存は明示的な操作であり、
         黙って消えると保存という行為の意味が壊れるため。
+
+        premium 限定（spec.md 2.8 / 2.11、週間premium再編設計）。
       requestBody:
         required: true
         content:
@@ -628,6 +659,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: プレミアムプランが必要
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -646,6 +683,9 @@ paths:
       description: |
         自分の行だけを消すため、他人の保存には到達できない。
         他人のものを指した場合は 403 ではなく 404 を返す（403 だと保存の存在を明かすため）。
+
+        premium 限定（spec.md 2.8 / 2.11、週間premium再編設計）。
+        こちらの 403 はプレミアムプランが必要であることを示す（他人の保存の 403 とは別の意味）。
       parameters:
         - name: id
           in: path
@@ -660,6 +700,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: プレミアムプランが必要
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '404':
           $ref: '#/components/responses/NotFound'
 
@@ -670,7 +716,10 @@ paths:
       description: |
         保存済みの週間献立から買い物リストを導出し、差分（チェック・手動品目・非表示）を
         重ねて返す。差分の重ね合わせはサーバで行い、フロントには最終形だけを渡す。
-        free でも呼べる（差分が重ならないだけで形は同じ）。他人の週は 404。
+        他人の週は 404。
+
+        premium 限定（spec.md 2.8 / 2.11、週間premium再編設計）。従来は free でも呼べたが、
+        週間まわり一式が premium の傘に入ったため free は 403 になる。
       parameters:
         - name: id
           in: path
@@ -687,6 +736,12 @@ paths:
                 $ref: '#/components/schemas/SavedShoppingListResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: プレミアムプランが必要
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '404':
           $ref: '#/components/responses/NotFound'
 

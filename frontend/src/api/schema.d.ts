@@ -110,7 +110,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 1週間分（7日）の献立を提案する */
+        /**
+         * 1週間分（7日）の献立を提案する
+         * @description premium 限定（spec.md 2.2 / 2.11、週間premium再編設計）。
+         *     未ログインは 401、ログイン済みの free は 403。
+         */
         post: {
             parameters: {
                 query?: never;
@@ -134,6 +138,16 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                /** @description プレミアムプランが必要 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
                 /** @description 条件に合う献立が足りない */
                 422: {
                     headers: {
@@ -164,6 +178,9 @@ export interface paths {
          * 週間献立の指定日だけを引き直す
          * @description サーバは週の状態を持たない。現在の週の献立IDを呼び出し側が渡す。
          *     引き直した結果は履歴に記録しない（確定した献立ではないため）。
+         *
+         *     premium 限定（spec.md 2.2 / 2.11、週間premium再編設計）。
+         *     未ログインは 401、ログイン済みの free は 403。
          */
         post: {
             parameters: {
@@ -188,6 +205,16 @@ export interface paths {
                     };
                 };
                 400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                /** @description プレミアムプランが必要 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
                 /** @description 条件に合う献立が無い */
                 422: {
                     headers: {
@@ -1026,6 +1053,9 @@ export interface paths {
          * 保存した週間献立を新しい順に取得する
          * @description 中身の7日分を含めて返すため、「開く」ための個別取得は設けていない。
          *     上限が最大でも50件と小さいのでページングも設けず全件返す（spec.md 2.8 / 2.11 / 5.3）。
+         *
+         *     premium 限定（spec.md 2.8 / 2.11、週間premium再編設計）。free は保存済みの週が
+         *     残っていても一覧が 403 になる（grandfather しない）。
          */
         get: {
             parameters: {
@@ -1046,6 +1076,15 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
+                /** @description プレミアムプランが必要 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
             };
         };
         put?: never;
@@ -1060,6 +1099,8 @@ export interface paths {
          *     上限に達した状態での保存は、古いものを押し出さず 409 で断る。
          *     履歴（FIFO）と違い保存は明示的な操作であり、
          *     黙って消えると保存という行為の意味が壊れるため。
+         *
+         *     premium 限定（spec.md 2.8 / 2.11、週間premium再編設計）。
          */
         post: {
             parameters: {
@@ -1096,6 +1137,15 @@ export interface paths {
                 };
                 400: components["responses"]["BadRequest"];
                 401: components["responses"]["Unauthorized"];
+                /** @description プレミアムプランが必要 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
                 404: components["responses"]["NotFound"];
                 /**
                  * @description 保存の上限に達している。件数はプランで決まるため、
@@ -1131,6 +1181,9 @@ export interface paths {
          * 保存した週間献立を削除する
          * @description 自分の行だけを消すため、他人の保存には到達できない。
          *     他人のものを指した場合は 403 ではなく 404 を返す（403 だと保存の存在を明かすため）。
+         *
+         *     premium 限定（spec.md 2.8 / 2.11、週間premium再編設計）。
+         *     こちらの 403 はプレミアムプランが必要であることを示す（他人の保存の 403 とは別の意味）。
          */
         delete: {
             parameters: {
@@ -1152,6 +1205,15 @@ export interface paths {
                 };
                 400: components["responses"]["BadRequest"];
                 401: components["responses"]["Unauthorized"];
+                /** @description プレミアムプランが必要 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
                 404: components["responses"]["NotFound"];
             };
         };
@@ -1171,7 +1233,10 @@ export interface paths {
          * 保存済みの週の買い物リストを取得する
          * @description 保存済みの週間献立から買い物リストを導出し、差分（チェック・手動品目・非表示）を
          *     重ねて返す。差分の重ね合わせはサーバで行い、フロントには最終形だけを渡す。
-         *     free でも呼べる（差分が重ならないだけで形は同じ）。他人の週は 404。
+         *     他人の週は 404。
+         *
+         *     premium 限定（spec.md 2.8 / 2.11、週間premium再編設計）。従来は free でも呼べたが、
+         *     週間まわり一式が premium の傘に入ったため free は 403 になる。
          */
         get: {
             parameters: {
@@ -1194,6 +1259,15 @@ export interface paths {
                     };
                 };
                 401: components["responses"]["Unauthorized"];
+                /** @description プレミアムプランが必要 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
                 404: components["responses"]["NotFound"];
             };
         };
