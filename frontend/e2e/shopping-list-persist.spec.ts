@@ -34,7 +34,16 @@ test('premium は保存済み週の買い物リストのチェックがリロー
 
   // ランダム献立のため品目名は固定できない。最初のチェックボックスに絞る。
   const first = page.getByRole('checkbox').first()
-  await first.check()
+  // チェック操作は PUT（非keepalive）を発火するだけで完了を待たない。
+  // reload がそれより先に走ると保存前に中断されるため、PUT応答を待ってから進める。
+  await Promise.all([
+    page.waitForResponse(
+      (res) =>
+        res.url().includes('/shopping-list') &&
+        res.request().method() === 'PUT',
+    ),
+    first.check(),
+  ])
   await expect(first).toBeChecked()
 
   // リロードしても残る（＝サーバに永続化された）。
