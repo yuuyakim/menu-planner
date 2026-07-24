@@ -88,12 +88,39 @@ function WeeklyStub() {
 // 2026-07-22 12:34 に保存されたことにする。
 const savedAt = new Date(2026, 6, 22, 12, 34).toISOString()
 
+describe('プレミアムゲート', () => {
+  it('free はロックを出し保存一覧を取得しない', async () => {
+    respondMe('free')
+    let listed = false
+    server.use(
+      http.get('/api/v1/weekly-menus', () => {
+        listed = true
+        return HttpResponse.json({ weeklyMenus: [] })
+      }),
+    )
+    renderPage()
+
+    expect(await screen.findByText(/プレミアム/)).toBeInTheDocument()
+    // free では一覧 API を叩かない（403 になる無駄打ちを避ける）。
+    expect(listed).toBe(false)
+  })
+
+  it('premium は保存一覧を出す', async () => {
+    respondMe('premium')
+    respondList([])
+    renderPage()
+
+    expect(await screen.findByText(/まだ保存した週間献立がありません/)).toBeVisible()
+  })
+})
+
 describe('保存した週間献立', () => {
   beforeEach(() => {
     sessionStorage.clear()
   })
 
   it('保存日時と中身の一部を並べる', async () => {
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     renderPage()
 
@@ -104,6 +131,7 @@ describe('保存した週間献立', () => {
   })
 
   it('1件も無ければ、作って保存するよう促す', async () => {
+    respondMe('premium')
     respondList([])
     renderPage()
 
@@ -113,6 +141,7 @@ describe('保存した週間献立', () => {
 
   it('開くと週間献立画面に移り、その週が出ている', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     renderPage()
 
@@ -132,6 +161,7 @@ describe('保存した週間献立', () => {
       'menu-planner:weekly.filter',
       JSON.stringify({ genre: 'chinese' }),
     )
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     renderPage()
 
@@ -179,6 +209,7 @@ describe('保存した週間献立', () => {
   it('削除すると一覧から消える', async () => {
     const user = userEvent.setup()
     let deleted: string | undefined
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     server.use(
       http.delete('/api/v1/weekly-menus/:id', ({ params }) => {
@@ -200,6 +231,7 @@ describe('保存した週間献立', () => {
 
   it('削除に失敗しても一覧は残る', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     server.use(
       http.delete('/api/v1/weekly-menus/:id', () =>
