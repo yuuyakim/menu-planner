@@ -1,12 +1,14 @@
-import { apiDelete, apiGet, apiPost } from '../../api/client'
+import { apiDelete, apiGet, apiPost, apiPut } from '../../api/client'
 import type {
   DayMenu,
   Ingredient,
   Menu,
   MenuMatch,
   Recipe,
+  SavedShoppingItem,
   SavedWeeklyMenu,
   ShoppingItem,
+  ShoppingListOverride,
 } from '../../api/types'
 import { withDefaultRole, type MenuFilter } from './filter'
 
@@ -147,4 +149,36 @@ export async function fetchShoppingList(
     menuIds,
   })
   return res.items
+}
+
+/** savedShoppingListQueryKey は保存済み週の買い物リストのキャッシュキー。 */
+export function savedShoppingListQueryKey(savedId: string) {
+  return ['saved-shopping-list', savedId] as const
+}
+
+/**
+ * fetchSavedShoppingList は保存済み週の買い物リストを取得する。
+ *
+ * 未保存の週と違いサーバ側に状態があるため、チェック済みや手動追加も含めて
+ * 差分適用後の形で返る（spec.md 14.5）。
+ */
+export async function fetchSavedShoppingList(
+  savedId: string,
+): Promise<SavedShoppingItem[]> {
+  const res = await apiGet<{ items: SavedShoppingItem[] }>(
+    `/weekly-menus/${savedId}/shopping-list`,
+  )
+  return res.items
+}
+
+/**
+ * saveShoppingListOverrides は保存済み週の買い物リストの差分（overlay）を
+ * 一括置換する。1件ずつではなく、今の overlay 全体を毎回送り直す
+ * （spec.md 14.5 / 部分更新のAPIを持たない）。
+ */
+export async function saveShoppingListOverrides(
+  savedId: string,
+  items: ShoppingListOverride[],
+): Promise<void> {
+  await apiPut(`/weekly-menus/${savedId}/shopping-list`, { items })
 }

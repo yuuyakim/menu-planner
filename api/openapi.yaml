@@ -663,6 +663,74 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/weekly-menus/{id}/shopping-list:
+    get:
+      tags: [weekly-menus]
+      summary: 保存済みの週の買い物リストを取得する
+      description: |
+        保存済みの週間献立から買い物リストを導出し、差分（チェック・手動品目・非表示）を
+        重ねて返す。差分の重ね合わせはサーバで行い、フロントには最終形だけを渡す。
+        free でも呼べる（差分が重ならないだけで形は同じ）。他人の週は 404。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 差分適用後の買い物リスト（カテゴリ順→カナ順）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedShoppingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [weekly-menus]
+      summary: 保存済みの週の買い物リストの差分を置き換える
+      description: |
+        チェック状態・手動品目・非表示を overlay 全体として一括置換する（設計 3.5）。
+        品目単位の部分更新はしない。free は 403。手動品目が上限を超えると 409。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShoppingListOverridesRequest'
+      responses:
+        '204':
+          description: 置き換えた
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: プレミアムプランが必要
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 手動品目が上限に達している
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
 components:
   securitySchemes:
     accessCookie:
@@ -938,6 +1006,76 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShoppingItem'
+
+    Origin:
+      type: string
+      description: 差分行の由来。derived=献立由来 / manual=手動追加。
+      enum: [derived, manual]
+
+    SavedShoppingItem:
+      type: object
+      required: [name, category, origin, checked, hidden, usedIn]
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+          description: 調味料の分類は持たない（spec.md 14.4）
+          enum: [vegetable, meat, seafood, dairy_egg, staple, other]
+        origin:
+          $ref: '#/components/schemas/Origin'
+        checked:
+          type: boolean
+        hidden:
+          type: boolean
+          description: >-
+            利用者が消した導出品目であることを表す。表示からは外すが、
+            次回 PUT で overlay 全体を再構築できるよう GET には含める。
+        usedIn:
+          type: array
+          description: その食材を使う献立。手動品目では空。
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+
+    SavedShoppingListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SavedShoppingItem'
+
+    ShoppingListOverridesRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: overlay 全体。導出品目のチェック/非表示と、手動品目を並べる。
+          items:
+            type: object
+            required: [name, category, origin, checked, hidden]
+            properties:
+              name:
+                type: string
+              category:
+                type: string
+                description: 調味料の分類は持たない（spec.md 14.4）
+                enum: [vegetable, meat, seafood, dairy_egg, staple, other]
+              origin:
+                $ref: '#/components/schemas/Origin'
+              checked:
+                type: boolean
+              hidden:
+                type: boolean
 
     CredentialsRequest:
       type: object

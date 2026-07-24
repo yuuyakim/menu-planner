@@ -200,3 +200,17 @@ type Entitlements interface {
 	// userID が空（未認証）でもエラーにせず free を返す。
 	For(ctx context.Context, userID string) (domain.Entitlement, error)
 }
+
+// ShoppingListOverrideStore は保存済みの週の買い物リストの差分（overlay）の
+// 永続化を抽象化する。実装は internal/repository にある。
+//
+// リストの実体は持たず「差分」だけを扱う（設計 3.4）。更新は品目単位の部分更新では
+// なく overlay 全体の一括置換にする（設計 3.5）。冪等で実装が単純になり、
+// 1端末1利用の実態に競合制御は要らない。
+type ShoppingListOverrideStore interface {
+	// FindBySavedWeeklyMenu は当該週の差分を name 順で返す。無ければ空スライス。
+	FindBySavedWeeklyMenu(ctx context.Context, id domain.SavedWeeklyMenuID) ([]domain.ShoppingListOverride, error)
+
+	// Replace は当該週の差分を丸ごと置き換える。削除と挿入を1トランザクションで行う。
+	Replace(ctx context.Context, id domain.SavedWeeklyMenuID, overrides []domain.ShoppingListOverride) error
+}

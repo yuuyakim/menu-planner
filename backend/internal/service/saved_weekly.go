@@ -39,6 +39,10 @@ type SavedWeeklyMenuStore interface {
 	// Delete は保存を1件削除する。
 	// 該当が無い、または他人のものであれば ErrSavedWeeklyMenuNotFound を返す。
 	Delete(ctx context.Context, userID domain.UserID, id domain.SavedWeeklyMenuID) error
+
+	// Find は本人の保存を1件、中身の7日分も含めて返す。
+	// 他人のもの・存在しないものは ErrSavedWeeklyMenuNotFound を返す（存在を明かさない）。
+	Find(ctx context.Context, userID domain.UserID, id domain.SavedWeeklyMenuID) (domain.SavedWeeklyMenu, error)
 }
 
 // SavedDayInput は保存する1日分の指定。APIの生の値をそのまま受ける。

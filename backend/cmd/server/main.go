@@ -136,6 +136,13 @@ func run() error {
 	ingredientSvc := service.NewIngredientService(ingredientRepo, menuRepo)
 	ingredientHandler := handler.NewIngredientHandler(shoppingSvc, ingredientSvc)
 
+	// 保存済み週の買い物リストは、既存の導出（shoppingSvc）に差分（overrideRepo）を
+	// 重ねる。所有者検証は savedWeeklyRepo、premium 判定は entitlementSvc に委ねる。
+	overrideRepo := repository.NewShoppingListOverrideRepository(pool)
+	savedShoppingListSvc := service.NewSavedShoppingListService(
+		shoppingSvc, savedWeeklyRepo, overrideRepo, entitlementSvc)
+	savedShoppingListHandler := handler.NewSavedShoppingListHandler(savedShoppingListSvc, tokens)
+
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -174,6 +181,7 @@ func run() error {
 	historyHandler.RegisterRoutes(e)
 	favoriteHandler.RegisterRoutes(e)
 	savedWeeklyHandler.RegisterRoutes(e)
+	savedShoppingListHandler.RegisterRoutes(e)
 
 	addr := ":" + env("PORT", "8080")
 

@@ -19,6 +19,7 @@ const weekdays = ['日', '月', '火', '水', '木', '金', '土'] as const
 // サーバは週の状態を持たない（spec.md 5.1）ため、保持はクライアントの責務。
 const weekKey = 'weekly.week'
 const filterKey = 'weekly.filter'
+const savedIdKey = 'weekly.savedId'
 
 // dayLabel は「何日目か」を日付つきの見出しにする。
 //
@@ -58,6 +59,8 @@ export function WeeklyPage({ today = new Date() }: Props) {
   // 引き直しには週と絞り込み条件の両方が要るので、どちらも保持する。
   const [filter, setFilter] = useSessionState<MenuFilter>(filterKey, emptyMenuFilter)
   const [week, setWeek] = useSessionState<DayMenu[] | null>(weekKey, null)
+  // 買い物リストの取得経路（GET/POST）の切り替えに使う保存ID。
+  const [, setSavedId] = useSessionState<string | null>(savedIdKey, null)
 
   const queryClient = useQueryClient()
 
@@ -65,6 +68,9 @@ export function WeeklyPage({ today = new Date() }: Props) {
     mutationFn: suggestWeekly,
     onSuccess: (next) => {
       setWeek(next)
+      // 新しく作った週は保存済みの週とは無関係。古い保存IDを持ち越すと、
+      // 買い物リストが別の週の差分を誤って重ねてしまう（spec.md 14.5）。
+      setSavedId(null)
       // 週の確定はサーバ側で7件まとめて履歴に記録される（6-A）。
       void queryClient.invalidateQueries({ queryKey: historiesQueryKey })
     },
@@ -80,6 +86,8 @@ export function WeeklyPage({ today = new Date() }: Props) {
         (current) =>
           current?.map((d) => (d.day === day ? { ...d, menu } : d)) ?? null,
       )
+      // 中身が保存時点からずれるため、保存済みの差分経路からは外す。
+      setSavedId(null)
     },
   })
 
@@ -88,7 +96,9 @@ export function WeeklyPage({ today = new Date() }: Props) {
 
   const save = useMutation({
     mutationFn: () => saveWeeklyMenu(week ?? []),
-    onSuccess: () => {
+    onSuccess: (newId) => {
+      // 保存直後からこの週を永続化経路（GET）にする。
+      setSavedId(newId)
       // 保存一覧を開いたときに、今保存したものが載っている状態にする。
       void queryClient.invalidateQueries({ queryKey: savedWeeklyMenusQueryKey })
     },

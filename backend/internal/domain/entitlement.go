@@ -41,3 +41,11 @@ func (e Entitlement) SavedWeeklyMenuLimit() int {
 	}
 	return freeSavedWeeklyMenuLimit
 }
+
+// CanPersistShoppingList は買い物リストの差分を保存できるかを返す。
+//
+// premium だけが true。ゼロ値の Entitlement は Plan() が free に落ちるため
+// false になり、取得し忘れても永続化の権限は漏れない（false 側が安全）。
+func (e Entitlement) CanPersistShoppingList() bool {
+	return e.Plan() == PlanPremium
+}

@@ -41,3 +41,26 @@ func TestEntitlement_Planを返す(t *testing.T) {
 	require.Equal(t, domain.PlanFree,
 		domain.NewEntitlement(domain.PlanFree).Plan())
 }
+
+func TestEntitlement_CanPersistShoppingList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		ent  domain.Entitlement
+		want bool
+	}{
+		{"premium は永続化できる", domain.NewEntitlement(domain.PlanPremium), true},
+		{"free は永続化できない", domain.NewEntitlement(domain.PlanFree), false},
+		// ゼロ値は取得し忘れを表す。free と同じく永続化できない（安全側）。
+		{"ゼロ値は永続化できない", domain.Entitlement{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.ent.CanPersistShoppingList(); got != tt.want {
+				t.Errorf("CanPersistShoppingList() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

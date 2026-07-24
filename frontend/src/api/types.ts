@@ -28,6 +28,14 @@ export type IngredientCategory = Ingredient['category']
 export type ShoppingItem = Schemas['ShoppingItem']
 export type MenuMatch = Schemas['MenuMatch']
 
+/** SavedShoppingItem は保存済み週の買い物リスト1件（差分適用後の形）。 */
+export type SavedShoppingItem = Schemas['SavedShoppingItem']
+/** Origin は差分行の由来。derived=献立由来 / manual=手動追加。 */
+export type Origin = Schemas['Origin']
+/** ShoppingListOverride は overlay 一括置換で送る1件（PUT のリクエスト形）。 */
+export type ShoppingListOverride =
+  Schemas['ShoppingListOverridesRequest']['items'][number]
+
 /** RFC 7807 の problem+json。 */
 export type Problem = Schemas['Problem']
 

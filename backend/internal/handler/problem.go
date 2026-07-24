@@ -47,6 +47,8 @@ var problemMapping = []struct {
 	{domain.ErrInvalidMenuID, http.StatusBadRequest, "invalid-menu-id", "不正な献立IDです"},
 	{domain.ErrInvalidHistoryID, http.StatusBadRequest, "invalid-history-id", "不正な履歴IDです"},
 	{domain.ErrInvalidSavedWeeklyMenuID, http.StatusBadRequest, "invalid-saved-weekly-menu-id", "不正な保存IDです"},
+	// 買い物リストの差分（PUT のボディ）が不正。Validate が返す。
+	{domain.ErrInvalidOverride, http.StatusBadRequest, "invalid-shopping-list-override", "不正な買い物リストの指定です"},
 	// 食材からの検索で本文に壊れたIDが来た場合（13-C で初めて外に出る経路になった）。
 	{domain.ErrInvalidIngredientID, http.StatusBadRequest, "invalid-ingredient-id", "不正な食材IDです"},
 	{domain.ErrInvalidMenu, http.StatusBadRequest, "invalid-menu", "不正な献立です"},
@@ -77,6 +79,10 @@ var problemMapping = []struct {
 	{service.ErrEmailTaken, http.StatusConflict, "email-taken", "メールアドレスは既に登録されています"},
 	// お気に入りの重複も同様に 409。既にある状態との競合であって入力の誤りではない。
 	{service.ErrFavoriteExists, http.StatusConflict, "favorite-exists", "この献立は既にお気に入りに登録されています"},
+	// プレミアム専用の操作を free が試みた。403。
+	{service.ErrPremiumRequired, http.StatusForbidden, "premium-required", "プレミアムプランが必要です"},
+	// 手動品目が上限に達した。既存の保存上限と同じく今の状態との競合なので 409。
+	{service.ErrShoppingListItemLimitReached, http.StatusConflict, "shopping-list-item-limit-reached", "追加できる品目の上限に達しました"},
 	// 保存した週間献立が上限に達している。履歴のように押し出さず断るため、
 	// 入力の誤り（400）ではなく今の状態との競合（409）にする（spec.md 2.8）。
 	//

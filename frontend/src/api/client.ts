@@ -153,6 +153,19 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
   })
 }
 
+/** PUT でJSONを送る。overlay の一括置換など、全体を送り直す更新に使う。 */
+export function apiPut<T = void>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: 'PUT',
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+  })
+}
+
 /** DELETE する。応答は基本 204。 */
 export function apiDelete<T = void>(path: string): Promise<T> {
   return request<T>(path, { method: 'DELETE' })

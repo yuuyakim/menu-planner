@@ -163,6 +163,51 @@ func TestSavedWeeklyRepository_無い保存の削除は見つからない(t *tes
 	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuNotFound)
 }
 
+func TestSavedWeeklyRepository_Find_本人の週を中身つきで返す(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := repository.NewSavedWeeklyMenuRepository(pool)
+
+	u := createUser(t, pool, "sw-find@example.com")
+	days := buildWeek(t, pool, "検")
+	id, err := repo.Save(ctx, u.ID, days)
+	require.NoError(t, err)
+
+	got, err := repo.Find(ctx, u.ID, id)
+	require.NoError(t, err)
+	require.Equal(t, id, got.ID)
+	require.Len(t, got.Days, domain.WeekLength, "中身の7日分が詰まっているべき")
+	for i, want := range days {
+		assert.Equal(t, want.Day, got.Days[i].Day)
+		assert.Equal(t, want.Menu.ID, got.Days[i].Menu.ID)
+	}
+	assert.False(t, got.CreatedAt.IsZero())
+}
+
+func TestSavedWeeklyRepository_Find_他人の週は見つからない(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := repository.NewSavedWeeklyMenuRepository(pool)
+
+	owner := createUser(t, pool, "sw-find-owner@example.com")
+	other := createUser(t, pool, "sw-find-other@example.com")
+	id, err := repo.Save(ctx, owner.ID, buildWeek(t, pool, "他"))
+	require.NoError(t, err)
+
+	_, err = repo.Find(ctx, other.ID, id)
+	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuNotFound, "他人の週は存在を明かさず not found")
+}
+
+func TestSavedWeeklyRepository_Find_無い週は見つからない(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := repository.NewSavedWeeklyMenuRepository(pool)
+
+	u := createUser(t, pool, "sw-find-missing@example.com")
+	_, err := repo.Find(ctx, u.ID, domain.NewSavedWeeklyMenuID())
+	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuNotFound)
+}
+
 func TestSavedWeeklyRepository_存在しない献立を含む保存は失敗し何も残さない(t *testing.T) {
 	pool := newTestPool(t)
 	ctx := context.Background()
