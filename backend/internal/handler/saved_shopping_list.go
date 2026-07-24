@@ -33,6 +33,7 @@ func (h *SavedShoppingListHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
 	requireAuth := RequireAuth(h.tokens)
 	g.GET("/weekly-menus/:id/shopping-list", h.Get, requireAuth)
+	g.PUT("/weekly-menus/:id/shopping-list", h.Replace, requireAuth)
 }
 
 // savedShoppingUsedInDTO はその食材を使う献立。
@@ -87,4 +88,45 @@ func (h *SavedShoppingListHandler) Get(c echo.Context) error {
 		})
 	}
 	return c.JSON(http.StatusOK, savedShoppingListResponse{Items: out})
+}
+
+// putShoppingListOverridesRequest は PUT のリクエストボディ。
+type putShoppingListOverridesRequest struct {
+	Items []struct {
+		Name     string `json:"name"`
+		Category string `json:"category"`
+		Origin   string `json:"origin"`
+		Checked  bool   `json:"checked"`
+		Hidden   bool   `json:"hidden"`
+	} `json:"items"`
+}
+
+// Replace は保存済み週の買い物リストの差分を一括置換する。
+//
+//	PUT /api/v1/weekly-menus/:id/shopping-list
+//
+// 品目単位の部分更新はしない。free は 403、他人の週は 404、手動品目が
+// 上限を超えると 409、未認証は 401。
+func (h *SavedShoppingListHandler) Replace(c echo.Context) error {
+	userID, ok := UserIDFromContext(c)
+	if !ok {
+		return auth.ErrTokenInvalid
+	}
+
+	var req putShoppingListOverridesRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "リクエストの形式が不正です")
+	}
+
+	inputs := make([]service.OverrideInput, 0, len(req.Items))
+	for _, i := range req.Items {
+		inputs = append(inputs, service.OverrideInput{
+			Name: i.Name, Category: i.Category, Origin: i.Origin, Checked: i.Checked, Hidden: i.Hidden,
+		})
+	}
+
+	if err := h.svc.ReplaceOverrides(c.Request().Context(), userID, c.Param("id"), inputs); err != nil {
+		return err
+	}
+	return c.NoContent(http.StatusNoContent)
 }
