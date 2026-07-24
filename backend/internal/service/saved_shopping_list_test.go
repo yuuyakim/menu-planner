@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -145,4 +146,64 @@ func TestSavedShoppingListService_For_並びはカテゴリ順カナ順(t *testi
 	require.NoError(t, err)
 	require.Equal(t, "にんじん", items[0].Name, "野菜が肉より先")
 	require.Equal(t, "豚肉", items[1].Name)
+}
+
+func manualInput(name string) service.OverrideInput {
+	return service.OverrideInput{Name: name, Category: "other", Origin: "manual"}
+}
+
+func TestReplaceOverrides_freeは403(t *testing.T) {
+	t.Parallel()
+	svc, _, userID, weekID := setupForTest(t, domain.PlanFree, nil)
+	err := svc.ReplaceOverrides(context.Background(), userID, weekID,
+		[]service.OverrideInput{manualInput("牛乳")})
+	require.ErrorIs(t, err, service.ErrPremiumRequired)
+}
+
+func TestReplaceOverrides_premiumは保存する(t *testing.T) {
+	t.Parallel()
+	svc, overrides, userID, weekID := setupForTest(t, domain.PlanPremium, nil)
+	err := svc.ReplaceOverrides(context.Background(), userID, weekID, []service.OverrideInput{
+		{Name: "にんじん", Category: "vegetable", Origin: "derived", Checked: true},
+		manualInput("牛乳"),
+	})
+	require.NoError(t, err)
+	wid, _ := domain.ParseSavedWeeklyMenuID(weekID)
+	require.Len(t, overrides.byWeek[wid], 2)
+}
+
+func TestReplaceOverrides_他人の週は404(t *testing.T) {
+	t.Parallel()
+	svc, _, _, weekID := setupForTest(t, domain.PlanPremium, nil)
+	err := svc.ReplaceOverrides(context.Background(), domain.NewUserID().String(), weekID,
+		[]service.OverrideInput{manualInput("牛乳")})
+	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuNotFound)
+}
+
+func TestReplaceOverrides_手動品目100件超は409(t *testing.T) {
+	t.Parallel()
+	svc, _, userID, weekID := setupForTest(t, domain.PlanPremium, nil)
+	inputs := make([]service.OverrideInput, 0, 101)
+	for i := 0; i < 101; i++ {
+		inputs = append(inputs, manualInput("品目"+strconv.Itoa(i)))
+	}
+	err := svc.ReplaceOverrides(context.Background(), userID, weekID, inputs)
+	require.ErrorIs(t, err, service.ErrShoppingListItemLimitReached)
+}
+
+func TestReplaceOverrides_不正なカテゴリは400(t *testing.T) {
+	t.Parallel()
+	svc, _, userID, weekID := setupForTest(t, domain.PlanPremium, nil)
+	err := svc.ReplaceOverrides(context.Background(), userID, weekID,
+		[]service.OverrideInput{{Name: "牛乳", Category: "spice", Origin: "manual"}})
+	require.ErrorIs(t, err, domain.ErrInvalidOverride)
+}
+
+func TestReplaceOverrides_名前の重複は400(t *testing.T) {
+	t.Parallel()
+	svc, _, userID, weekID := setupForTest(t, domain.PlanPremium, nil)
+	err := svc.ReplaceOverrides(context.Background(), userID, weekID, []service.OverrideInput{
+		manualInput("牛乳"), manualInput("牛乳"),
+	})
+	require.ErrorIs(t, err, domain.ErrInvalidOverride)
 }
