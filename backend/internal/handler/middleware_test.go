@@ -73,7 +73,7 @@ func TestRequirePremium_userID無しは401(t *testing.T) {
 
 	mw := handler.RequirePremium(fakeEntitlements{plan: domain.PlanPremium})
 	called := false
-	next := func(c echo.Context) error { called = true; return nil }
+	next := func(_ echo.Context) error { called = true; return nil }
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/premium-only", nil)
