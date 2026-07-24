@@ -47,6 +47,8 @@ var problemMapping = []struct {
 	{domain.ErrInvalidMenuID, http.StatusBadRequest, "invalid-menu-id", "不正な献立IDです"},
 	{domain.ErrInvalidHistoryID, http.StatusBadRequest, "invalid-history-id", "不正な履歴IDです"},
 	{domain.ErrInvalidSavedWeeklyMenuID, http.StatusBadRequest, "invalid-saved-weekly-menu-id", "不正な保存IDです"},
+	// 買い物リストの差分（PUT のボディ）が不正。Validate が返す。
+	{domain.ErrInvalidOverride, http.StatusBadRequest, "invalid-shopping-list-override", "不正な買い物リストの指定です"},
 	// 食材からの検索で本文に壊れたIDが来た場合（13-C で初めて外に出る経路になった）。
 	{domain.ErrInvalidIngredientID, http.StatusBadRequest, "invalid-ingredient-id", "不正な食材IDです"},
 	{domain.ErrInvalidMenu, http.StatusBadRequest, "invalid-menu", "不正な献立です"},

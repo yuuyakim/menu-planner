@@ -58,6 +58,10 @@ var intentionallyUnmapped = map[string]string{
 	// 現状どのハンドラも本文から食材IDを解釈しない。
 	// 解釈する経路が増えたら写像すること（写像済みでもこのテストは通る）。
 	"domain.ErrInvalidIngredientID": "リクエスト由来の経路が無い",
+
+	// リクエスト経路では ShoppingListOverride.Validate が ErrInvalidOverride に
+	// 丸めるため、この生のエラーは handler まで届かない（ParseOrigin は入力検証に使わない）。
+	"domain.ErrInvalidOrigin": "リクエスト経路では ErrInvalidOverride に丸める",
 }
 
 // mappedErrors は problem.go の写像表に載っているエラーを "pkg.Name" で返す。
