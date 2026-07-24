@@ -153,6 +153,7 @@ describe('ShoppingListPage', () => {
               category: 'vegetable',
               origin: 'derived',
               checked: false,
+              hidden: false,
               usedIn: [{ id: nikujaga.id, name: nikujaga.name }],
             },
           ],
@@ -188,6 +189,7 @@ describe('ShoppingListPage', () => {
               category: 'vegetable',
               origin: 'derived',
               checked: false,
+              hidden: false,
               usedIn: [],
             },
           ],
@@ -238,6 +240,7 @@ describe('ShoppingListPage', () => {
               category: 'vegetable',
               origin: 'derived',
               checked: false,
+              hidden: false,
               usedIn: [],
             },
           ],
@@ -276,6 +279,7 @@ describe('ShoppingListPage', () => {
               category: 'vegetable',
               origin: 'derived',
               checked: false,
+              hidden: false,
               usedIn: [],
             },
             {
@@ -283,6 +287,7 @@ describe('ShoppingListPage', () => {
               category: 'vegetable',
               origin: 'derived',
               checked: false,
+              hidden: false,
               usedIn: [],
             },
           ],
@@ -327,6 +332,7 @@ describe('ShoppingListPage', () => {
               category: 'vegetable',
               origin: 'derived',
               checked: false,
+              hidden: false,
               usedIn: [],
             },
           ],
@@ -393,6 +399,7 @@ describe('ShoppingListPage', () => {
               category: 'vegetable',
               origin: 'derived',
               checked: false,
+              hidden: false,
               usedIn: [],
             },
           ],
@@ -421,6 +428,74 @@ describe('ShoppingListPage', () => {
       origin: 'derived',
       checked: false,
       hidden: true,
+    })
+  })
+
+  it('保存済みの週で hidden の品目は表示されないが overlay には残る', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+    respondMe('premium')
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              name: 'たまねぎ',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              hidden: true,
+              usedIn: [],
+            },
+            {
+              name: 'にんじん',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              hidden: false,
+              usedIn: [],
+            },
+          ],
+        }),
+      ),
+    )
+    const puts: { items: unknown[] }[] = []
+    server.use(
+      http.put(
+        `/api/v1/weekly-menus/${savedId}/shopping-list`,
+        async ({ request }) => {
+          puts.push((await request.json()) as { items: unknown[] })
+          return new HttpResponse(null, { status: 204 })
+        },
+      ),
+    )
+
+    renderWithProviders(<ShoppingListPage />)
+    // hidden な品目（たまねぎ）は画面に出ない。
+    expect(await screen.findByText('にんじん')).toBeInTheDocument()
+    expect(screen.queryByText('たまねぎ')).not.toBeInTheDocument()
+
+    // 別の（表示されている）品目をチェックしても、
+    // 送る overlay には hidden な品目が消えずに残っている
+    // （そうでないと、次に開いたときに hidden が復活してしまう）。
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: /にんじん/ }),
+    )
+    await waitFor(() => expect(puts.length).toBe(1))
+    expect(puts[0].items).toContainEqual({
+      name: 'たまねぎ',
+      category: 'vegetable',
+      origin: 'derived',
+      checked: false,
+      hidden: true,
+    })
+    expect(puts[0].items).toContainEqual({
+      name: 'にんじん',
+      category: 'vegetable',
+      origin: 'derived',
+      checked: true,
+      hidden: false,
     })
   })
 })

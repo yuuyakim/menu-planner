@@ -37,6 +37,9 @@ type ViewItem = {
   usedIn: { id: string; name: string }[]
   checked: boolean
   origin: Origin
+  // hidden は利用者が消した導出品目であることを表す。表示からは外すが、
+  // overlay を再構築できるよう items 自体には残す（サーバの GET 由来）。
+  hidden: boolean
 }
 
 // groupByCategory は買い物リストをカテゴリごとにまとめ、売り場を回る順に並べる。
@@ -91,6 +94,7 @@ export function ShoppingListPage() {
           usedIn: it.usedIn,
           checked: it.checked,
           origin: it.origin,
+          hidden: it.hidden,
         }))
       : (derived.data ?? []).map((it) => ({
           key: it.ingredient.id,
@@ -99,6 +103,7 @@ export function ShoppingListPage() {
           usedIn: it.usedIn,
           checked: false,
           origin: 'derived' as const,
+          hidden: false,
         }))
 
   // 保存済みの週かつ premium のときだけ、チェックはサーバに残る。
@@ -120,13 +125,16 @@ export function ShoppingListPage() {
   useEffect(() => {
     setChecked(new Set(items.filter((it) => it.checked).map((it) => it.key)))
     // manual はサーバが返す origin==='manual' の品目から作り直す。
-    // 非表示（hidden）は差分適用後の GET には現れない設計（Task 8）ため、
-    // ここでは再現できない。再取得のたびに空へ戻る点は Task 13 の既知の制約。
     setManual(
       items
         .filter((it) => it.origin === 'manual')
         .map((it) => ({ name: it.name, category: it.category })),
     )
+    // hidden もサーバが返す hidden===true の品目から作り直す。GET が hidden
+    // 行も返すようになったため（設計の穴の修正）、ここで再構築できる。
+    // これをしないと次回 PUT で overlay から hidden 行が抜け、消したはずの
+    // 導出品目が復活してしまう。
+    setHidden(new Set(items.filter((it) => it.hidden).map((it) => it.key)))
     // items ではなく取得結果そのもの（saved.data / derived.data）を依存にする。
     // items は毎レンダー新しい配列を作るため、それを依存にすると
     // チェック操作のたびにローカル state がサーバの値へ巻き戻ってしまう。
@@ -232,25 +240,9 @@ export function ShoppingListPage() {
     }
   }
 
-  // visibleItems は画面に出す一覧。導出品目は非表示にしたものを除き、
-  // 手動品目はローカルの manual を正として表示する
-  // （サーバへの再取得を待たず、即座に画面へ反映するため）。
-  const visibleItems: ViewItem[] =
-    savedId != null
-      ? [
-          ...items.filter(
-            (it) => it.origin === 'derived' && !hidden.has(it.key),
-          ),
-          ...manual.map((m) => ({
-            key: m.name,
-            name: m.name,
-            category: m.category,
-            usedIn: [],
-            checked: checked.has(m.name),
-            origin: 'manual' as const,
-          })),
-        ]
-      : items
+  // visible は画面に出す一覧。hidden な導出品目は items 自体には残す
+  // （overlay 再構築のため）が、表示からは外す。
+  const visible: ViewItem[] = items.filter((it) => !it.hidden)
 
   if (menuIds.length === 0) {
     return (
@@ -282,11 +274,11 @@ export function ShoppingListPage() {
         </p>
       </div>
 
-      {visibleItems.length === 0 ? (
+      {visible.length === 0 ? (
         <MascotEmpty>この献立には食材が登録されていません。</MascotEmpty>
       ) : (
         <div className="space-y-4">
-          {groupByCategory(visibleItems).map((group) => (
+          {groupByCategory(visible).map((group) => (
             <div key={group.category} className="space-y-2">
               <h2 className="text-sm font-medium text-kon-ink/60">
                 {categoryLabels[group.category]}
