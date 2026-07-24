@@ -120,7 +120,8 @@ func run() error {
 
 	savedWeeklyRepo := repository.NewSavedWeeklyMenuRepository(pool)
 	savedWeeklySvc := service.NewSavedWeeklyMenuService(savedWeeklyRepo, entitlementSvc)
-	savedWeeklyHandler := handler.NewSavedWeeklyMenuHandler(savedWeeklySvc, tokens)
+	// 保存/一覧/削除は premium 限定のため entitlementSvc も渡す。
+	savedWeeklyHandler := handler.NewSavedWeeklyMenuHandler(savedWeeklySvc, tokens, entitlementSvc)
 
 	ingredientRepo := repository.NewIngredientRepository(pool)
 
