@@ -17,6 +17,7 @@ function menu(n: number): Menu {
     name: `献立${n}`,
     genre: 'japanese',
     difficulty: 'easy',
+    role: 'main',
     description: `説明${n}`,
   }
 }
@@ -168,7 +169,7 @@ describe('週間献立', () => {
     await user.click(create())
 
     await screen.findAllByRole('listitem')
-    expect(bodies[0]).toEqual({ genre: 'chinese', difficulty: undefined })
+    expect(bodies[0]).toEqual({ genre: 'chinese', difficulty: undefined, role: 'main' })
   })
 
   it('作成に失敗したらメッセージを出す', async () => {
@@ -386,7 +387,9 @@ describe('週間献立の保存', () => {
     expect(bodies[0].days?.[6]).toEqual({ day: 7, menuId: menu(7).id })
   })
 
-  it('上限に達していたら、古いものを消すよう伝える', async () => {
+  // 上限はプランで変わる（free 10件 / premium 50件）。件数をこちらで持つと
+  // premium の利用者に「10件まで」と出るため、サーバの detail をそのまま出す。
+  it('上限に達していたら、サーバが返した件数で古いものを消すよう伝える', async () => {
     const user = userEvent.setup()
     signedIn()
     respondWeekly()
@@ -395,8 +398,10 @@ describe('週間献立の保存', () => {
         HttpResponse.json(
           {
             type: 'https://example.com/probs/saved-weekly-menu-limit-reached',
-            title: '保存できる週間献立は10件までです',
+            title: '保存できる週間献立の上限に達しました',
             status: 409,
+            detail:
+              '保存できる週間献立の上限に達しました: 保存できるのは50件までです。「保存した週間献立」から古いものを削除してください',
           },
           { status: 409, headers: { 'Content-Type': 'application/problem+json' } },
         ),
@@ -410,7 +415,8 @@ describe('週間献立の保存', () => {
 
     // 押し直しても直らない。次に取るべき行動は「古いものを消す」。
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('10件まで')
+    expect(alert).toHaveTextContent('50件まで')
+    expect(alert).not.toHaveTextContent('10件まで')
     expect(alert).toHaveTextContent('削除してください')
   })
 

@@ -73,7 +73,7 @@ func TestSavedWeeklyService_Save_7日分を渡す(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 	userID := domain.NewUserID()
 	in := weekInput()
 
@@ -96,7 +96,7 @@ func TestSavedWeeklyService_Save_日数が7でなければ拒否(t *testing.T) {
 	// 過不足のどちらも受け付けない。0件も含める。
 	for _, n := range []int{0, 6, 8} {
 		store := &fakeSavedWeeklyStore{}
-		svc := service.NewSavedWeeklyMenuService(store)
+		svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 		in := weekInput()
 		if n < domain.WeekLength {
@@ -115,7 +115,7 @@ func TestSavedWeeklyService_Save_日の重複は拒否(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	in := weekInput()
 	in[3].Day = in[2].Day // 7件のまま、日だけを重複させる
@@ -130,7 +130,7 @@ func TestSavedWeeklyService_Save_日の範囲外は拒否(t *testing.T) {
 
 	for _, day := range []int{0, 8, -1} {
 		store := &fakeSavedWeeklyStore{}
-		svc := service.NewSavedWeeklyMenuService(store)
+		svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 		in := weekInput()
 		in[0].Day = day
@@ -145,7 +145,7 @@ func TestSavedWeeklyService_Save_壊れた献立IDは拒否(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	in := weekInput()
 	in[5].MenuID = "not-a-uuid"
@@ -158,9 +158,9 @@ func TestSavedWeeklyService_Save_壊れた献立IDは拒否(t *testing.T) {
 func TestSavedWeeklyService_Save_上限に達していたら断る(t *testing.T) {
 	t.Parallel()
 
-	// 上限ちょうどの状態で保存しようとすると 409 相当になる。
-	store := &fakeSavedWeeklyStore{count: service.SavedWeeklyMenuLimit}
-	svc := service.NewSavedWeeklyMenuService(store)
+	// 上限ちょうどの状態で保存しようとすると 409 相当になる（free の10件）。
+	store := &fakeSavedWeeklyStore{count: 10}
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
 	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuLimitReached)
@@ -170,9 +170,9 @@ func TestSavedWeeklyService_Save_上限に達していたら断る(t *testing.T)
 func TestSavedWeeklyService_Save_上限の1つ手前なら通る(t *testing.T) {
 	t.Parallel()
 
-	// 境界の確認。ちょうど上限に達する保存は成功する。
-	store := &fakeSavedWeeklyStore{count: service.SavedWeeklyMenuLimit - 1}
-	svc := service.NewSavedWeeklyMenuService(store)
+	// 境界の確認。ちょうど上限に達する保存は成功する（free の10件）。
+	store := &fakeSavedWeeklyStore{count: 9}
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
 	require.NoError(t, err)
@@ -183,7 +183,7 @@ func TestSavedWeeklyService_Save_壊れたユーザーIDは認証エラー(t *te
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.Save(context.Background(), "not-a-uuid", weekInput())
 	require.ErrorIs(t, err, service.ErrUserNotFound)
@@ -196,7 +196,7 @@ func TestSavedWeeklyService_Save_件数の取得に失敗したら保存しな�
 	// 上限を確かめられないまま書くと、際限なく溜まる余地を残す。
 	sentinel := errors.New("DBが落ちている")
 	store := &fakeSavedWeeklyStore{countErr: sentinel}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
 	require.ErrorIs(t, err, sentinel)
@@ -208,7 +208,7 @@ func TestSavedWeeklyService_List_委譲する(t *testing.T) {
 
 	want := []domain.SavedWeeklyMenu{{ID: domain.NewSavedWeeklyMenuID()}}
 	store := &fakeSavedWeeklyStore{saved: want}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	userID := domain.NewUserID()
 	got, err := svc.List(context.Background(), userID.String())
@@ -223,7 +223,7 @@ func TestSavedWeeklyService_List_壊れたユーザーIDは認証エラー(t *te
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.List(context.Background(), "not-a-uuid")
 	require.ErrorIs(t, err, service.ErrUserNotFound)
@@ -234,7 +234,7 @@ func TestSavedWeeklyService_Delete_委譲する(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	userID := domain.NewUserID()
 	id := domain.NewSavedWeeklyMenuID()
@@ -249,7 +249,7 @@ func TestSavedWeeklyService_Delete_壊れた保存IDは400相当(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	err := svc.Delete(context.Background(), domain.NewUserID().String(), "not-a-uuid")
 	require.ErrorIs(t, err, domain.ErrInvalidSavedWeeklyMenuID)
@@ -261,9 +261,65 @@ func TestSavedWeeklyService_Delete_見つからなければそのまま返す(t 
 
 	// 他人のものを指した場合も repository がこのエラーにする。
 	store := &fakeSavedWeeklyStore{deleteErr: service.ErrSavedWeeklyMenuNotFound}
-	svc := service.NewSavedWeeklyMenuService(store)
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	err := svc.Delete(context.Background(),
 		domain.NewUserID().String(), domain.NewSavedWeeklyMenuID().String())
 	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuNotFound)
+}
+
+// fakeEntitlements は常に同じプランを返す。
+type fakeEntitlements struct{ plan domain.Plan }
+
+func (f fakeEntitlements) For(context.Context, string) (domain.Entitlement, error) {
+	return domain.NewEntitlement(f.plan), nil
+}
+
+func TestSavedWeekly_freeは10件で断る(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeSavedWeeklyStore{count: 10}
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
+
+	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
+	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuLimitReached)
+	assert.Contains(t, err.Error(), "10件",
+		"断る理由の件数はプラン由来で本文に出るべき")
+	assert.Zero(t, store.saveCalls, "上限に達したら保存を呼ばない")
+}
+
+func TestSavedWeekly_premiumは10件でも保存できる(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeSavedWeeklyStore{count: 10}
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanPremium})
+
+	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
+	require.NoError(t, err, "premium の上限は50件なので10件目は通る")
+	assert.Equal(t, 1, store.saveCalls)
+}
+
+func TestSavedWeekly_premiumは50件で断る(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeSavedWeeklyStore{count: 50}
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanPremium})
+
+	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
+	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuLimitReached)
+	assert.Contains(t, err.Error(), "50件")
+}
+
+// 上限の文言は「次に何をすればよいか」まで含めてサーバが組み立てる。
+// フロントは detail をそのまま出すだけなので、ここが唯一の情報源になる
+// （フロントが件数を持つと premium に「10件まで」と出る。spec.md 2.11）。
+func TestSavedWeekly_上限の文言に次の行動が入る(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeSavedWeeklyStore{count: 50}
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanPremium})
+
+	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "「保存した週間献立」から古いものを削除してください")
 }

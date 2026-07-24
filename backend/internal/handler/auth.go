@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -50,17 +51,24 @@ type GoogleAuthenticator interface {
 
 // AuthHandler は認証APIの受け口。
 type AuthHandler struct {
-	svc         AuthUseCase
-	tokens      *auth.JWT
-	google      GoogleAuthenticator
-	frontendURL string
+	svc          AuthUseCase
+	tokens       *auth.JWT
+	google       GoogleAuthenticator
+	frontendURL  string
+	entitlements service.Entitlements
 }
 
 // NewAuthHandler は AuthHandler を生成する。
 // tokens はトークンの発行・検証、google は Google SSO、frontendURL は
-// Google ログイン完了後に戻すフロントのURL。
-func NewAuthHandler(s AuthUseCase, tokens *auth.JWT, google GoogleAuthenticator, frontendURL string) *AuthHandler {
-	return &AuthHandler{svc: s, tokens: tokens, google: google, frontendURL: frontendURL}
+// Google ログイン完了後に戻すフロントのURL、entitlements はプランの問い合わせ。
+func NewAuthHandler(
+	s AuthUseCase, tokens *auth.JWT, google GoogleAuthenticator, frontendURL string,
+	entitlements service.Entitlements,
+) *AuthHandler {
+	return &AuthHandler{
+		svc: s, tokens: tokens, google: google, frontendURL: frontendURL,
+		entitlements: entitlements,
+	}
 }
 
 // RegisterRoutes は認証APIのルーティングを登録する。
@@ -89,6 +97,7 @@ type userDTO struct {
 	ID          string `json:"id"`
 	Email       string `json:"email"`
 	DisplayName string `json:"displayName"`
+	Plan        string `json:"plan"`
 }
 
 // userResponse はユーザー1件を返すエンドポイントの共通レスポンス。
@@ -117,7 +126,9 @@ func (h *AuthHandler) SignUp(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusCreated, userResponse{User: toUserDTO(user)})
+	// サインアップ直後は必ず free（有料プランへの加入経路が無い）。
+	// entitlements を引く必要はない。
+	return c.JSON(http.StatusCreated, userResponse{User: toUserDTO(user, domain.PlanFree)})
 }
 
 // loginRequest は POST /auth/login のリクエスト（spec.md 5.2）。
@@ -143,11 +154,42 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		return err
 	}
 
+	// ログインは既存利用者を通す経路であり、プレミアムでありうる。
+	// **Cookie を発行する前にプランを引く。** 後に置くと、ここで失敗したときに
+	// 「画面はログイン失敗、ブラウザには新しいCookie」という食い違いが起きる。
+	// 共有端末では前の利用者のキャッシュが残ったまま別人として認証された状態になり、
+	// フロントが onSuccess で行う queryClient.clear() も走らない（Issue #78 の再発）。
+	plan := h.planFor(c, user.ID.String())
+
 	if err := h.issueSession(c, user.ID.String()); err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user)})
+	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user, plan)})
+}
+
+// planFor は表示用のプランを返す。引けなければ free に落とす。
+//
+// **プランを引けないことでログインや /auth/me を落とさない。** この2経路は
+// 本PR以前 users テーブルにしか依存しておらず、プレミアムの可用性の問題を
+// 認証全体の可用性の問題に格上げしてはならない。マイグレーションは自動デプロイに
+// 含まれず手で流す運用（DEPLOY.md 手順1）なので、subscriptions が無い状態で
+// コードだけが本番に出ることは現実に起こりうる。そこで全利用者がログイン不能に
+// なるより、バッジが一時的に出ないほうがはるかに軽い。
+//
+// 上限の判定（service.SavedWeeklyMenuService）はこの緩和を通さない。あちらは
+// 課金済みの利用者を黙って free の上限で拒むことになるため、引けなければ失敗させる。
+// 表示は縮退させ、権限の行使は縮退させない。
+func (h *AuthHandler) planFor(c echo.Context, userID string) domain.Plan {
+	ent, err := h.entitlements.For(c.Request().Context(), userID)
+	if err != nil {
+		LoggerFrom(c).ErrorContext(c.Request().Context(),
+			"プランを取得できませんでした。freeとして表示します",
+			slog.String("user_id", userID),
+			slog.String("error", err.Error()))
+		return domain.PlanFree
+	}
+	return ent.Plan()
 }
 
 // Refresh はリフレッシュトークンでアクセストークンを再発行する。
@@ -201,13 +243,15 @@ func (h *AuthHandler) Me(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user)})
+
+	return c.JSON(http.StatusOK, userResponse{User: toUserDTO(user, h.planFor(c, userID))})
 }
 
-func toUserDTO(u domain.User) userDTO {
+func toUserDTO(u domain.User, plan domain.Plan) userDTO {
 	return userDTO{
 		ID:          u.ID.String(),
 		Email:       u.Email.String(),
 		DisplayName: u.DisplayName,
+		Plan:        plan.String(),
 	}
 }

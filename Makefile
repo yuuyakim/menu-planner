@@ -2,7 +2,7 @@
 # そのためレシピ内は ASCII のみ・1コマンド単位に保つこと（日本語はコメントに書く）。
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed deps gen-api test-e2e
+.PHONY: help up down logs dev test test-backend test-frontend lint build health clean migrate migrate-down migrate-version seed deps gen-api test-e2e grant revoke
 
 help: ## このヘルプを表示する
 	@echo "Usage: make <target>"
@@ -16,6 +16,8 @@ help: ## このヘルプを表示する
 	@echo "  migrate-down   roll back one migration"
 	@echo "  migrate-version show current migration version"
 	@echo "  seed           load menu master data"
+	@echo "  grant          grant premium (EMAIL=... MONTHS=1)"
+	@echo "  revoke         revoke premium (EMAIL=...)"
 	@echo "  test           run all tests"
 	@echo "  test-backend   run Go tests"
 	@echo "  test-frontend  run frontend checks"
@@ -53,6 +55,13 @@ migrate-version: ## 現在のマイグレーションバージョンを表示す
 
 seed: ## 献立マスタを投入する
 	docker compose run --rm backend go run ./cmd/seed
+
+# 決済を導入するまでの唯一の付与手段。EMAIL は必須、MONTHS の既定は1。
+grant: ## プレミアムを付与する (make grant EMAIL=foo@example.com MONTHS=1)
+	docker compose run --rm backend go run ./cmd/grant -email=$(EMAIL) -months=$(or $(MONTHS),1)
+
+revoke: ## プレミアムを即時取り消す (make revoke EMAIL=foo@example.com)
+	docker compose run --rm backend go run ./cmd/grant -email=$(EMAIL) -revoke
 
 # ローカルでは -race を使わない（cgo=gcc が必要なため）。CI の Linux 上では有効化している。
 test-backend: ## Goのテストを実行する

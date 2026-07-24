@@ -35,8 +35,12 @@ var intentionallyUnmapped = map[string]string{
 	"service.ErrCredentialNotFound": "同上。ユーザーの存在を推測させないため",
 
 	// service の内部事情。外に出る前に変換される。
-	"service.ErrNoCandidates":    "menu.go が domain のエラーに変換して返す",
-	"service.ErrRecipeCacheMiss": "キャッシュ不在は障害ではなく通常の制御フロー",
+	"service.ErrNoCandidates":         "menu.go が domain のエラーに変換して返す",
+	"service.ErrRecipeCacheMiss":      "キャッシュ不在は障害ではなく通常の制御フロー",
+	"service.ErrSubscriptionNotFound": "加入が無いのは free プランの通常の表現。entitlement service が free の加入に変換するため handler には届かない",
+
+	// 付与の月数の検証はCLIの引数に対して行う。HTTPの経路が無い。
+	"service.ErrInvalidGrantMonths": "CLI専用。リクエスト由来の経路が無い",
 
 	// JWT のクレーム由来。壊れていればセッション不正なので
 	// service が ErrUserNotFound（401）に変換する。
@@ -48,6 +52,8 @@ var intentionallyUnmapped = map[string]string{
 	"domain.ErrInvalidIngredientCategory": "同上",
 	"domain.ErrInvalidRecipeLink":         "外部APIの応答の解釈失敗。リクエスト由来ではない",
 	"domain.ErrInvalidSearchMode":         "DBの値の解釈失敗。リクエスト由来ではない",
+	"domain.ErrInvalidPlan":               "同上",
+	"domain.ErrInvalidSubscriptionStatus": "同上",
 
 	// 現状どのハンドラも本文から食材IDを解釈しない。
 	// 解釈する経路が増えたら写像すること（写像済みでもこのテストは通る）。

@@ -8,7 +8,8 @@ import { suggestMenu } from './api'
 import { IngredientList } from './IngredientList'
 import { MenuCard } from './MenuCard'
 import { RecipeList } from './RecipeList'
-import { SearchForm, type MenuFilter } from './SearchForm'
+import { SearchForm } from './SearchForm'
+import type { MenuFilter } from './filter'
 
 // SearchPage は献立検索の画面。
 //

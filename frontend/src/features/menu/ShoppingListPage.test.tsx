@@ -13,6 +13,7 @@ function menu(id: string, name: string): Menu {
     name,
     genre: 'japanese',
     difficulty: 'easy',
+    role: 'main',
     description: `${name}の説明`,
   }
 }

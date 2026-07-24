@@ -10,6 +10,11 @@ export type Genre = Schemas['Genre']
 export type Difficulty = Schemas['Difficulty']
 export type SearchMode = Schemas['SearchMode']
 
+/** Role は献立が一食の中で担う役割（spec.md 2.10）。 */
+export type Role = Schemas['Role']
+/** RoleFilter は検索での絞り込み。`all` は「絞り込まない」。 */
+export type RoleFilter = Schemas['RoleFilter']
+
 export type Menu = Schemas['Menu']
 export type DayMenu = Schemas['DayMenu']
 export type SavedWeeklyMenu = Schemas['SavedWeeklyMenu']
@@ -41,6 +46,24 @@ export const difficultyLabels: Record<Difficulty, string> = {
   normal: '普通',
   elaborate: '手が込んだ',
 }
+
+// roleLabels は献立が持つ役割の表示名。カードの表示に使う。
+export const roleLabels: Record<Role, string> = {
+  main: '主菜',
+  side: '副菜',
+  soup: '汁物',
+}
+
+// roleFilterLabels は検索の選択肢。**「すべて」を末尾に置く。**
+// ジャンル・難易度は既定が「すべて」なので先頭に置いているが、
+// 役割の既定は「主菜」（spec.md 2.10）で、先頭に置くと既定に見えてしまう。
+export const roleFilterLabels: Record<RoleFilter, string> = {
+  ...roleLabels,
+  all: 'すべて',
+}
+
+/** defaultRoleFilter は検索の既定。未指定を主菜に倒すのはサーバと同じ判断。 */
+export const defaultRoleFilter: RoleFilter = 'main'
 
 export const genres = Object.keys(genreLabels) as Genre[]
 export const difficulties = Object.keys(difficultyLabels) as Difficulty[]

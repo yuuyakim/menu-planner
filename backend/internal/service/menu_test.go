@@ -519,7 +519,7 @@ func TestRecipeLinks_初回はgatewayを呼びキャッシュに保存する(t *
 func TestRecipeLinks_2回目はgatewayを呼ばない(t *testing.T) {
 	t.Parallel()
 
-	// ここがキャッシュの目的。献立360件 × 1回に消費を抑える（spec.md 13.2）。
+	// ここがキャッシュの目的。献立380件 × 1回に消費を抑える（spec.md 13.2）。
 	menus := testMenus()
 	gw := newFakeRecipeGateway(newRecipeLink("肉じゃがの作り方", "https://recipe.example.com/1"))
 	cache := newFakeRecipeCache()

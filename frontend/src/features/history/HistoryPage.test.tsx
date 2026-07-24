@@ -16,6 +16,7 @@ function entry(n: number, mode: 'single' | 'weekly' = 'single'): HistoryItem {
       name: `献立${n}`,
       genre: 'japanese',
       difficulty: 'easy',
+      role: 'main',
       description: `説明${n}`,
     },
     searchMode: mode,

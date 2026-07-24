@@ -11,7 +11,7 @@ import {
   fetchSavedWeeklyMenus,
   savedWeeklyMenusQueryKey,
 } from './api'
-import type { MenuFilter } from './SearchForm'
+import { emptyMenuFilter, type MenuFilter } from './filter'
 
 // WeeklyPage が作業中の週を置いている場所と同じキー。
 // 「開く」はここへ書き戻すだけで済む（spec.md 5.3）。
@@ -43,7 +43,7 @@ export function SavedWeeklyPage() {
   // 「開く」は作業中の週を差し替えるだけ。サーバへの問い合わせは要らない
   // （一覧の応答に7日分が入っている）。
   const [, setWeek] = useSessionState<DayMenu[] | null>(weekKey, null)
-  const [, setFilter] = useSessionState<MenuFilter>(filterKey, {})
+  const [, setFilter] = useSessionState<MenuFilter>(filterKey, emptyMenuFilter)
 
   const {
     data: saved,
@@ -65,7 +65,7 @@ export function SavedWeeklyPage() {
     setWeek(week.days)
     // 絞り込み条件は保存していない。前回の条件を引き継ぐと、
     // この週とは無関係な条件で引き直すことになるため空に戻す。
-    setFilter({})
+    setFilter(emptyMenuFilter)
     void navigate('/weekly')
   }
 

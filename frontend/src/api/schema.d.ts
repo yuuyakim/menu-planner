@@ -63,6 +63,8 @@ export interface paths {
                     genre?: components["parameters"]["GenreQuery"];
                     /** @description 未指定と空文字はどちらも「絞り込まない」。 */
                     difficulty?: components["parameters"]["DifficultyQuery"];
+                    /** @description **未指定は main（主菜）に絞る。** ジャンル・難易度と違い「すべて」ではない。 絞り込まない場合は all を明示する（spec.md 2.10）。 */
+                    role?: components["parameters"]["RoleQuery"];
                 };
                 header?: never;
                 path?: never;
@@ -1023,7 +1025,7 @@ export interface paths {
         /**
          * 保存した週間献立を新しい順に取得する
          * @description 中身の7日分を含めて返すため、「開く」ための個別取得は設けていない。
-         *     上限が10件と小さいのでページングも設けず全件返す（spec.md 2.8 / 5.3）。
+         *     上限が最大でも50件と小さいのでページングも設けず全件返す（spec.md 2.8 / 2.11 / 5.3）。
          */
         get: {
             parameters: {
@@ -1051,8 +1053,12 @@ export interface paths {
          * 組み立てた1週間分の献立を保存する
          * @description 7日分をひとまとまりで保存する（spec.md 2.8）。買い物の場で見返すのが主な用途。
          *
-         *     保存できるのは1ユーザーあたり10件まで。上限に達した状態での保存は、
-         *     古いものを押し出さず 409 で断る。履歴（FIFO）と違い保存は明示的な操作であり、
+         *     保存できる件数はプランで決まる（free 10件 / premium 50件、spec.md 2.11）。
+         *     件数は応答に含めず、上限に達したときの 409 の detail に文言として入れて返す。
+         *     クライアントが件数を持つとサーバとの二重管理になるため。
+         *
+         *     上限に達した状態での保存は、古いものを押し出さず 409 で断る。
+         *     履歴（FIFO）と違い保存は明示的な操作であり、
          *     黙って消えると保存という行為の意味が壊れるため。
          */
         post: {
@@ -1091,7 +1097,10 @@ export interface paths {
                 400: components["responses"]["BadRequest"];
                 401: components["responses"]["Unauthorized"];
                 404: components["responses"]["NotFound"];
-                /** @description 保存の上限（10件）に達している */
+                /**
+                 * @description 保存の上限に達している。件数はプランで決まるため、
+                 *     detail に「保存できるのはN件までです」を入れて返す。
+                 */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -1159,6 +1168,16 @@ export interface components {
         Genre: "japanese" | "western" | "chinese" | "other";
         /** @enum {string} */
         Difficulty: "easy" | "normal" | "elaborate";
+        /**
+         * @description 献立が一食の中で担う役割（spec.md 2.10）。
+         * @enum {string}
+         */
+        Role: "main" | "side" | "soup";
+        /**
+         * @description 検索での役割の絞り込み。all は「絞り込まない」。 **省略時は main**で、ジャンル・難易度（省略時はすべて）と意味が違う。
+         * @enum {string}
+         */
+        RoleFilter: "main" | "side" | "soup" | "all";
         /** @enum {string} */
         SearchMode: "single" | "weekly";
         Menu: {
@@ -1167,6 +1186,7 @@ export interface components {
             name: string;
             genre: components["schemas"]["Genre"];
             difficulty: components["schemas"]["Difficulty"];
+            role: components["schemas"]["Role"];
             description: string;
         };
         MenuResponse: {
@@ -1175,6 +1195,7 @@ export interface components {
         WeeklyRequest: {
             genre?: components["schemas"]["Genre"] | null;
             difficulty?: components["schemas"]["Difficulty"] | null;
+            role?: components["schemas"]["RoleFilter"] | null;
         };
         DayMenu: {
             day: number;
@@ -1190,6 +1211,7 @@ export interface components {
             week: string[];
             genre?: components["schemas"]["Genre"] | null;
             difficulty?: components["schemas"]["Difficulty"] | null;
+            role?: components["schemas"]["RoleFilter"] | null;
         };
         Recipe: {
             title: string;
@@ -1251,6 +1273,12 @@ export interface components {
             /** Format: email */
             email: string;
             displayName: string;
+            /**
+             * @description 契約プラン。上限そのものは返さない。フロントが件数を持つと
+             *     サーバとの二重管理になるため、上限に達したことは 409 の本文で伝える。
+             * @enum {string}
+             */
+            plan: "free" | "premium";
         };
         UserResponse: {
             user: components["schemas"]["User"];
@@ -1348,6 +1376,8 @@ export interface components {
         GenreQuery: components["schemas"]["Genre"];
         /** @description 未指定と空文字はどちらも「絞り込まない」。 */
         DifficultyQuery: components["schemas"]["Difficulty"];
+        /** @description **未指定は main（主菜）に絞る。** ジャンル・難易度と違い「すべて」ではない。 絞り込まない場合は all を明示する（spec.md 2.10）。 */
+        RoleQuery: components["schemas"]["RoleFilter"];
         /** @description 献立のID */
         MenuIDPath: string;
     };

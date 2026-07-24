@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/auth"
+	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
 )
 
@@ -50,7 +51,7 @@ func callbackApp(t *testing.T, svc handler.AuthUseCase, g *fakeGoogle) *echo.Ech
 
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewAuthHandler(svc, tokens, g, testFrontendURL).RegisterRoutes(e)
+	handler.NewAuthHandler(svc, tokens, g, testFrontendURL, fakeEntitlements{plan: domain.PlanFree}).RegisterRoutes(e)
 	return e
 }
 

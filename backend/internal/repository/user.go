@@ -174,9 +174,23 @@ func scanUserRow(row pgx.Row) (domain.User, bool, error) {
 
 // FindByID はIDでユーザーを取得する。存在しない場合は service.ErrUserNotFound を返す。
 func (r *UserRepository) FindByID(ctx context.Context, id domain.UserID) (domain.User, error) {
-	row := r.pool.QueryRow(ctx,
-		`SELECT id, email, display_name FROM users WHERE id = $1`, id.String())
+	return scanUser(r.pool.QueryRow(ctx,
+		`SELECT id, email, display_name FROM users WHERE id = $1`, id.String()))
+}
 
+// FindByEmail はメールでユーザーを取得する。
+// 存在しない場合は service.ErrUserNotFound を返す。
+func (r *UserRepository) FindByEmail(ctx context.Context, email domain.Email) (domain.User, error) {
+	return scanUser(r.pool.QueryRow(ctx,
+		`SELECT id, email, display_name FROM users WHERE email = $1`, email.String()))
+}
+
+// scanUser は1行を domain.User に組み立てる。
+//
+// FindByID（/auth/me）と FindByEmail（cmd/grant）で条件以外は同じなので、
+// ここに集める。分けて持つと users に列が増えたときに片方だけ直され、
+// 経路によって挙動が食い違う。
+func scanUser(row pgx.Row) (domain.User, error) {
 	var rawID, mail, displayName string
 	if err := row.Scan(&rawID, &mail, &displayName); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
