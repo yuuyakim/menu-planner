@@ -1,13 +1,25 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 
-import type { DayMenu, IngredientCategory, Origin } from '../../api/types'
+import type {
+  DayMenu,
+  IngredientCategory,
+  Origin,
+  ShoppingListOverride,
+} from '../../api/types'
 import { categoryLabels, categoryOrder } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
 import { useSessionState } from '../../hooks/useSessionState'
-import { fetchSavedShoppingList, fetchShoppingList, savedShoppingListQueryKey } from './api'
+import { useCurrentUser } from '../auth/useCurrentUser'
+import {
+  fetchSavedShoppingList,
+  fetchShoppingList,
+  saveShoppingListOverrides,
+  savedShoppingListQueryKey,
+} from './api'
 
 // weekKey/savedIdKey は WeeklyPage / SavedWeeklyPage が同じ場所に置いている値と
 // 同じキー。買い物リストは「いま画面に出ている週」に対して作る。
@@ -88,6 +100,59 @@ export function ShoppingListPage() {
           origin: 'derived' as const,
         }))
 
+  // 保存済みの週かつ premium のときだけ、チェックはサーバに残る。
+  // それ以外（未保存の週／free）はその場限りで、画面を離れると消える。
+  const { user } = useCurrentUser()
+  const canPersist = savedId != null && user?.plan === 'premium'
+  const queryClient = useQueryClient()
+
+  // チェック状態はローカルで持つ。全品目に常時チェックボックスを出す
+  // という Task 11 の要件のため、未保存の週（サーバ側に checked が無い）
+  // でも状態を持てるようにローカルが正になる。
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    setChecked(new Set(items.filter((it) => it.checked).map((it) => it.key)))
+    // items ではなく取得結果そのもの（saved.data / derived.data）を依存にする。
+    // items は毎レンダー新しい配列を作るため、それを依存にすると
+    // チェック操作のたびにローカル state がサーバの値へ巻き戻ってしまう。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved.data, derived.data])
+
+  const persist = useMutation({
+    mutationFn: (next: Set<string>) => {
+      // PUT は overlay 全体の一括置換（部分更新のAPIを持たない）。
+      // 手動品目・非表示は Task 13 で overlay に加える。
+      const overrides: ShoppingListOverride[] = items
+        .filter((it) => next.has(it.key))
+        .map((it) => ({
+          name: it.name,
+          category: it.category,
+          origin: 'derived',
+          checked: true,
+          hidden: false,
+        }))
+      return saveShoppingListOverrides(savedId as string, overrides)
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: savedShoppingListQueryKey(savedId as string),
+      })
+    },
+  })
+
+  function toggle(key: string) {
+    setChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      if (canPersist) persist.mutate(next)
+      return next
+    })
+  }
+
   if (menuIds.length === 0) {
     return (
       <section className="space-y-4">
@@ -133,7 +198,28 @@ export function ShoppingListPage() {
                     key={it.key}
                     className="rounded-xl border border-kon-leaf-soft bg-white px-4 py-2"
                   >
-                    <span className="font-medium text-kon-ink">{it.name}</span>
+                    <label className="flex items-center gap-2">
+                      {/*
+                        premium×保存済み以外はその場限り（画面を離れると消える）。
+                        それでもチェックボックス自体は常に出す。買い物中は
+                        premium かどうかを気にせず使える方が自然なため。
+                      */}
+                      <input
+                        type="checkbox"
+                        checked={checked.has(it.key)}
+                        onChange={() => toggle(it.key)}
+                        aria-label={it.name}
+                      />
+                      <span
+                        className={
+                          checked.has(it.key)
+                            ? 'font-medium text-kon-ink/50 line-through'
+                            : 'font-medium text-kon-ink'
+                        }
+                      >
+                        {it.name}
+                      </span>
+                    </label>
                     {/*
                       分量を持たない設計（spec.md 14.2）の補償。
                       どの献立で使うかが分かれば、必要量は利用者が判断できる。
