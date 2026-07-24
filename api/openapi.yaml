@@ -663,6 +663,33 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/v1/weekly-menus/{id}/shopping-list:
+    get:
+      tags: [weekly-menus]
+      summary: 保存済みの週の買い物リストを取得する
+      description: |
+        保存済みの週間献立から買い物リストを導出し、差分（チェック・手動品目・非表示）を
+        重ねて返す。差分の重ね合わせはサーバで行い、フロントには最終形だけを渡す。
+        free でも呼べる（差分が重ならないだけで形は同じ）。他人の週は 404。
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 差分適用後の買い物リスト（カテゴリ順→カナ順）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedShoppingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     accessCookie:
@@ -938,6 +965,47 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShoppingItem'
+
+    Origin:
+      type: string
+      description: 差分行の由来。derived=献立由来 / manual=手動追加。
+      enum: [derived, manual]
+
+    SavedShoppingItem:
+      type: object
+      required: [name, category, origin, checked, usedIn]
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+          description: 調味料の分類は持たない（spec.md 14.4）
+          enum: [vegetable, meat, seafood, dairy_egg, staple, other]
+        origin:
+          $ref: '#/components/schemas/Origin'
+        checked:
+          type: boolean
+        usedIn:
+          type: array
+          description: その食材を使う献立。手動品目では空。
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+
+    SavedShoppingListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SavedShoppingItem'
 
     CredentialsRequest:
       type: object

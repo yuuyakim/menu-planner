@@ -16,6 +16,7 @@ import (
 	"github.com/pb33f/libopenapi-validator/errors"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
 	"github.com/yuuyakim/menu-planner/backend/internal/service"
@@ -387,4 +388,57 @@ func TestContract_ShoppingList_Problem(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	assertMatchesSpec(t, v, req, body, rec)
+}
+
+// newContractSavedShoppingListApp は保存済み週の買い物リストの契約検証用アプリを組み立てる。
+func newContractSavedShoppingListApp(
+	t *testing.T, svc handler.SavedShoppingListUseCase,
+) (*echo.Echo, *auth.JWT) {
+	t.Helper()
+	tokens, err := auth.NewJWT([]byte(authTestSecret))
+	require.NoError(t, err)
+	e := echo.New()
+	e.HTTPErrorHandler = handler.ErrorHandler()
+	handler.NewSavedShoppingListHandler(svc, tokens).RegisterRoutes(e)
+	return e, tokens
+}
+
+func TestContract_SavedShoppingList(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	menu := shoppingTestMenu("肉じゃが")
+	svc := &fakeSavedShoppingList{items: []service.SavedShoppingItem{
+		{
+			Name: "玉ねぎ", Category: domain.CategoryVegetable, Origin: domain.OriginDerived,
+			UsedIn: []domain.Menu{menu},
+		},
+		{Name: "牛乳", Category: domain.CategoryDairyEgg, Origin: domain.OriginManual},
+	}}
+	e, tokens := newContractSavedShoppingListApp(t, svc)
+	access, err := tokens.Issue("018f0000-0000-7000-8000-000000000001")
+	require.NoError(t, err)
+
+	req := contractRequest(http.MethodGet,
+		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", "")
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assertMatchesSpec(t, v, req, "", rec)
+}
+
+func TestContract_SavedShoppingList_Unauthorized(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	e, _ := newContractSavedShoppingListApp(t, &fakeSavedShoppingList{})
+	req := contractRequest(http.MethodGet,
+		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", "")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	assertResponseMatchesSpec(t, v, req, rec)
 }

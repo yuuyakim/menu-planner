@@ -1160,6 +1160,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/weekly-menus/{id}/shopping-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 保存済みの週の買い物リストを取得する
+         * @description 保存済みの週間献立から買い物リストを導出し、差分（チェック・手動品目・非表示）を
+         *     重ねて返す。差分の重ね合わせはサーバで行い、フロントには最終形だけを渡す。
+         *     free でも呼べる（差分が重ならないだけで形は同じ）。他人の週は 404。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 差分適用後の買い物リスト（カテゴリ順→カナ順） */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SavedShoppingListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1260,6 +1305,30 @@ export interface components {
         };
         ShoppingListResponse: {
             items: components["schemas"]["ShoppingItem"][];
+        };
+        /**
+         * @description 差分行の由来。derived=献立由来 / manual=手動追加。
+         * @enum {string}
+         */
+        Origin: "derived" | "manual";
+        SavedShoppingItem: {
+            name: string;
+            /**
+             * @description 調味料の分類は持たない（spec.md 14.4）
+             * @enum {string}
+             */
+            category: "vegetable" | "meat" | "seafood" | "dairy_egg" | "staple" | "other";
+            origin: components["schemas"]["Origin"];
+            checked: boolean;
+            /** @description その食材を使う献立。手動品目では空。 */
+            usedIn: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+            }[];
+        };
+        SavedShoppingListResponse: {
+            items: components["schemas"]["SavedShoppingItem"][];
         };
         CredentialsRequest: {
             /** Format: email */
