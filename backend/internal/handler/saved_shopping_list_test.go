@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -23,6 +24,9 @@ type fakeSavedShoppingList struct {
 	err        error
 	lastUserID string
 	lastWeekID string
+
+	replaced   []service.OverrideInput
+	replaceErr error
 }
 
 func (f *fakeSavedShoppingList) For(
@@ -31,6 +35,15 @@ func (f *fakeSavedShoppingList) For(
 	f.lastUserID = userID
 	f.lastWeekID = savedWeeklyMenuID
 	return f.items, f.err
+}
+
+func (f *fakeSavedShoppingList) ReplaceOverrides(
+	_ context.Context, userID, savedWeeklyMenuID string, inputs []service.OverrideInput,
+) error {
+	f.lastUserID = userID
+	f.lastWeekID = savedWeeklyMenuID
+	f.replaced = inputs
+	return f.replaceErr
 }
 
 // savedShoppingListApp は SavedShoppingListHandler のみを積んだ echo アプリを組み立てる。
@@ -52,6 +65,22 @@ func getShoppingList(t *testing.T, e *echo.Echo, access, id string) *httptest.Re
 	if access != "" {
 		req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
 	}
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	return rec
+}
+
+// doAuthedPut は getShoppingList に倣い、認証済みトークンを発行してから
+// PUT /weekly-menus/:id/shopping-list を叩く共通ヘルパ。
+func doAuthedPut(t *testing.T, svc handler.SavedShoppingListUseCase, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	e, tokens := savedShoppingListApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPut, path, strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	return rec
@@ -154,4 +183,42 @@ func TestSavedShoppingListHandler_Get_未認証は401(t *testing.T) {
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 	assert.Empty(t, svc.lastUserID, "未認証なら service を呼ばないべき")
+}
+
+func TestSavedShoppingListHandler_Put_204(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedShoppingList{}
+	body := `{"items":[{"name":"にんじん","category":"vegetable","origin":"derived","checked":true,"hidden":false}]}`
+	rec := doAuthedPut(t, svc, "/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", body)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	require.Len(t, svc.replaced, 1)
+	require.Equal(t, "にんじん", svc.replaced[0].Name)
+}
+
+func TestSavedShoppingListHandler_Put_freeは403(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedShoppingList{replaceErr: service.ErrPremiumRequired}
+	rec := doAuthedPut(t, svc, "/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list",
+		`{"items":[]}`)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestSavedShoppingListHandler_Put_上限で409(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedShoppingList{replaceErr: service.ErrShoppingListItemLimitReached}
+	rec := doAuthedPut(t, svc, "/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list",
+		`{"items":[]}`)
+	require.Equal(t, http.StatusConflict, rec.Code)
+}
+
+func TestSavedShoppingListHandler_Put_壊れたボディは400(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedShoppingList{}
+	rec := doAuthedPut(t, svc, "/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list",
+		`{`)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }

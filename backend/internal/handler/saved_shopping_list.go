@@ -12,10 +12,9 @@ import (
 
 // SavedShoppingListUseCase は保存済み週の買い物リストのAPIが必要とする操作。
 // 実装は service.SavedShoppingListService。
-//
-// PUT（差分の置き換え）は別タスクで足す。
 type SavedShoppingListUseCase interface {
 	For(ctx context.Context, userID, savedWeeklyMenuID string) ([]service.SavedShoppingItem, error)
+	ReplaceOverrides(ctx context.Context, userID, savedWeeklyMenuID string, inputs []service.OverrideInput) error
 }
 
 // SavedShoppingListHandler は保存済み週の買い物リストAPIの受け口。

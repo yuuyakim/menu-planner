@@ -1197,7 +1197,56 @@ export interface paths {
                 404: components["responses"]["NotFound"];
             };
         };
-        put?: never;
+        /**
+         * 保存済みの週の買い物リストの差分を置き換える
+         * @description チェック状態・手動品目・非表示を overlay 全体として一括置換する（設計 3.5）。
+         *     品目単位の部分更新はしない。free は 403。手動品目が上限を超えると 409。
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ShoppingListOverridesRequest"];
+                };
+            };
+            responses: {
+                /** @description 置き換えた */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["BadRequest"];
+                401: components["responses"]["Unauthorized"];
+                /** @description プレミアムプランが必要 */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+                404: components["responses"]["NotFound"];
+                /** @description 手動品目が上限に達している */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -1329,6 +1378,20 @@ export interface components {
         };
         SavedShoppingListResponse: {
             items: components["schemas"]["SavedShoppingItem"][];
+        };
+        ShoppingListOverridesRequest: {
+            /** @description overlay 全体。導出品目のチェック/非表示と、手動品目を並べる。 */
+            items: {
+                name: string;
+                /**
+                 * @description 調味料の分類は持たない（spec.md 14.4）
+                 * @enum {string}
+                 */
+                category: "vegetable" | "meat" | "seafood" | "dairy_egg" | "staple" | "other";
+                origin: components["schemas"]["Origin"];
+                checked: boolean;
+                hidden: boolean;
+            }[];
         };
         CredentialsRequest: {
             /** Format: email */
