@@ -278,6 +278,13 @@ describe('ShoppingListPage', () => {
               checked: false,
               usedIn: [],
             },
+            {
+              name: 'たまねぎ',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              usedIn: [],
+            },
           ],
         }),
       ),
@@ -289,11 +296,20 @@ describe('ShoppingListPage', () => {
     )
     expect(await screen.findByText(/プレミアム/)).toBeInTheDocument()
 
-    // 閉じてもう一度チェックしても出ない
+    // 閉じる
     await userEvent.click(screen.getByRole('button', { name: /閉じる/ }))
+    expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
+
+    // 別の（まだ未チェックの）品目を初めてチェックする、正真正銘の2度目の
+    // 「追加」操作。ここで案内が再度出ないことこそが「1回だけ」の本質。
+    // 同じ品目を再クリックすると外す操作（adding === false）になり、
+    // adding のガードだけで通ってしまって guidanceDone 側の検証にならない。
     await userEvent.click(
-      screen.getByRole('checkbox', { name: /にんじん/ }),
+      screen.getByRole('checkbox', { name: /たまねぎ/ }),
     )
+    expect(
+      screen.getByRole('checkbox', { name: /たまねぎ/ }),
+    ).toBeChecked()
     expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
   })
 
