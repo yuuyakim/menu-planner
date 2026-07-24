@@ -342,4 +342,85 @@ describe('ShoppingListPage', () => {
     )
     expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
   })
+
+  it('premium が品目を手で足すと manual として PUT に載る', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+    respondMe('premium')
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        HttpResponse.json({ items: [] }),
+      ),
+    )
+    const puts: { items: unknown[] }[] = []
+    server.use(
+      http.put(
+        `/api/v1/weekly-menus/${savedId}/shopping-list`,
+        async ({ request }) => {
+          puts.push((await request.json()) as { items: unknown[] })
+          return new HttpResponse(null, { status: 204 })
+        },
+      ),
+    )
+
+    renderWithProviders(<ShoppingListPage />)
+    await userEvent.type(await screen.findByLabelText(/品目を追加/), '牛乳')
+    await userEvent.selectOptions(screen.getByLabelText(/カテゴリ/), 'dairy_egg')
+    await userEvent.click(screen.getByRole('button', { name: /追加/ }))
+
+    await waitFor(() => expect(puts.length).toBe(1))
+    expect(puts[0].items).toContainEqual({
+      name: '牛乳',
+      category: 'dairy_egg',
+      origin: 'manual',
+      checked: false,
+      hidden: false,
+    })
+  })
+
+  it('premium が導出品目を消すと hidden として PUT に載る', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+    respondMe('premium')
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              name: 'にんじん',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              usedIn: [],
+            },
+          ],
+        }),
+      ),
+    )
+    const puts: { items: unknown[] }[] = []
+    server.use(
+      http.put(
+        `/api/v1/weekly-menus/${savedId}/shopping-list`,
+        async ({ request }) => {
+          puts.push((await request.json()) as { items: unknown[] })
+          return new HttpResponse(null, { status: 204 })
+        },
+      ),
+    )
+
+    renderWithProviders(<ShoppingListPage />)
+    await userEvent.click(
+      await screen.findByRole('button', { name: /にんじんを消す/ }),
+    )
+    await waitFor(() => expect(puts.length).toBe(1))
+    expect(puts[0].items).toContainEqual({
+      name: 'にんじん',
+      category: 'vegetable',
+      origin: 'derived',
+      checked: false,
+      hidden: true,
+    })
+  })
 })
