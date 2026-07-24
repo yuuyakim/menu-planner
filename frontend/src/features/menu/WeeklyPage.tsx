@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useRef } from 'react'
 import { Link } from 'react-router'
 
 import { ApiError } from '../../api/client'
@@ -94,17 +93,7 @@ export function WeeklyPage({ today = new Date() }: Props) {
   })
 
   // 保存は認証が要る（spec.md 2.8）。未ログインなら押させずログインへ誘う。
-  const { user, isLoading } = useCurrentUser()
-
-  // 一度でも判定が付いたら、以後の一瞬の isLoading への戻りではローディング
-  // 表示に戻さない。<PremiumLock> も同じ /auth/me を内部で問い合わせるため、
-  // それがマウントした直後にバックグラウンドの再取得が走り、未ログイン時は
-  // （まだ一度も成功していないクエリのため）isLoading が一瞬 true に戻る。
-  // ここでガードせずに毎回 isLoading を信じると、その一瞬で <PremiumLock> が
-  // アンマウントされ→再取得完了で再マウント→また再取得…と無限に往復して
-  // /auth/me と /auth/refresh を延々叩き続けてしまう（実際に確認済み）。
-  const hasResolvedRef = useRef(false)
-  if (!isLoading) hasResolvedRef.current = true
+  const { user } = useCurrentUser()
 
   const save = useMutation({
     mutationFn: () => saveWeeklyMenu(week ?? []),
@@ -125,9 +114,9 @@ export function WeeklyPage({ today = new Date() }: Props) {
   const error = create.error ?? reroll.error
 
   // 週間献立の作成・保存は premium 限定（フックはここより上ですべて呼び終えている）。
-  if (isLoading && !hasResolvedRef.current) {
-    return <MascotStatus>読み込み中…</MascotStatus>
-  }
+  // ローディング中は user が undefined のためここに入り、<PremiumLock> が自身の
+  // ローディング表示を出す。WeeklyPage 側で別のローディング表示を挟まないため、
+  // <PremiumLock> がマウントされたまま維持され、/auth/me の再取得ループが起きない。
   if (user?.plan !== 'premium') {
     return (
       <PremiumLock
@@ -172,24 +161,14 @@ export function WeeklyPage({ today = new Date() }: Props) {
               買い物リストを見る
             </Link>
 
-            {user ? (
-              <button
-                type="button"
-                onClick={() => save.mutate()}
-                disabled={save.isPending}
-                className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream disabled:cursor-not-allowed disabled:text-kon-ink/40"
-              >
-                {save.isPending ? '保存中…' : 'この週を保存する'}
-              </button>
-            ) : (
-              // 押せないボタンを出すより、何をすれば保存できるかを示す。
-              <Link
-                to="/login"
-                className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream"
-              >
-                ログインして保存する
-              </Link>
-            )}
+            <button
+              type="button"
+              onClick={() => save.mutate()}
+              disabled={save.isPending}
+              className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream disabled:cursor-not-allowed disabled:text-kon-ink/40"
+            >
+              {save.isPending ? '保存中…' : 'この週を保存する'}
+            </button>
           </div>
 
           {save.isSuccess && (
