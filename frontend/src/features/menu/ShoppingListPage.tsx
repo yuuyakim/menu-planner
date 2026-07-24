@@ -141,16 +141,19 @@ export function ShoppingListPage() {
   })
 
   function toggle(key: string) {
-    setChecked((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) {
-        next.delete(key)
-      } else {
-        next.add(key)
-      }
-      if (canPersist) persist.mutate(next)
-      return next
-    })
+    // setChecked に渡す updater 内で persist.mutate を呼ぶと、
+    // StrictMode の開発時二重実行で PUT が2回飛んでしまう
+    // （updater は純粋関数であるべきで、副作用を含めてはいけない）。
+    // 現在の checked をクロージャから読み、次の Set を先に計算してから
+    // setChecked には値を渡し、副作用は updater の外で実行する。
+    const next = new Set(checked)
+    if (next.has(key)) {
+      next.delete(key)
+    } else {
+      next.add(key)
+    }
+    setChecked(next)
+    if (canPersist) persist.mutate(next)
   }
 
   if (menuIds.length === 0) {
