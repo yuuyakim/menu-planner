@@ -12,6 +12,7 @@ import { categoryLabels, categoryOrder } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
+import { useOnceFlag } from '../../hooks/useOnceFlag'
 import { useSessionState } from '../../hooks/useSessionState'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import {
@@ -140,12 +141,18 @@ export function ShoppingListPage() {
     },
   })
 
+  // free（未認証含む）が買い物リストのチェックを初めて付けたときだけ、
+  // プレミアムの案内を1回出す。端末に恒久的に記録し、以後は出さない。
+  const [guidanceDone, markGuidance] = useOnceFlag('premium-shopping')
+  const [showGuidance, setShowGuidance] = useState(false)
+
   function toggle(key: string) {
     // setChecked に渡す updater 内で persist.mutate を呼ぶと、
     // StrictMode の開発時二重実行で PUT が2回飛んでしまう
     // （updater は純粋関数であるべきで、副作用を含めてはいけない）。
     // 現在の checked をクロージャから読み、次の Set を先に計算してから
     // setChecked には値を渡し、副作用は updater の外で実行する。
+    const adding = !checked.has(key)
     const next = new Set(checked)
     if (next.has(key)) {
       next.delete(key)
@@ -153,7 +160,13 @@ export function ShoppingListPage() {
       next.add(key)
     }
     setChecked(next)
-    if (canPersist) persist.mutate(next)
+    if (canPersist) {
+      persist.mutate(next)
+    } else if (adding && user?.plan !== 'premium' && !guidanceDone) {
+      // user が undefined（未認証）も free 扱いにするための条件。
+      setShowGuidance(true)
+      markGuidance()
+    }
   }
 
   if (menuIds.length === 0) {
@@ -235,6 +248,17 @@ export function ShoppingListPage() {
               </ul>
             </div>
           ))}
+        </div>
+      )}
+
+      {showGuidance && (
+        <div role="status" className="rounded-lg bg-kon-leaf/10 p-3 text-sm">
+          <p>
+            プレミアムプランなら、チェックした買い物リストがそのまま残ります。
+          </p>
+          <button type="button" onClick={() => setShowGuidance(false)}>
+            閉じる
+          </button>
         </div>
       )}
 
