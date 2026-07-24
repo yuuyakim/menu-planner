@@ -100,7 +100,8 @@ describe('プレミアムゲート', () => {
     )
     renderPage()
 
-    expect(await screen.findByText(/プレミアム/)).toBeInTheDocument()
+    // PremiumLock の見出し。「プレミアム」は本文にも出るため一意な見出しで判定する。
+    expect(await screen.findByText('保存した週間献立')).toBeInTheDocument()
     // free では一覧 API を叩かない（403 になる無駄打ちを避ける）。
     expect(listed).toBe(false)
   })
