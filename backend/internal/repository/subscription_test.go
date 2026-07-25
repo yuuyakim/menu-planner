@@ -141,6 +141,34 @@ func TestSubscriptionRepository_決済IDを保持する(t *testing.T) {
 	require.Equal(t, "sub_XYZ", got.ProviderSubscriptionID)
 }
 
+func TestSubscriptionRepository_ProviderCustomerIDRoundTrip(t *testing.T) {
+	pool := newTestPool(t)
+	ctx := context.Background()
+	repo := repository.NewSubscriptionRepository(pool)
+
+	u := createUser(t, pool, "sub-repo-custid@example.com")
+
+	sub := domain.Subscription{
+		UserID:                 u.ID,
+		Plan:                   domain.PlanPremium,
+		Status:                 domain.SubscriptionTrialing,
+		CurrentPeriodEnd:       time.Now().Add(120 * time.Hour),
+		Provider:               domain.ProviderStripe,
+		ProviderSubscriptionID: "sub_test_123",
+		ProviderCustomerID:     "cus_test_123",
+	}
+	if err := repo.Upsert(ctx, sub); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	got, err := repo.Find(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if got.ProviderCustomerID != "cus_test_123" {
+		t.Errorf("ProviderCustomerID = %q, want %q", got.ProviderCustomerID, "cus_test_123")
+	}
+}
+
 func TestSubscriptionRepository_決済IDが空でも複数ユーザーがUpsertできる(t *testing.T) {
 	pool := newTestPool(t)
 	ctx := context.Background()
