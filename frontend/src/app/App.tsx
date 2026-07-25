@@ -1,6 +1,7 @@
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
 
 import { ErrorBoundary } from '../components/ErrorBoundary'
+import { Footer } from '../components/Footer'
 import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RequireAuth } from '../features/auth/RequireAuth'
@@ -132,6 +133,8 @@ export function App() {
           </Routes>
         </ErrorBoundary>
       </main>
+
+      <Footer />
     </div>
   )
 }
