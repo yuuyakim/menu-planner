@@ -29,6 +29,7 @@ func NewStripePaymentGateway(secretKey, webhookSecret, priceID string, trialDays
 	return &StripePaymentGateway{webhookSecret: webhookSecret, priceID: priceID, trialDays: trialDays}
 }
 
+// CreateCheckoutSession は subscription モードの Checkout セッションを作り、遷移先 URL を返す。
 func (g *StripePaymentGateway) CreateCheckoutSession(ctx context.Context, p service.CheckoutParams) (string, error) {
 	params := &stripe.CheckoutSessionParams{
 		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
@@ -52,15 +53,17 @@ func (g *StripePaymentGateway) CreateCheckoutSession(ctx context.Context, p serv
 
 	s, err := session.New(params)
 	if err != nil {
-		return "", fmt.Errorf("Checkout セッションの作成に失敗しました: %w", err)
+		return "", fmt.Errorf("決済セッションの作成に失敗しました: %w", err)
 	}
 	return s.URL, nil
 }
 
+// ParseWebhookEvent は署名を検証し、Stripe のイベントを正規化して返す。
+// 対象外のイベント種別は Type が空の WebhookEvent を err=nil で返す。
 func (g *StripePaymentGateway) ParseWebhookEvent(payload []byte, sigHeader string) (service.WebhookEvent, error) {
 	event, err := webhook.ConstructEvent(payload, sigHeader, g.webhookSecret)
 	if err != nil {
-		return service.WebhookEvent{}, fmt.Errorf("Webhook 署名の検証に失敗しました: %w", err)
+		return service.WebhookEvent{}, fmt.Errorf("署名の検証に失敗しました: %w", err)
 	}
 
 	switch event.Type {

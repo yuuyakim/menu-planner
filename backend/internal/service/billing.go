@@ -116,7 +116,7 @@ func (s *BillingService) trialEligibility(ctx context.Context, userID string) (b
 func (s *BillingService) HandleWebhook(ctx context.Context, payload []byte, sigHeader string) error {
 	ev, err := s.gateway.ParseWebhookEvent(payload, sigHeader)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrWebhookSignature, err)
+		return fmt.Errorf("%w: %w", ErrWebhookSignature, err)
 	}
 	if ev.Type == "" {
 		return nil // 対象外イベント
