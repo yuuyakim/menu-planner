@@ -28,6 +28,11 @@ type fakeBilling struct {
 
 	handleErr    error
 	handleCalled bool
+
+	view      service.SubscriptionView
+	viewErr   error
+	portalURL string
+	portalErr error
 }
 
 func (f *fakeBilling) Preview(context.Context, string) (service.PreviewResult, error) {
@@ -44,6 +49,14 @@ func (f *fakeBilling) CreateCheckoutSession(context.Context, string) (string, er
 func (f *fakeBilling) HandleWebhook(_ context.Context, _ []byte, _ string) error {
 	f.handleCalled = true
 	return f.handleErr
+}
+
+func (f *fakeBilling) Subscription(context.Context, string) (service.SubscriptionView, error) {
+	return f.view, f.viewErr
+}
+
+func (f *fakeBilling) CreatePortalSession(context.Context, string) (string, error) {
+	return f.portalURL, f.portalErr
 }
 
 // billingApp は BillingHandler のみを積んだ echo アプリを組み立てる。
@@ -161,6 +174,67 @@ func TestBillingHandler_Preview_200(t *testing.T) {
 	assert.True(t, body.TrialEligible)
 	assert.NotEmpty(t, body.FirstBillingAt)
 	assert.Equal(t, "アカウント設定 > プランの管理", body.PlanManagementPath)
+}
+
+func TestBillingHandler_Subscription_RequiresAuth(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeBilling{}
+	e, _ := billingApp(t, svc)
+
+	rec := doBillingRequest(t, e, http.MethodGet, "/api/v1/billing/subscription", "", "")
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestBillingHandler_Subscription_ReturnsView(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeBilling{view: service.SubscriptionView{
+		Plan: "premium", Status: "active", HasPortal: true,
+	}}
+	e, tokens := billingApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := doBillingRequest(t, e, http.MethodGet, "/api/v1/billing/subscription", access, "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Body.String(), "premium")
+	assert.Contains(t, rec.Body.String(), "active")
+	assert.Contains(t, rec.Body.String(), `"hasPortal":true`)
+}
+
+func TestBillingHandler_PortalSession_NoBillingCustomer(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeBilling{portalErr: service.ErrNoBillingCustomer}
+	e, tokens := billingApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := doBillingRequest(t, e, http.MethodPost, "/api/v1/billing/portal-session", access, "")
+
+	require.Equal(t, http.StatusConflict, rec.Code)
+	assert.Contains(t, rec.Body.String(), "no-billing-customer")
+}
+
+func TestBillingHandler_PortalSession_ReturnsURL(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeBilling{portalURL: "https://stripe/portal"}
+	e, tokens := billingApp(t, svc)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := doBillingRequest(t, e, http.MethodPost, "/api/v1/billing/portal-session", access, "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		URL string `json:"url"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, "https://stripe/portal", body.URL)
 }
 
 func TestBillingHandler_Webhook_BadSignature(t *testing.T) {

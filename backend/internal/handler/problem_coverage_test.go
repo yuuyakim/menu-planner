@@ -66,11 +66,6 @@ var intentionallyUnmapped = map[string]string{
 	// ErrWebhookSignature は Webhook でのみ使い、client へ problem+json として
 	// 返さない（Stripe には素の 400 を返す）。よって写像しない。
 	"service.ErrWebhookSignature": "Webhookのみで使用。Stripeには素の400/500を返し、problem+jsonにはしない",
-
-	// プラン管理（顧客ポータル）のタスク分割で、BillingService への追加（本タスク）と
-	// handler/route の追加（次タスク）を分けている。今はまだそのエラーを返す
-	// リクエスト経路（handler）が無いため写像しない。次タスクで写像を追加すること。
-	"service.ErrNoBillingCustomer": "顧客ポータルのhandler/routeは次タスクで追加予定。現時点ではリクエスト由来の経路が無い",
 }
 
 // mappedErrors は problem.go の写像表に載っているエラーを "pkg.Name" で返す。

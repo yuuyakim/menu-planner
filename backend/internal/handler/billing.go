@@ -18,6 +18,8 @@ type BillingUseCase interface {
 	Preview(ctx context.Context, userID string) (service.PreviewResult, error)
 	CreateCheckoutSession(ctx context.Context, userID string) (string, error)
 	HandleWebhook(ctx context.Context, payload []byte, sigHeader string) error
+	Subscription(ctx context.Context, userID string) (service.SubscriptionView, error)
+	CreatePortalSession(ctx context.Context, userID string) (string, error)
 }
 
 // BillingHandler は課金APIの受け口。
@@ -40,6 +42,8 @@ func (h *BillingHandler) RegisterRoutes(e *echo.Echo) {
 	g.GET("/billing/preview", h.Preview, requireAuth)
 	g.POST("/billing/checkout-session", h.CreateCheckoutSession, requireAuth)
 	g.POST("/billing/webhook", h.Webhook)
+	g.GET("/billing/subscription", h.Subscription, requireAuth)
+	g.POST("/billing/portal-session", h.PortalSession, requireAuth)
 }
 
 // previewDTO は申込確認画面の表示値。
@@ -91,6 +95,51 @@ func (h *BillingHandler) CreateCheckoutSession(c echo.Context) error {
 	url, err := h.svc.CreateCheckoutSession(c.Request().Context(), userID)
 	if err != nil {
 		return err // ErrAlreadySubscribed は problem マッピングで 409
+	}
+	return c.JSON(http.StatusOK, map[string]string{"url": url})
+}
+
+// subscriptionDTO はプラン管理画面の表示値。
+type subscriptionDTO struct {
+	Plan              string  `json:"plan"`
+	Status            string  `json:"status"`
+	CurrentPeriodEnd  *string `json:"currentPeriodEnd"`
+	CancelAtPeriodEnd bool    `json:"cancelAtPeriodEnd"`
+	HasPortal         bool    `json:"hasPortal"`
+}
+
+// Subscription は現在のプラン状態を返す。
+//
+//	GET /api/v1/billing/subscription
+//
+// 未認証は401。
+func (h *BillingHandler) Subscription(c echo.Context) error {
+	userID, _ := UserIDFromContext(c)
+	v, err := h.svc.Subscription(c.Request().Context(), userID)
+	if err != nil {
+		return err
+	}
+	dto := subscriptionDTO{
+		Plan: v.Plan, Status: v.Status,
+		CancelAtPeriodEnd: v.CancelAtPeriodEnd, HasPortal: v.HasPortal,
+	}
+	if !v.CurrentPeriodEnd.IsZero() {
+		s := v.CurrentPeriodEnd.Format(time.RFC3339)
+		dto.CurrentPeriodEnd = &s
+	}
+	return c.JSON(http.StatusOK, dto)
+}
+
+// PortalSession は顧客ポータルのセッションを作り URL を返す。
+//
+//	POST /api/v1/billing/portal-session
+//
+// Stripe 顧客が無い場合は409、未認証は401。
+func (h *BillingHandler) PortalSession(c echo.Context) error {
+	userID, _ := UserIDFromContext(c)
+	url, err := h.svc.CreatePortalSession(c.Request().Context(), userID)
+	if err != nil {
+		return err // ErrNoBillingCustomer は problem マッピングで 409
 	}
 	return c.JSON(http.StatusOK, map[string]string{"url": url})
 }
