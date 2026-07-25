@@ -1,6 +1,7 @@
 import { Link, NavLink, Route, Routes, useLocation } from 'react-router'
 
 import { ErrorBoundary } from '../components/ErrorBoundary'
+import { Footer } from '../components/Footer'
 import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RequireAuth } from '../features/auth/RequireAuth'
@@ -8,6 +9,9 @@ import { AuthMenu } from '../features/auth/AuthMenu'
 import { FavoritePage } from '../features/favorite/FavoritePage'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
+import { PrivacyPage } from '../features/legal/PrivacyPage'
+import { TermsPage } from '../features/legal/TermsPage'
+import { TokushohoPage } from '../features/legal/TokushohoPage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
 import { SavedWeeklyPage } from '../features/menu/SavedWeeklyPage'
 import { SearchByIngredientsPage } from '../features/menu/SearchByIngredientsPage'
@@ -119,11 +123,18 @@ export function App() {
               }
             />
             <Route path="/login" element={<LoginPage />} />
+            {/* 法務3ページは/loginと同じく未認証でも見える必要があるため、
+                RequireAuth で包まない（表示義務のあるページのため）。 */}
+            <Route path="/legal/tokushoho" element={<TokushohoPage />} />
+            <Route path="/legal/terms" element={<TermsPage />} />
+            <Route path="/legal/privacy" element={<PrivacyPage />} />
             {/* どれにも一致しないパスは404画面に落とす。 */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </ErrorBoundary>
       </main>
+
+      <Footer />
     </div>
   )
 }
