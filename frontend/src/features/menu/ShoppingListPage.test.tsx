@@ -318,6 +318,39 @@ describe('ShoppingListPage', () => {
     expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
   })
 
+  it('free が初めてチェックしたときの案内に /checkout へのリンクがある', async () => {
+    const savedId = '11111111-1111-1111-1111-111111111111'
+    withWeek([nikujaga])
+    withSavedId(savedId)
+    respondMe('free')
+    server.use(
+      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
+        HttpResponse.json({
+          items: [
+            {
+              name: 'にんじん',
+              category: 'vegetable',
+              origin: 'derived',
+              checked: false,
+              hidden: false,
+              usedIn: [],
+            },
+          ],
+        }),
+      ),
+    )
+
+    renderWithProviders(<ShoppingListPage />)
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: /にんじん/ }),
+    )
+    expect(await screen.findByText(/プレミアム/)).toBeInTheDocument()
+
+    // 案内から /checkout へ進める導線がある。
+    const link = screen.getByRole('link', { name: /プレミアム|アップグレード/ })
+    expect(link).toHaveAttribute('href', '/checkout')
+  })
+
   it('premium にはチェックしても案内を出さない', async () => {
     const savedId = '11111111-1111-1111-1111-111111111111'
     withWeek([nikujaga])
