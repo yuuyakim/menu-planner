@@ -159,3 +159,112 @@ func TestBilling_HandleWebhook_IgnoredEvent(t *testing.T) {
 		t.Error("対象外イベントは upsert しない")
 	}
 }
+
+// --- #3: 古い/別subscriptionのイベントによる上書き防止 ---
+
+func TestBilling_HandleWebhook_StaleOtherSubscriptionEvent_NotUpserted(t *testing.T) {
+	// sub_new が現在有効（active）なのに、古い sub_old の deleted イベントが遅れて届いた。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionActive, ProviderSubscriptionID: "sub_new",
+		ProviderCustomerID: "cus_1",
+		CurrentPeriodEnd:   time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_old",
+		CustomerID: "cus_1", Status: domain.SubscriptionCanceled,
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted != nil {
+		t.Error("有効な別サブスクを古いイベントで上書きしてはいけない")
+	}
+}
+
+func TestBilling_HandleWebhook_SameSubscriptionDowngrade_IsApplied(t *testing.T) {
+	// 同一 subscription の past_due/canceled への遷移は通常の更新として適用する。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionActive, ProviderSubscriptionID: "sub_1",
+		ProviderCustomerID: "cus_1",
+		CurrentPeriodEnd:   time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_1",
+		CustomerID: "cus_1", Status: domain.SubscriptionPastDue,
+		CurrentPeriodEnd: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted == nil {
+		t.Fatal("同一サブスクの更新は適用すべき")
+	}
+	if store.upserted.Status != domain.SubscriptionPastDue {
+		t.Errorf("Status = %v", store.upserted.Status)
+	}
+}
+
+func TestBilling_HandleWebhook_ManualGrantTakeover_IsApplied(t *testing.T) {
+	// 手動付与（ProviderSubscriptionID 空）はStripeイベントが来たら乗っ取ってよい。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionActive, Provider: domain.ProviderManual,
+		ProviderSubscriptionID: "",
+		CurrentPeriodEnd:       time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_1",
+		CustomerID: "cus_1", Status: domain.SubscriptionActive,
+		CurrentPeriodEnd: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted == nil {
+		t.Fatal("手動付与はStripeイベントで乗っ取るべき")
+	}
+	if store.upserted.ProviderSubscriptionID != "sub_1" {
+		t.Errorf("ProviderSubscriptionID = %q", store.upserted.ProviderSubscriptionID)
+	}
+}
+
+func TestBilling_HandleWebhook_ExistingCanceledRow_IsApplied(t *testing.T) {
+	// 既存行が canceled（無効）なら、別サブスクのイベントでも適用してよい。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionCanceled, ProviderSubscriptionID: "sub_old",
+		CurrentPeriodEnd: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	}}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_new",
+		CustomerID: "cus_2", Status: domain.SubscriptionActive,
+		CurrentPeriodEnd: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanFree}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted == nil {
+		t.Fatal("既存行が無効なら新サブスクのイベントは適用すべき")
+	}
+	if store.upserted.ProviderSubscriptionID != "sub_new" {
+		t.Errorf("ProviderSubscriptionID = %q", store.upserted.ProviderSubscriptionID)
+	}
+}
+
+// --- #4: 二重加入防止 ---
+
+func TestBilling_CreateCheckoutSession_PastDueLiveSubscription_AlreadySubscribed(t *testing.T) {
+	// past_due が猶予を超えて entitlement は free に落ちても、Stripe側の
+	// サブスクはまだ生きている（キャンセルされていない）ので二重加入させない。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionPastDue, ProviderSubscriptionID: "sub_1",
+		ProviderCustomerID: "cus_1",
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	_, err := svc.CreateCheckoutSession(context.Background(), validUID)
+	if !errors.Is(err, service.ErrAlreadySubscribed) {
+		t.Fatalf("past_due の生きているサブスクは already-subscribed。got %v", err)
+	}
+}

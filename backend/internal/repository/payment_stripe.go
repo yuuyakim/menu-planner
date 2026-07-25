@@ -83,7 +83,12 @@ func (g *StripePaymentGateway) ParseWebhookEvent(payload []byte, sigHeader strin
 			return service.WebhookEvent{}, nil // 加入を伴わない（想定外）→無視
 		}
 		// session は加入の詳細を含まないため取得する（subscription.* を取りこぼした場合の保険）。
-		sub, err := subscription.Get(cs.Subscription.ID, nil)
+		// Stripe側が遅いとWebhookリクエストを開いたまま待たせてしまうため、上限を設ける。
+		subCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		params := &stripe.SubscriptionParams{}
+		params.Context = subCtx
+		sub, err := subscription.Get(cs.Subscription.ID, params)
 		if err != nil {
 			return service.WebhookEvent{}, fmt.Errorf("subscription の取得に失敗しました: %w", err)
 		}

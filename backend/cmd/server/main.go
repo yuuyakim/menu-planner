@@ -175,6 +175,10 @@ func run() error {
 	e.HTTPErrorHandler = handler.ErrorHandler()
 
 	e.Use(middleware.Recover())
+	// Webhook（未認証で叩ける公開エンドポイント）が io.ReadAll で本文を無制限に
+	// 読み込むためのDoS対策。Stripeの実ペイロードは数十KB程度、他エンドポイントの
+	// 本文もごく小さいため 1M で十分safe側。
+	e.Use(middleware.BodyLimit("1M"))
 	e.Use(middleware.RequestID())
 	// RequestID の後に置く。request_id を全ログに伝播させ、1リクエスト1行の
 	// アクセスログを出す。本文・機微なヘッダ・クエリは記録しない。

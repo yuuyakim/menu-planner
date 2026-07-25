@@ -74,6 +74,13 @@ func (s *BillingService) Preview(ctx context.Context, userID string) (PreviewRes
 }
 
 // CreateCheckoutSession は Checkout セッションを作り URL を返す。
+//
+// 二重加入防止: 既存の加入行があり、それが canceled でなければ
+// （active/trialing/past_due のいずれでも）Stripe 側の加入がまだ生きている
+// ということなので、たとえ entitlement が既に free に落ちていても
+// （past_due が猶予を超えた場合など）再申込を許さない。二重課金を防ぐため。
+// entitlement==premium のチェックは無くても上記だけで十分だが、
+// 安全側の保険としてそのまま残す。
 func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID string) (string, error) {
 	ent, err := s.entitlements.For(ctx, userID)
 	if err != nil {
@@ -82,8 +89,23 @@ func (s *BillingService) CreateCheckoutSession(ctx context.Context, userID strin
 	if ent.Plan() == domain.PlanPremium {
 		return "", ErrAlreadySubscribed
 	}
-	eligible, customerID, err := s.trialEligibility(ctx, userID)
+	uid, err := domain.ParseUserID(userID)
 	if err != nil {
+		return "", err
+	}
+	sub, err := s.store.Find(ctx, uid)
+	eligible := true
+	customerID := ""
+	switch {
+	case err == nil:
+		if sub.Status != domain.SubscriptionCanceled {
+			return "", ErrAlreadySubscribed
+		}
+		eligible = false
+		customerID = sub.ProviderCustomerID
+	case errors.Is(err, ErrSubscriptionNotFound):
+		// 加入行が一度も無い＝初回。トライアル適格。
+	default:
 		return "", err
 	}
 	return s.gateway.CreateCheckoutSession(ctx, CheckoutParams{
@@ -133,7 +155,29 @@ func (s *BillingService) HandleWebhook(ctx context.Context, payload []byte, sigH
 			slog.String("user_id", ev.UserID))
 		return nil
 	}
-	return s.store.Upsert(ctx, domain.Subscription{
+
+	// 古い/別サブスクのイベントによる上書き防止（out-of-order 対策）。
+	// 現在の行が「別の」サブスクで、かつそれが今この瞬間プレミアムを与えている
+	// （＝新しく加入し直した後）なら、遅れて届いた古いイベントで上書きしない。
+	// 手動付与（ProviderSubscriptionID 空）は対象外＝Stripeイベントに乗っ取られてよい。
+	existing, err := s.store.Find(ctx, uid)
+	if err != nil && !errors.Is(err, ErrSubscriptionNotFound) {
+		return err
+	}
+	existingFound := err == nil
+	if existingFound &&
+		existing.ProviderSubscriptionID != "" &&
+		existing.ProviderSubscriptionID != ev.SubscriptionID &&
+		existing.GivesPremiumAt(s.now()) {
+		logctx.From(ctx).WarnContext(ctx,
+			"古い/別サブスクのイベントのため無視します（現行の有効な加入を保護）",
+			slog.String("user_id", ev.UserID),
+			slog.String("incoming_subscription_id", ev.SubscriptionID),
+			slog.String("existing_subscription_id", existing.ProviderSubscriptionID))
+		return nil
+	}
+
+	if err := s.store.Upsert(ctx, domain.Subscription{
 		UserID:                 uid,
 		Plan:                   domain.PlanPremium,
 		Status:                 ev.Status,
@@ -142,5 +186,14 @@ func (s *BillingService) HandleWebhook(ctx context.Context, payload []byte, sigH
 		Provider:               domain.ProviderStripe,
 		ProviderSubscriptionID: ev.SubscriptionID,
 		ProviderCustomerID:     ev.CustomerID,
-	})
+	}); err != nil {
+		// ここが失敗すると PAID な加入がDBに同期されず、handler は 500 を返す
+		// （Stripe が再送する）。診断できるよう原因をログに残す。
+		logctx.From(ctx).ErrorContext(ctx, "Webフックの加入更新（Upsert）に失敗しました",
+			slog.String("subscription_id", ev.SubscriptionID),
+			slog.String("user_id", ev.UserID),
+			slog.Any("error", err))
+		return err
+	}
+	return nil
 }
