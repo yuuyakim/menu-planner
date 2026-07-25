@@ -806,10 +806,6 @@ paths:
           description: 同期した（対象外イベントも200で受理する）
         '400':
           description: 署名不正、または本文を解釈できない
-          content:
-            text/plain:
-              schema:
-                type: string
 
 components:
   securitySchemes:

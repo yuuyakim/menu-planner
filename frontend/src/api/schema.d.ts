@@ -1394,9 +1394,7 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content: {
-                        "text/plain": string;
-                    };
+                    content?: never;
                 };
             };
         };
