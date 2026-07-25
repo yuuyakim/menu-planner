@@ -65,7 +65,7 @@ func TestSubscriptionRepository_未知の値でも締め出さない(t *testing.
 		plan, status string
 	}{
 		{"未知のプラン", "pro", "active"},
-		{"未知の状態", "premium", "trialing"},
+		{"未知の状態", "premium", "unknown_status"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			u := createUser(t, pool, "sub-repo-unknown-"+tt.plan+tt.status+"@example.com")
