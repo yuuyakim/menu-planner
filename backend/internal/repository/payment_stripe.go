@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stripe/stripe-go/v86"
+	portalsession "github.com/stripe/stripe-go/v86/billingportal/session"
 	"github.com/stripe/stripe-go/v86/checkout/session"
 	"github.com/stripe/stripe-go/v86/subscription"
 	"github.com/stripe/stripe-go/v86/webhook"
@@ -101,6 +102,20 @@ func (g *StripePaymentGateway) ParseWebhookEvent(payload []byte, sigHeader strin
 	default:
 		return service.WebhookEvent{}, nil // 対象外→無視
 	}
+}
+
+// CreateBillingPortalSession は顧客ポータルのセッションを作り、遷移先 URL を返す。
+func (g *StripePaymentGateway) CreateBillingPortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
+	params := &stripe.BillingPortalSessionParams{
+		Customer:  stripe.String(customerID),
+		ReturnURL: stripe.String(returnURL),
+	}
+	params.Context = ctx
+	s, err := portalsession.New(params)
+	if err != nil {
+		return "", fmt.Errorf("顧客ポータルセッションの作成に失敗しました: %w", err)
+	}
+	return s.URL, nil
 }
 
 // normalizeSubscription は Stripe の Subscription を WebhookEvent に写す。

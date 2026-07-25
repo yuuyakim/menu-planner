@@ -49,6 +49,9 @@ func (f *fakeGateway) CreateCheckoutSession(_ context.Context, p service.Checkou
 func (f *fakeGateway) ParseWebhookEvent(_ []byte, _ string) (service.WebhookEvent, error) {
 	return f.event, f.parseErr
 }
+func (f *fakeGateway) CreateBillingPortalSession(_ context.Context, _, _ string) (string, error) {
+	return f.url, nil
+}
 
 const validUID = "11111111-1111-1111-1111-111111111111"
 

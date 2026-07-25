@@ -244,4 +244,6 @@ type PaymentGateway interface {
 	// ParseWebhookEvent は署名を検証し、Stripe イベントを WebhookEvent に正規化する。
 	// 署名不正・本文の解釈失敗はエラー。処理対象外のイベントは Type="" で err=nil を返す。
 	ParseWebhookEvent(payload []byte, sigHeader string) (WebhookEvent, error)
+	// CreateBillingPortalSession は Stripe 顧客ポータルのセッションを作り、遷移先 URL を返す。
+	CreateBillingPortalSession(ctx context.Context, customerID, returnURL string) (string, error)
 }
