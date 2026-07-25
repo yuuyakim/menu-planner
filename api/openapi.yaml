@@ -773,6 +773,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /api/v1/billing/subscription:
+    get:
+      tags: [billing]
+      summary: 現在のプラン状態を取得する
+      description: |
+        アカウント設定 > プランの管理 画面の表示値。
+        加入状態の真実の源は Webhook が更新する subscriptions で、このAPIは読むだけ。
+      responses:
+        '200':
+          description: 現在のプラン状態
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/billing/portal-session:
+    post:
+      tags: [billing]
+      summary: Stripe 顧客ポータルのセッションを作成する
+      description: |
+        Stripe 顧客ポータル（ホスト型）のセッションURLを返す。フロントはこのURLへ
+        リダイレクトする。解約・カード変更・請求履歴の閲覧はポータル側で行われ、
+        その結果は既存の Webhook（/billing/webhook）が同期する。このAPI自身は
+        subscriptions を更新しない。
+      responses:
+        '200':
+          description: 顧客ポータルセッションのURL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalSessionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Stripe 顧客が紐づいていない（手動付与・未加入）
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
   /api/v1/billing/webhook:
     post:
       tags: [billing]
@@ -1327,6 +1369,40 @@ components:
           type: string
           format: uri
           description: Stripe Checkout（ホスト型）のセッションURL。フロントはここへリダイレクトする。
+
+    SubscriptionResponse:
+      type: object
+      description: アカウント設定 > プランの管理 画面の表示値。
+      required: [plan, status, currentPeriodEnd, cancelAtPeriodEnd, hasPortal]
+      properties:
+        plan:
+          type: string
+          description: 現在のプラン。
+          example: premium
+        status:
+          type: string
+          description: 加入状態（Stripe の subscription status、free なら空文字）。
+          example: active
+        currentPeriodEnd:
+          type: string
+          format: date-time
+          nullable: true
+          description: 現在の請求期間の終了日時。free、または未加入なら null。
+        cancelAtPeriodEnd:
+          type: boolean
+          description: 期末解約が予約されているか（顧客ポータルで解約すると true になる）。
+        hasPortal:
+          type: boolean
+          description: Stripe 顧客が紐づいているか。false なら手動付与や未加入で、プランの管理ボタンは出さない。
+
+    PortalSessionResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Stripe 顧客ポータル（ホスト型）のセッションURL。フロントはここへリダイレクトする。
 
     Problem:
       type: object

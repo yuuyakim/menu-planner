@@ -269,7 +269,11 @@ JWTの issuer などの識別子は `menu-planner` のままとする（改名�
 - `GET /auth/me` が `plan`（`free` \| `premium`）を返す。**上限の数値そのものは返さない**
 - **解約・プラン変更の導線名は「アカウント設定 > プランの管理」**（`planManagementPath`。
   申込み確認画面・利用規約・特商法表示の3文書がこの名称で解約方法を示す）。
-  この画面自体（Stripe カスタマーポータル想定）の実装は本仕様の対象外で別途行う
+  実体は `/account` の画面（`GET /billing/subscription` で現在の加入状態を表示）で、
+  解約・カード変更・請求履歴の閲覧は **Stripe 顧客ポータル**（`POST /billing/portal-session`
+  が発行するホスト型URLへリダイレクト）に委ねる。**解約は期末**（利用規約4条5項）で、
+  ポータルでの操作結果は既存の `POST /billing/webhook` が同期する。手動付与など
+  Stripe 顧客が無い利用者にはポータルの導線を出さない（`hasPortal: false`）
 - **運用者によるCLI付与（`make grant` / `make revoke`）は決済実装後も残す。**
   問い合わせ対応や検証用アカウントなど、決済を経由しない手動付与の手段として使う
 
@@ -823,6 +827,8 @@ WHERE user_id = $1
 | GET | `/billing/preview` | 必須 | 申込確認画面の表示値（価格・トライアル・初回課金日） |
 | POST | `/billing/checkout-session` | 必須 | Stripe Checkout セッションを作成しURLを返す |
 | POST | `/billing/webhook` | 不要（署名検証） | Stripe からの通知を受け加入状態を同期する |
+| GET | `/billing/subscription` | 必須 | `/account`（アカウント設定 > プランの管理）の表示値。プラン・加入状態・期末日・期末解約予約・ポータル導線の有無 |
+| POST | `/billing/portal-session` | 必須 | Stripe 顧客ポータルのセッションを作成しURLを返す。Stripe 顧客が無い場合は409（`no-billing-customer`） |
 
 **`GET /billing/preview` レスポンス例**
 ```json
@@ -859,6 +865,33 @@ WHERE user_id = $1
 - `subscriptions` の `status` / `current_period_end` / `cancel_at_period_end` を
   同期する。**加入状態の真実の源はここであり、preview / checkout-session は
   申込みの表示・導線に過ぎない**
+
+**`GET /billing/subscription` レスポンス例**
+```json
+{
+  "plan": "premium",
+  "status": "active",
+  "currentPeriodEnd": "2026-08-24T10:00:00Z",
+  "cancelAtPeriodEnd": false,
+  "hasPortal": true
+}
+```
+
+- `/account`（アカウント設定 > プランの管理）が表示に使う。free、または未加入なら
+  `currentPeriodEnd` は `null`
+- `hasPortal` が `false` の場合（手動付与・未加入で Stripe 顧客が無い）、フロントは
+  「プランを管理する」ボタンを出さない（誤操作で解約できないURLへ送らないため）
+
+**`POST /billing/portal-session` レスポンス例**
+```json
+{ "url": "https://billing.stripe.com/p/session/..." }
+```
+
+- Stripe 顧客ポータル（ホスト型）へのリダイレクト先。解約・カード変更・請求履歴の
+  閲覧はポータル側で行われ、**解約は期末**（利用規約4条5項）。ポータルでの操作結果は
+  `POST /billing/webhook` の `customer.subscription.updated` / `deleted` が同期する
+  （このAPI自身は `subscriptions` を更新しない）
+- Stripe 顧客が紐づいていない場合は **409**（`no-billing-customer`）
 
 > **実 Stripe を使う E2E はCIに含めない。** テストモードでの一連の流れ（トライアル→
 > 初回課金→解約→失効）は `stripe listen` / `stripe trigger` によるローカル再現が前提で、
