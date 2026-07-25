@@ -61,7 +61,7 @@ func (s *SubscriptionService) Grant(ctx context.Context, userID domain.UserID, m
 	}
 
 	base := now
-	if sub.GivesPremiumAt(now) {
+	if sub.IsActiveAt(now) {
 		base = sub.CurrentPeriodEnd
 	}
 
