@@ -64,33 +64,41 @@ type MenuHistory interface {
 
 // MenuHandler は献立APIの受け口。
 type MenuHandler struct {
-	svc     MenuUseCase
-	history MenuHistory
-	tokens  *auth.JWT
+	svc          MenuUseCase
+	history      MenuHistory
+	tokens       *auth.JWT
+	entitlements service.Entitlements
 }
 
 // NewMenuHandler は MenuHandler を生成する。
 // history / tokens はログイン中の利用者に履歴を連携するために使う。
-func NewMenuHandler(s MenuUseCase, history MenuHistory, tokens *auth.JWT) *MenuHandler {
-	return &MenuHandler{svc: s, history: history, tokens: tokens}
+// entitlements は週間献立（suggest-weekly / reroll-day）の premium 判定に使う。
+func NewMenuHandler(s MenuUseCase, history MenuHistory, tokens *auth.JWT, entitlements service.Entitlements) *MenuHandler {
+	return &MenuHandler{svc: s, history: history, tokens: tokens, entitlements: entitlements}
 }
 
 // RegisterRoutes は献立APIのルーティングを登録する。
 // パスの定義をハンドラと同じ場所に置き、テストで実際のパスごと検証できるようにする。
 //
-// OptionalAuth は履歴を活かす提案系のルートにだけ個別に付ける。グループ全体に
+// OptionalAuth は履歴を活かす単発提案（suggest）にだけ個別に付ける。グループ全体に
 // 付けると echo の method-not-allowed 判定が変わり、未対応メソッドが 405 ではなく
 // 404 になってしまうため（param ルート /menus/:id との兼ね合い）。未認証でも 200 の
 // まま使え、ログイン中なら userID をコンテキストから取れる（履歴の除外・記録に使う）。
+//
+// 週間献立（suggest-weekly / reroll-day）は premium 限定（spec.md: 週間=premium）。
+// RequireAuth → RequirePremium の順に重ね、未認証は401、free は403に丸める。
 func (h *MenuHandler) RegisterRoutes(e *echo.Echo, mw ...echo.MiddlewareFunc) {
 	g := e.Group(APIBasePath, mw...)
 	optional := OptionalAuth(h.tokens)
+	requireAuth := RequireAuth(h.tokens)
+	premium := RequirePremium(h.entitlements)
+
 	// /menus/suggest は /menus/:id と同じ階層にあるが、echo は静的なパスを
 	// パラメータより優先して照合するため、:id に飲み込まれることはない。
 	g.GET("/menus/suggest", h.Suggest, optional)
 	// 状態は変えないが、条件をボディで受けるため POST（spec.md 5.1）。
-	g.POST("/menus/suggest-weekly", h.SuggestWeekly, optional)
-	g.POST("/menus/reroll-day", h.RerollDay, optional)
+	g.POST("/menus/suggest-weekly", h.SuggestWeekly, requireAuth, premium)
+	g.POST("/menus/reroll-day", h.RerollDay, requireAuth, premium)
 	g.GET("/menus/:id", h.Get)
 	g.GET("/menus/:id/recipes", h.Recipes)
 }

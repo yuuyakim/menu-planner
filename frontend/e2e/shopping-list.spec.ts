@@ -1,6 +1,22 @@
+import { execSync } from 'node:child_process'
+
 import { expect, test } from '@playwright/test'
 
+import { signUp, uniqueEmail } from './helpers'
+
 test('週間献立を作ると、買い物リストに食材がまとまる', async ({ page }) => {
+  const email = uniqueEmail('shopping-list')
+  await signUp(page, email)
+
+  // 週間献立の作成は premium 限定（決済が無いのでCLIで付与する。
+  // premium.spec.ts と同じ流儀）。
+  execSync(
+    `docker compose run --rm backend go run ./cmd/grant -email=${email} -months=1`,
+    { cwd: '..', stdio: 'inherit' },
+  )
+  // useCurrentUser は staleTime 5分でキャッシュするため、取り直しが要る。
+  await page.reload()
+
   await page.goto('/weekly')
 
   // 週を作る前は導線を出さない。買うものがまだ決まっていないため。

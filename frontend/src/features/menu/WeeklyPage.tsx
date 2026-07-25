@@ -8,6 +8,7 @@ import { MascotStatus } from '../../components/MascotStatus'
 import { useSessionState } from '../../hooks/useSessionState'
 import { useCurrentUser } from '../auth/useCurrentUser'
 import { historiesQueryKey } from '../history/api'
+import { PremiumLock } from '../premium/PremiumLock'
 import { rerollDay, saveWeeklyMenu, savedWeeklyMenusQueryKey, suggestWeekly } from './api'
 import { MenuCard } from './MenuCard'
 import { SearchForm } from './SearchForm'
@@ -112,6 +113,19 @@ export function WeeklyPage({ today = new Date() }: Props) {
 
   const error = create.error ?? reroll.error
 
+  // 週間献立の作成・保存は premium 限定（フックはここより上ですべて呼び終えている）。
+  // ローディング中は user が undefined のためここに入り、<PremiumLock> が自身の
+  // ローディング表示を出す。WeeklyPage 側で別のローディング表示を挟まないため、
+  // <PremiumLock> がマウントされたまま維持され、/auth/me の再取得ループが起きない。
+  if (user?.plan !== 'premium') {
+    return (
+      <PremiumLock
+        title="1週間まとめて計画"
+        description="プレミアムプランなら、1週間分の献立をまとめて作って保存し、買い物リストも週単位で使えます。"
+      />
+    )
+  }
+
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-bold text-kon-ink">1週間の献立</h1>
@@ -147,24 +161,14 @@ export function WeeklyPage({ today = new Date() }: Props) {
               買い物リストを見る
             </Link>
 
-            {user ? (
-              <button
-                type="button"
-                onClick={() => save.mutate()}
-                disabled={save.isPending}
-                className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream disabled:cursor-not-allowed disabled:text-kon-ink/40"
-              >
-                {save.isPending ? '保存中…' : 'この週を保存する'}
-              </button>
-            ) : (
-              // 押せないボタンを出すより、何をすれば保存できるかを示す。
-              <Link
-                to="/login"
-                className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream"
-              >
-                ログインして保存する
-              </Link>
-            )}
+            <button
+              type="button"
+              onClick={() => save.mutate()}
+              disabled={save.isPending}
+              className="rounded-full border border-kon-leaf-soft bg-white px-5 py-2 font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream disabled:cursor-not-allowed disabled:text-kon-ink/40"
+            >
+              {save.isPending ? '保存中…' : 'この週を保存する'}
+            </button>
           </div>
 
           {save.isSuccess && (

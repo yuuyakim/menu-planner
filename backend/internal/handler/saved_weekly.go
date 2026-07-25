@@ -22,25 +22,32 @@ type SavedWeeklyMenuUseCase interface {
 
 // SavedWeeklyMenuHandler は保存した週間献立APIの受け口。
 type SavedWeeklyMenuHandler struct {
-	svc    SavedWeeklyMenuUseCase
-	tokens *auth.JWT
+	svc          SavedWeeklyMenuUseCase
+	tokens       *auth.JWT
+	entitlements service.Entitlements
 }
 
 // NewSavedWeeklyMenuHandler は SavedWeeklyMenuHandler を生成する。
-func NewSavedWeeklyMenuHandler(svc SavedWeeklyMenuUseCase, tokens *auth.JWT) *SavedWeeklyMenuHandler {
-	return &SavedWeeklyMenuHandler{svc: svc, tokens: tokens}
+// entitlements は保存/一覧/削除の premium 判定に使う（週間=premium）。
+func NewSavedWeeklyMenuHandler(
+	svc SavedWeeklyMenuUseCase, tokens *auth.JWT, entitlements service.Entitlements,
+) *SavedWeeklyMenuHandler {
+	return &SavedWeeklyMenuHandler{svc: svc, tokens: tokens, entitlements: entitlements}
 }
 
 // RegisterRoutes は保存した週間献立APIのルーティングを登録する。
 // 保存は本人のものだけを扱うため認証必須（spec.md 2.8）。
+// 週間献立の保存/一覧/削除は premium 限定（spec.md: 週間=premium）。
+// RequireAuth → RequirePremium の順に重ね、未認証は401、free は403に丸める。
 func (h *SavedWeeklyMenuHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
 	// RequireAuth はグループではなくルート個別に付ける。グループに付けると
 	// /api/v1 配下の未定義パスにも走り、404 であるべきものが 401 になる（Issue #73）。
 	requireAuth := RequireAuth(h.tokens)
-	g.GET("/weekly-menus", h.List, requireAuth)
-	g.POST("/weekly-menus", h.Save, requireAuth)
-	g.DELETE("/weekly-menus/:id", h.Delete, requireAuth)
+	premium := RequirePremium(h.entitlements)
+	g.GET("/weekly-menus", h.List, requireAuth, premium)
+	g.POST("/weekly-menus", h.Save, requireAuth, premium)
+	g.DELETE("/weekly-menus/:id", h.Delete, requireAuth, premium)
 }
 
 // saveWeeklyMenuRequest は POST /weekly-menus のリクエストボディ。

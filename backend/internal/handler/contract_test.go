@@ -37,7 +37,7 @@ const specPath = "../../../api/openapi.yaml"
 func newContractApp(s *fakeMenuService) *echo.Echo {
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(s, noopMenuHistory{}, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 	return e
 }
 
@@ -391,15 +391,16 @@ func TestContract_ShoppingList_Problem(t *testing.T) {
 }
 
 // newContractSavedShoppingListApp は保存済み週の買い物リストの契約検証用アプリを組み立てる。
+// GET/PUT は premium 限定（Task 5）のため ent を渡す。
 func newContractSavedShoppingListApp(
-	t *testing.T, svc handler.SavedShoppingListUseCase,
+	t *testing.T, svc handler.SavedShoppingListUseCase, ent fakeEntitlements,
 ) (*echo.Echo, *auth.JWT) {
 	t.Helper()
 	tokens, err := auth.NewJWT([]byte(authTestSecret))
 	require.NoError(t, err)
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewSavedShoppingListHandler(svc, tokens).RegisterRoutes(e)
+	handler.NewSavedShoppingListHandler(svc, tokens, ent).RegisterRoutes(e)
 	return e, tokens
 }
 
@@ -416,7 +417,7 @@ func TestContract_SavedShoppingList(t *testing.T) {
 		{Name: "牛乳", Category: domain.CategoryDairyEgg, Origin: domain.OriginManual},
 		{Name: "にんじん", Category: domain.CategoryVegetable, Origin: domain.OriginDerived, Hidden: true},
 	}}
-	e, tokens := newContractSavedShoppingListApp(t, svc)
+	e, tokens := newContractSavedShoppingListApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("018f0000-0000-7000-8000-000000000001")
 	require.NoError(t, err)
 
@@ -434,7 +435,7 @@ func TestContract_SavedShoppingList_Unauthorized(t *testing.T) {
 	t.Parallel()
 	v := newContractValidator(t)
 
-	e, _ := newContractSavedShoppingListApp(t, &fakeSavedShoppingList{})
+	e, _ := newContractSavedShoppingListApp(t, &fakeSavedShoppingList{}, premiumEnt)
 	req := contractRequest(http.MethodGet,
 		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", "")
 	rec := httptest.NewRecorder()

@@ -26,8 +26,12 @@ const menuB: Menu = {
   description: 'アカウントBのデータ。',
 }
 
+// plan は premium にしておく。週間献立（premium 限定、Task 7）を使う
+// テストがこのファイルに含まれるため。
 function userResponse(id: string, name: string) {
-  return { user: { id, email: `${name}@example.com`, displayName: name } }
+  return {
+    user: { id, email: `${name}@example.com`, displayName: name, plan: 'premium' },
+  }
 }
 
 /** asUser は「そのユーザーとしてログイン済み」のサーバ応答に切り替える。 */

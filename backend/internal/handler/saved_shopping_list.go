@@ -19,21 +19,28 @@ type SavedShoppingListUseCase interface {
 
 // SavedShoppingListHandler は保存済み週の買い物リストAPIの受け口。
 type SavedShoppingListHandler struct {
-	svc    SavedShoppingListUseCase
-	tokens *auth.JWT
+	svc          SavedShoppingListUseCase
+	tokens       *auth.JWT
+	entitlements service.Entitlements
 }
 
 // NewSavedShoppingListHandler は SavedShoppingListHandler を生成する。
-func NewSavedShoppingListHandler(svc SavedShoppingListUseCase, tokens *auth.JWT) *SavedShoppingListHandler {
-	return &SavedShoppingListHandler{svc: svc, tokens: tokens}
+// entitlements は GET/PUT の premium 判定に使う（週間=premium）。
+func NewSavedShoppingListHandler(
+	svc SavedShoppingListUseCase, tokens *auth.JWT, entitlements service.Entitlements,
+) *SavedShoppingListHandler {
+	return &SavedShoppingListHandler{svc: svc, tokens: tokens, entitlements: entitlements}
 }
 
 // RegisterRoutes はルーティングを登録する。保存は本人のものだけを扱うため認証必須。
+// 保存済み週の買い物リストも premium 限定（spec.md: 週間=premium）。
+// RequireAuth → RequirePremium の順に重ね、未認証は401、free は403に丸める。
 func (h *SavedShoppingListHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
 	requireAuth := RequireAuth(h.tokens)
-	g.GET("/weekly-menus/:id/shopping-list", h.Get, requireAuth)
-	g.PUT("/weekly-menus/:id/shopping-list", h.Replace, requireAuth)
+	premium := RequirePremium(h.entitlements)
+	g.GET("/weekly-menus/:id/shopping-list", h.Get, requireAuth, premium)
+	g.PUT("/weekly-menus/:id/shopping-list", h.Replace, requireAuth, premium)
 }
 
 // savedShoppingUsedInDTO はその食材を使う献立。

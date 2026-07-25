@@ -57,7 +57,7 @@ func suggestAuthed(t *testing.T, svc *fakeMenuService, hist handler.MenuHistory)
 	t.Helper()
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(svc, hist, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(svc, hist, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 
 	access, err := menuTestTokens.Issue("user-777")
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestSuggest_Unauthed_DoesNotTouchHistory(t *testing.T) {
 	// Cookie なし（未認証）で叩く。
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewMenuHandler(svc, hist, menuTestTokens).RegisterRoutes(e)
+	handler.NewMenuHandler(svc, hist, menuTestTokens, fakeEntitlements{plan: domain.PlanPremium}).RegisterRoutes(e)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/menus/suggest", nil))
 

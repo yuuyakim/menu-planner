@@ -4,6 +4,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/auth"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
 // userIDContextKey は認証済みユーザーのIDを echo コンテキストに置く際のキー。
@@ -58,4 +59,28 @@ func OptionalAuth(tokens *auth.JWT) echo.MiddlewareFunc {
 func UserIDFromContext(c echo.Context) (string, bool) {
 	v, ok := c.Get(userIDContextKey).(string)
 	return v, ok && v != ""
+}
+
+// RequirePremium は premium 加入者だけを通すミドルウェア。RequireAuth の後段に置く。
+//
+// userID が無ければ 401（RequireAuth が先に通っていない配線ミス、または未認証）。
+// premium でなければ 403（ErrPremiumRequired）。エンタイトルメントの引き当てに
+// 失敗したら、その err をそのまま返す（500 系）。
+func RequirePremium(entitlements service.Entitlements) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			userID, ok := UserIDFromContext(c)
+			if !ok {
+				return auth.ErrTokenInvalid
+			}
+			ent, err := entitlements.For(c.Request().Context(), userID)
+			if err != nil {
+				return err
+			}
+			if !ent.CanUseWeeklyPlanning() {
+				return service.ErrPremiumRequired
+			}
+			return next(c)
+		}
+	}
 }

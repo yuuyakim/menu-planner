@@ -64,3 +64,24 @@ func TestEntitlement_CanPersistShoppingList(t *testing.T) {
 		})
 	}
 }
+
+func TestEntitlement_CanUseWeeklyPlanning(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		ent  domain.Entitlement
+		want bool
+	}{
+		{"premium は週間を使える", domain.NewEntitlement(domain.PlanPremium), true},
+		{"free は使えない", domain.NewEntitlement(domain.PlanFree), false},
+		{"ゼロ値は使えない", domain.Entitlement{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.ent.CanUseWeeklyPlanning(); got != tt.want {
+				t.Errorf("CanUseWeeklyPlanning() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
