@@ -6,6 +6,8 @@ import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RequireAuth } from '../features/auth/RequireAuth'
 import { AuthMenu } from '../features/auth/AuthMenu'
+import { CheckoutCompletePage } from '../features/billing/CheckoutCompletePage'
+import { CheckoutPage } from '../features/billing/CheckoutPage'
 import { FavoritePage } from '../features/favorite/FavoritePage'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
@@ -119,6 +121,23 @@ export function App() {
               element={
                 <RequireAuth>
                   <FavoritePage />
+                </RequireAuth>
+              }
+            />
+            {/* 加入は本人に紐づくため認証必須。 */}
+            <Route
+              path="/checkout"
+              element={
+                <RequireAuth>
+                  <CheckoutPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/checkout/complete"
+              element={
+                <RequireAuth>
+                  <CheckoutCompletePage />
                 </RequireAuth>
               }
             />
