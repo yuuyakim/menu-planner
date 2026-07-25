@@ -49,7 +49,7 @@ func (r *SubscriptionRepository) Find(
 	// **未知の値でエラーにしない。** ここで弾くと EntitlementService がそれを返し、
 	// /auth/me が 500 になって、ログイン済みの利用者がアプリを一切使えなくなる。
 	// 未知のプランは domain.Entitlement が free に落とし、未知の状態は
-	// IsActiveAt が false にするため、そのまま通しても安全側に倒れる
+	// GivesPremiumAt が false にするため、そのまま通しても安全側に倒れる
 	// （プレミアムとして通ってしまう経路は無い）。
 	// 000010 が CHECK 制約を張らず「決済事業者ごとに増える値を DDL の変更なしに
 	// 受けられる」ことを狙っているのも、この読み方があってはじめて成立する。

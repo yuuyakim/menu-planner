@@ -54,7 +54,7 @@ func (s *EntitlementService) For(ctx context.Context, userID string) (domain.Ent
 		return domain.Entitlement{}, err
 	}
 
-	if !sub.IsActiveAt(s.now()) {
+	if !sub.GivesPremiumAt(s.now()) {
 		return free, nil
 	}
 	return domain.NewEntitlement(sub.Plan), nil

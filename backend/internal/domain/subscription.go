@@ -74,14 +74,6 @@ type Subscription struct {
 	ProviderCustomerID string
 }
 
-// IsActiveAt は指定時刻に加入が有効かを返す。
-//
-// 期限切れをバッチでDBに書き戻すことはせず、参照のたびにここで判定する。
-// バッチが停止すると、課金していない利用者がプレミアムのまま残るため。
-func (s Subscription) IsActiveAt(t time.Time) bool {
-	return s.Status == SubscriptionActive && s.CurrentPeriodEnd.After(t)
-}
-
 // GivesPremiumAt は now 時点でこの加入がプレミアム権限を与えるかを返す。
 //
 // active / trialing は期間内なら premium。past_due は支払い失敗後の状態だが、

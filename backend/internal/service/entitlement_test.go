@@ -77,24 +77,65 @@ func TestEntitlementService_期限切れはfree(t *testing.T) {
 		"参照は加入の状態を書き換えてはいけない")
 }
 
-func TestEntitlementService_canceledとpast_dueはfree(t *testing.T) {
-	for _, status := range []domain.SubscriptionStatus{
-		domain.SubscriptionCanceled,
-		domain.SubscriptionPastDue,
-	} {
-		store := newFakeSubscriptionStore()
-		u := domain.NewUserID()
-		require.NoError(t, store.Upsert(context.Background(), domain.Subscription{
-			UserID:           u,
-			Plan:             domain.PlanPremium,
-			Status:           status,
-			CurrentPeriodEnd: fixedNow.Add(time.Hour),
-			Provider:         domain.ProviderManual,
-		}))
+func TestEntitlementService_canceledはfree(t *testing.T) {
+	// past_due は trialing / past_due 猶予のテスト
+	// (TestEntitlementService_TrialingとPastDue猶予はpremium) でカバーする。
+	// 猶予期間内は premium になるため、ここでは canceled のみを見る。
+	store := newFakeSubscriptionStore()
+	u := domain.NewUserID()
+	require.NoError(t, store.Upsert(context.Background(), domain.Subscription{
+		UserID:           u,
+		Plan:             domain.PlanPremium,
+		Status:           domain.SubscriptionCanceled,
+		CurrentPeriodEnd: fixedNow.Add(time.Hour),
+		Provider:         domain.ProviderManual,
+	}))
 
-		ent, err := newEntitlementSvc(store).For(context.Background(), u.String())
-		require.NoError(t, err)
-		require.Equal(t, domain.PlanFree, ent.Plan(), "%s は free であるべき", status)
+	ent, err := newEntitlementSvc(store).For(context.Background(), u.String())
+	require.NoError(t, err)
+	require.Equal(t, domain.PlanFree, ent.Plan(), "canceled は free であるべき")
+}
+
+func TestEntitlementService_TrialingとPastDue猶予はpremium(t *testing.T) {
+	cases := []struct {
+		name string
+		sub  domain.Subscription
+		want domain.Plan
+	}{
+		{
+			"trialing 期間内は premium",
+			domain.Subscription{Plan: domain.PlanPremium, Status: domain.SubscriptionTrialing, CurrentPeriodEnd: fixedNow.Add(48 * time.Hour)},
+			domain.PlanPremium,
+		},
+		{
+			"past_due 猶予内は premium",
+			domain.Subscription{Plan: domain.PlanPremium, Status: domain.SubscriptionPastDue, CurrentPeriodEnd: fixedNow.Add(-3 * 24 * time.Hour)},
+			domain.PlanPremium,
+		},
+		{
+			"past_due 猶予超過は free",
+			domain.Subscription{Plan: domain.PlanPremium, Status: domain.SubscriptionPastDue, CurrentPeriodEnd: fixedNow.Add(-8 * 24 * time.Hour)},
+			domain.PlanFree,
+		},
+		{
+			"canceled は free",
+			domain.Subscription{Plan: domain.PlanPremium, Status: domain.SubscriptionCanceled, CurrentPeriodEnd: fixedNow.Add(48 * time.Hour)},
+			domain.PlanFree,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newFakeSubscriptionStore()
+			u := domain.NewUserID()
+			sub := tc.sub
+			sub.UserID = u
+			sub.Provider = domain.ProviderManual
+			require.NoError(t, store.Upsert(context.Background(), sub))
+
+			ent, err := newEntitlementSvc(store).For(context.Background(), u.String())
+			require.NoError(t, err)
+			require.Equal(t, tc.want, ent.Plan())
+		})
 	}
 }
 

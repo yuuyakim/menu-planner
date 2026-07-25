@@ -79,9 +79,9 @@ func TestSubscriptionRepository_未知の値でも締め出さない(t *testing.
 			require.NoError(t, err, "未知の値はエラーにせず読み出せるべき")
 
 			// EntitlementService と同じ導出をして、安全側に倒れることを確かめる。
-			// 未知のプランは Entitlement が free に落とし、未知の状態は IsActiveAt が弾く。
+			// 未知のプランは Entitlement が free に落とし、未知の状態は GivesPremiumAt が弾く。
 			effective := domain.PlanFree
-			if got.IsActiveAt(time.Now()) {
+			if got.GivesPremiumAt(time.Now()) {
 				effective = domain.NewEntitlement(got.Plan).Plan()
 			}
 			require.Equal(t, domain.PlanFree, effective, "未知の値がプレミアムとして通ってはならない")
