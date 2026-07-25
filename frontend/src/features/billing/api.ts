@@ -18,3 +18,21 @@ export function getBillingPreview(): Promise<BillingPreview> {
 export function createCheckoutSession(): Promise<{ url: string }> {
   return apiPost<{ url: string }>('/billing/checkout-session')
 }
+
+export interface SubscriptionInfo {
+  plan: 'free' | 'premium'
+  status: 'none' | 'trialing' | 'active' | 'past_due' | 'canceled'
+  currentPeriodEnd: string | null
+  cancelAtPeriodEnd: boolean
+  hasPortal: boolean
+}
+
+/** getSubscription は現在のプラン状態を取得する（表示用）。 */
+export function getSubscription(): Promise<SubscriptionInfo> {
+  return apiGet<SubscriptionInfo>('/billing/subscription')
+}
+
+/** createPortalSession は Stripe 顧客ポータルのセッションを作り、遷移先 URL を返す。 */
+export function createPortalSession(): Promise<{ url: string }> {
+  return apiPost<{ url: string }>('/billing/portal-session')
+}

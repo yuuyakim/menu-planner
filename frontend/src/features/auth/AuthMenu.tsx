@@ -66,6 +66,12 @@ export function AuthMenu() {
         </span>
       )}
       <span className="text-sm text-kon-ink/80">{user.displayName}</span>
+      <Link
+        to="/account"
+        className="whitespace-nowrap text-sm text-kon-ink/70 underline decoration-kon-leaf underline-offset-2 hover:text-kon-ink"
+      >
+        アカウント設定
+      </Link>
       <button
         type="button"
         onClick={() => logout.mutate(undefined, { onSettled: () => setNotice(true) })}

@@ -6,6 +6,7 @@ import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RequireAuth } from '../features/auth/RequireAuth'
 import { AuthMenu } from '../features/auth/AuthMenu'
+import { AccountPage } from '../features/billing/AccountPage'
 import { CheckoutCompletePage } from '../features/billing/CheckoutCompletePage'
 import { CheckoutPage } from '../features/billing/CheckoutPage'
 import { FavoritePage } from '../features/favorite/FavoritePage'
@@ -138,6 +139,15 @@ export function App() {
               element={
                 <RequireAuth>
                   <CheckoutCompletePage />
+                </RequireAuth>
+              }
+            />
+            {/* プランの管理は本人のものだけを扱うため認証必須。 */}
+            <Route
+              path="/account"
+              element={
+                <RequireAuth>
+                  <AccountPage />
                 </RequireAuth>
               }
             />
