@@ -11,6 +11,7 @@ require (
 	github.com/pb33f/libopenapi v0.38.6
 	github.com/pb33f/libopenapi-validator v0.14.0
 	github.com/stretchr/testify v1.11.1
+	github.com/stripe/stripe-go/v86 v86.1.1
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
 	golang.org/x/crypto v0.53.0
