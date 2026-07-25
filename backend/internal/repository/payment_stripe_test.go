@@ -70,6 +70,48 @@ func TestStripeGateway_ParseWebhookEvent_SubscriptionUpdated(t *testing.T) {
 	}
 }
 
+// TestStripeGateway_ParseWebhookEvent_StatusMapping は mapStripeStatus の
+// フェイルクローズド分岐（未知・非アクセス系ステータスは canceled に倒す）を検証する。
+func TestStripeGateway_ParseWebhookEvent_StatusMapping(t *testing.T) {
+	cases := []struct {
+		name       string
+		wireStatus string
+		want       domain.SubscriptionStatus
+	}{
+		{"active", "active", domain.SubscriptionActive},
+		{"past_due", "past_due", domain.SubscriptionPastDue},
+		{"unpaid はフェイルクローズドで canceled", "unpaid", domain.SubscriptionCanceled},
+		{"incomplete はフェイルクローズドで canceled", "incomplete", domain.SubscriptionCanceled},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gw := repository.NewStripePaymentGateway("sk_test", testWebhookSecret, "price_test", 5)
+			periodEnd := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
+
+			sub := map[string]any{
+				"id":                   "sub_123",
+				"status":               tc.wireStatus,
+				"cancel_at_period_end": false,
+				"customer":             map[string]any{"id": "cus_123"},
+				"metadata":             map[string]any{"user_id": "user-abc"},
+				"items": map[string]any{
+					"data": []map[string]any{{"current_period_end": periodEnd.Unix()}},
+				},
+			}
+			payload, header := signedEvent(t, "customer.subscription.updated", sub)
+
+			ev, err := gw.ParseWebhookEvent(payload, header)
+			if err != nil {
+				t.Fatalf("ParseWebhookEvent: %v", err)
+			}
+			if ev.Status != tc.want {
+				t.Errorf("wire status %q: Status = %q, want %q", tc.wireStatus, ev.Status, tc.want)
+			}
+		})
+	}
+}
+
 func TestStripeGateway_ParseWebhookEvent_SubscriptionDeleted(t *testing.T) {
 	gw := repository.NewStripePaymentGateway("sk_test", testWebhookSecret, "price_test", 5)
 	sub := map[string]any{
