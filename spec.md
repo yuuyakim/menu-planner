@@ -243,9 +243,20 @@ JWTの issuer などの識別子は `menu-planner` のままとする（改名�
 
 有料のプレミアムプランを設ける。
 
-- **決済はこの段階では実装しない。** 販売主体（個人事業主／バーチャルオフィス／MoR）が
-  未確定で、決済を有効化するには特定商取引法に基づく事業者情報の開示が要る（15章）。
-  代わりに**運用者がCLI（`make grant` / `make revoke`）でプレミアムを付与・取消する**
+- **決済は Stripe Checkout（ホスト型）で行う。** 販売主体の特商法対応（15章）を前提に、
+  自前の「申込み内容の確認」画面 `/checkout`（特商法12条の6。表示要件は
+  `docs/legal/checkout-display.md`）→ Stripe Checkout（カード情報は自社を通さない）→
+  `/checkout/complete` で完了案内、という流れで加入する
+- **加入状態の真実の源は Webhook。** `POST /billing/webhook` が Stripe からの通知を
+  検証（署名: `Stripe-Signature`）し `subscriptions` に同期する。申込みAPI
+  （`checkout-session`）自身は `subscriptions` を更新しない。`/checkout/complete` は
+  Webhook の反映を待つだけの画面であり、決済の完了そのものを表さない
+- **初回のみ5日間のトライアルを付ける。** 過去に加入行が一度もない利用者だけが対象
+  （`GET /billing/preview` の `trialEligible`）。再加入や解約後の再申込みでは
+  トライアルを与えない
+- **`trialing` と `past_due` も premium と評価する。** `past_due`（支払い失敗後の状態）は
+  利用規約4条7項の**7日間の猶予期間**の間だけプレミアムを維持する（Stripe側の督促設定と
+  二重に効かせる安全弁）。猶予を過ぎた `past_due` は free
 - 週間献立の保存上限（2.8）は **free = 10件（現行維持）、premium = 50件**
 - **買い物リストの永続化**（2.7 / 2.8）。保存済みの週に限り、チェック状態・手動品目の
   追加・非表示を保存できる。free はこれらを保存できない
@@ -256,7 +267,11 @@ JWTの issuer などの識別子は `menu-planner` のままとする（改名�
   引けなければ表示上 free に落とし、ログは残す。上限の判定はこの緩和を通さない
   （課金済みの利用者を黙って free の上限で拒まないため、引けなければ失敗させる）
 - `GET /auth/me` が `plan`（`free` \| `premium`）を返す。**上限の数値そのものは返さない**
-- アップグレード導線は決済が実装されるまで作らない
+- **解約・プラン変更の導線名は「アカウント設定 > プランの管理」**（`planManagementPath`。
+  申込み確認画面・利用規約・特商法表示の3文書がこの名称で解約方法を示す）。
+  この画面自体（Stripe カスタマーポータル想定）の実装は本仕様の対象外で別途行う
+- **運用者によるCLI付与（`make grant` / `make revoke`）は決済実装後も残す。**
+  問い合わせ対応や検証用アカウントなど、決済を経由しない手動付与の手段として使う
 
 premium は次の2機能に絞り、それ以外は free / premium で差を付けない
 （プレミアムの線引き設計3.1・4）。
@@ -276,8 +291,9 @@ premium は次の2機能に絞り、それ以外は free / premium で差を付�
 > freeの値は現行を据え置き、premiumはそれを上回る値にする。
 
 > **期限切れをバッチで書き戻さない理由。** バッチが停止すると、課金していない利用者が
-> プレミアムのまま残ってしまう。「行があり、statusがactiveで、有効期限が現在時刻より先」を
-> 参照のたびに評価すれば、真実は常に1つになる。
+> プレミアムのまま残ってしまう。「行があり、statusが active／trialing、または
+> statusがpast_dueで猶予期間内で、有効期限が現在時刻より先」を参照のたびに評価すれば、
+> 真実は常に1つになる。
 
 > **表示は縮退させ、権限の行使は縮退させない。** プランの問い合わせが失敗したときに
 > ログインまで落とすと、プレミアム機能の障害が認証全体の障害に格上げされる。
@@ -290,9 +306,15 @@ premium は次の2機能に絞り、それ以外は free / premium で差を付�
 > 達したときのメッセージはサーバ側でプラン由来の件数を組み立てて返すため、フロントは
 > 受け取って表示するだけでよい。
 
-> **アップグレード導線を作らない理由。** 決済が存在しない状態で「プレミアムにする」ボタンを
-> 出すのは利用者に対して不誠実である。ログイン中の利用者情報を出す `AuthMenu` に、
-> プレミアムであることを示すバッジを1つ出すだけに留める。freeの利用者には何も新しく表示しない。
+> **アップグレード導線は文脈内にだけ置く。** 決済（Stripe Checkout）と申込み確認画面
+> `/checkout` が実装されたため、以前のように導線を一切出さない理由は無くなった。
+> 一方で全画面に「プレミアムにする」ボタンを出すような押し付けはしない。
+> free の利用者が premium 限定機能に触れた文脈でだけ案内する（例:
+> 買い物リスト画面で永続化に触れたときの案内バナー → `/checkout`）。
+> ログイン中の利用者情報を出す `AuthMenu` には、premium であることを示す
+> バッジを1つ出すに留める（こちらは従来通り）。
+>
+> 手動テストの位置づけは5.7に記す。
 
 ---
 
@@ -511,10 +533,10 @@ menus >── menu_genres ──────┘   (将来: 1献立に複数ジ�
 | --- | --- | --- |
 | user_id | uuid | PK, FK → users.id, ON DELETE CASCADE |
 | plan | text | NOT NULL |
-| status | text | NOT NULL（`active` \| `past_due` \| `canceled`） |
+| status | text | NOT NULL（`active` \| `trialing` \| `past_due` \| `canceled`） |
 | current_period_end | timestamptz | NOT NULL |
 | cancel_at_period_end | boolean | NOT NULL DEFAULT false |
-| provider | text | NOT NULL（現在は `manual`。将来 `stripe` 等） |
+| provider | text | NOT NULL（`stripe` \| `manual`） |
 | provider_subscription_id | text | NULL可（手動付与ではNULL） |
 | created_at | timestamptz | NOT NULL DEFAULT now() |
 | updated_at | timestamptz | NOT NULL DEFAULT now() |
@@ -709,7 +731,7 @@ WHERE user_id = $1
 | 401 | 未認証 |
 | 403 | 他ユーザーのリソースへのアクセス |
 | 404 | リソース不存在 |
-| 409 | 重複（登録済みメールアドレス、お気に入り重複） |
+| 409 | 重複・競合（登録済みメールアドレス、お気に入り重複、保存上限、既にプレミアムに加入済み） |
 | 422 | 条件に合致する献立が存在しない |
 | 502 | 外部検索APIの障害 |
 | 429 | レート制限超過 |
@@ -793,6 +815,55 @@ WHERE user_id = $1
 
 > **履歴には記録しない。** 履歴は「提示された献立1件＝1レコード」（2.5）で、
 > 候補を並べただけでは献立が確定していない。週間献立の引き直しと同じ扱い。
+
+### 5.7 課金（フェーズ15、2.11）
+
+| Method | Path | 認証 | 説明 |
+| --- | --- | --- | --- |
+| GET | `/billing/preview` | 必須 | 申込確認画面の表示値（価格・トライアル・初回課金日） |
+| POST | `/billing/checkout-session` | 必須 | Stripe Checkout セッションを作成しURLを返す |
+| POST | `/billing/webhook` | 不要（署名検証） | Stripe からの通知を受け加入状態を同期する |
+
+**`GET /billing/preview` レスポンス例**
+```json
+{
+  "price": 300,
+  "currency": "jpy",
+  "trialDays": 5,
+  "trialEligible": true,
+  "firstBillingAt": "2026-07-29T10:00:00Z",
+  "planManagementPath": "アカウント設定 > プランの管理"
+}
+```
+
+- `trialEligible` は過去に加入行が一度も無い場合だけ `true`（トライアルは初回のみ）
+- `firstBillingAt` は `trialEligible` ならトライアル終了時点、そうでなければ現在時刻
+  （即時課金）。日付だけでなく時刻まで返し、確認画面側が「その時点より前」と
+  表示できるようにする（`docs/legal/checkout-display.md`）
+
+**`POST /billing/checkout-session` レスポンス例**
+```json
+{ "url": "https://checkout.stripe.com/c/pay/cs_test_..." }
+```
+
+- 既にプレミアムの利用者が呼ぶと **409**（`already-subscribed`）
+- このAPI自身は `subscriptions` を更新しない。加入状態の反映は Webhook を待つ
+
+**`POST /billing/webhook`**
+
+- クライアントから呼ぶものではない。Stripe が直接叩く。認証Cookieは付かず、
+  `Stripe-Signature` ヘッダの署名検証だけで保護する
+- 署名不正・本文解釈失敗は **400**（Stripeに再送させない）。自分側の不調
+  （DB障害など）は **500**（Stripeに再送してほしい）。いずれも problem+json では
+  返さない（Stripe は RFC 7807 を解釈しないため）
+- `subscriptions` の `status` / `current_period_end` / `cancel_at_period_end` を
+  同期する。**加入状態の真実の源はここであり、preview / checkout-session は
+  申込みの表示・導線に過ぎない**
+
+> **実 Stripe を使う E2E はCIに含めない。** テストモードでの一連の流れ（トライアル→
+> 初回課金→解約→失効）は `stripe listen` / `stripe trigger` によるローカル再現が前提で、
+> CIで安定して再現するコストに対して得られる保証が小さい。代わりに
+> `docs/legal/checkout-display.md` §6 の手動チェックリストでリリース前に確認する。
 
 ---
 
