@@ -78,4 +78,34 @@ describe('決済復帰画面', () => {
       ),
     ).toBeVisible()
   })
+
+  it('/auth/me が持続的にエラーを返す場合でもポーリングを打ち切って諦めた旨を表示する', async () => {
+    let callCount = 0
+    server.use(
+      http.get('/api/v1/auth/me', () => {
+        callCount += 1
+        return HttpResponse.json({ message: 'internal error' }, { status: 500 })
+      }),
+    )
+    renderWithProviders(<CheckoutCompletePage />)
+
+    await screen.findByText('お手続きを受け付けました')
+
+    // 上限（10回）を十分に超えるまでタイマーを進める。
+    // 成功シグナルが一度も来ないため、成功回数だけを数える実装だと
+    // ここで無限にポーリングし続けてしまう。
+    for (let i = 0; i < 15; i += 1) {
+      await vi.advanceTimersByTimeAsync(2000)
+    }
+
+    // (a) 諦めた旨のフォールバック表示が出る。
+    expect(
+      await vi.waitFor(() =>
+        screen.getByText(/反映まで少し時間がかかることがあります/),
+      ),
+    ).toBeVisible()
+
+    // (b) ポーリングが上限で止まっている（無制限に再取得され続けていない）。
+    expect(callCount).toBeLessThanOrEqual(11)
+  })
 })

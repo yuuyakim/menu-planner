@@ -17,9 +17,9 @@ const pollIntervalMs = 2000
 // /auth/me を短い間隔で取り直し、premium になった時点で成功表示に切り替える。
 // 上限回数まで反映が確認できなければ、諦めて後で確認してもらう案内に切り替える。
 export function CheckoutCompletePage() {
-  // 取得成功の回数を数える。useQuery が返す結果には回数そのものが無いため
-  // （dataUpdatedAt はあるが dataUpdateCount は observer の結果には出てこない）、
-  // 成功のたびに時刻が変わることを利用して自前で数える。
+  // 取得の試行回数を数える。成功・失敗どちらでも 1 回の試行として数えないと、
+  // /auth/me が持続的にエラーを返す場合（5xx・タイムアウト等）に
+  // 上限判定が働かず無限にポーリングしてしまう。
   const [attempts, setAttempts] = useState(0)
 
   const me = useQuery({
@@ -28,19 +28,27 @@ export function CheckoutCompletePage() {
     // 401 は取り直しても変わらない。ポーリングは premium 反映待ちの手段であって、
     // 通信エラーの再試行はここでの目的ではない。
     retry: false,
-    // premium になったら、または上限回数に達したら止める。
-    // この callback が受け取る query は内部状態そのものなので dataUpdateCount を持つ。
-    refetchInterval: (query) =>
-      query.state.data?.plan === 'premium' || query.state.dataUpdateCount >= maxPolls
-        ? false
-        : pollIntervalMs,
+    // premium になったら、または（成功+失敗の）総試行回数が上限に達したら止める。
+    // この callback が受け取る query は内部状態そのものなので dataUpdateCount /
+    // errorUpdateCount を持つ。成功のみを数えると、持続的なエラー時に
+    // dataUpdateCount が増えず無限にポーリングし続けてしまう。
+    refetchInterval: (query) => {
+      if (query.state.data?.plan === 'premium') {
+        return false
+      }
+      if (query.state.dataUpdateCount + query.state.errorUpdateCount >= maxPolls) {
+        return false
+      }
+      return pollIntervalMs
+    },
   })
 
   useEffect(() => {
-    if (me.dataUpdatedAt) {
+    if (me.dataUpdatedAt || me.errorUpdatedAt) {
       setAttempts((n) => n + 1)
     }
-  }, [me.dataUpdatedAt])
+    // dataUpdatedAt と errorUpdatedAt のどちらが変化しても 1 試行として数える。
+  }, [me.dataUpdatedAt, me.errorUpdatedAt])
 
   const active = me.data?.plan === 'premium'
   const exhausted = attempts >= maxPolls
