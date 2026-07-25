@@ -81,6 +81,8 @@ var problemMapping = []struct {
 	{service.ErrFavoriteExists, http.StatusConflict, "favorite-exists", "この献立は既にお気に入りに登録されています"},
 	// プレミアム専用の操作を free が試みた。403。
 	{service.ErrPremiumRequired, http.StatusForbidden, "premium-required", "プレミアムプランが必要です"},
+	// 既にプレミアムの利用者が加入を試みた。今の状態との競合なので 409。
+	{service.ErrAlreadySubscribed, http.StatusConflict, "already-subscribed", "既にプレミアムに加入しています"},
 	// 手動品目が上限に達した。既存の保存上限と同じく今の状態との競合なので 409。
 	{service.ErrShoppingListItemLimitReached, http.StatusConflict, "shopping-list-item-limit-reached", "追加できる品目の上限に達しました"},
 	// 保存した週間献立が上限に達している。履歴のように押し出さず断るため、

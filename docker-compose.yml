@@ -34,6 +34,11 @@ services:
       # 本番は実際のクライアントIPが分かる構成で spec 値（10 / 60）を設定する。
       AUTH_RATE_LIMIT_PER_MIN: ${AUTH_RATE_LIMIT_PER_MIN:-0}
       SEARCH_RATE_LIMIT_PER_MIN: ${SEARCH_RATE_LIMIT_PER_MIN:-0}
+      # Stripe。3つとも未設定だと起動時に落ちる。開発・CI(E2E)では実際に
+      # Checkout/Webhookを叩かないため、ダミー値で起動できれば十分。
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_dev_only_placeholder}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_dev_only_placeholder}
+      STRIPE_PRICE_ID: ${STRIPE_PRICE_ID:-price_dev_only_placeholder}
     ports:
       - "8080:8080"
     volumes:

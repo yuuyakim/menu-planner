@@ -220,6 +220,9 @@ jobs:
             -e DATABASE_URL='postgres://app:password@db:5432/menu_planner?sslmode=disable' \
             -e JWT_SECRET='ci-only-secret' \
             -e SEARCH_API_PROVIDER='stub' \
+            -e STRIPE_SECRET_KEY='sk_test_ci_placeholder' \
+            -e STRIPE_WEBHOOK_SECRET='whsec_ci_placeholder' \
+            -e STRIPE_PRICE_ID='price_ci_placeholder' \
             -p 8080:8080 \
             menu-planner-backend:ci
           # --retry だけでは接続リセット/recv失敗を再試行せず、起動直後の listen 前の
