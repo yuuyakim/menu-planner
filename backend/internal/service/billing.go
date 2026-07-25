@@ -14,6 +14,10 @@ import (
 // ErrAlreadySubscribed は既にプレミアムの利用者が加入を試みたことを表す。
 var ErrAlreadySubscribed = errors.New("既にプレミアムに加入しています")
 
+// ErrNoBillingCustomer は Stripe 顧客が紐づいていない（手動付与や未加入）ため
+// 顧客ポータルを開けないことを表す。
+var ErrNoBillingCustomer = errors.New("課金の顧客情報がありません")
+
 // ErrWebhookSignature は Webhook の署名検証・本文解釈に失敗したことを表す。
 // handler はこれを 400 に写し、Stripe に再送させない。
 var ErrWebhookSignature = errors.New("Webフックの検証に失敗しました")
@@ -38,6 +42,7 @@ type BillingService struct {
 	gateway      PaymentGateway
 	successURL   string
 	cancelURL    string
+	accountURL   string
 	trialDays    int
 	now          func() time.Time
 }
@@ -45,15 +50,25 @@ type BillingService struct {
 // NewBillingService は BillingService を生成する。
 func NewBillingService(
 	entitlements Entitlements, store SubscriptionStore, gateway PaymentGateway,
-	successURL, cancelURL string, trialDays int, now func() time.Time,
+	successURL, cancelURL, accountURL string, trialDays int, now func() time.Time,
 ) *BillingService {
 	if now == nil {
 		now = time.Now
 	}
 	return &BillingService{
 		entitlements: entitlements, store: store, gateway: gateway,
-		successURL: successURL, cancelURL: cancelURL, trialDays: trialDays, now: now,
+		successURL: successURL, cancelURL: cancelURL, accountURL: accountURL,
+		trialDays: trialDays, now: now,
 	}
+}
+
+// SubscriptionView はプラン管理画面の表示用。
+type SubscriptionView struct {
+	Plan              string    // "free" | "premium"（EntitlementService 由来）
+	Status            string    // "none" | "trialing" | "active" | "past_due" | "canceled"
+	CurrentPeriodEnd  time.Time // 行が無ければゼロ値
+	CancelAtPeriodEnd bool
+	HasPortal         bool // provider_customer_id があり顧客ポータルを開けるか
 }
 
 // Preview は申込確認画面の表示値を返す。
@@ -71,6 +86,52 @@ func (s *BillingService) Preview(ctx context.Context, userID string) (PreviewRes
 		TrialEligible: eligible, FirstBillingAt: first,
 		PlanManagementPath: planManagementPath,
 	}, nil
+}
+
+// Subscription はプラン管理画面の表示値を返す。
+func (s *BillingService) Subscription(ctx context.Context, userID string) (SubscriptionView, error) {
+	ent, err := s.entitlements.For(ctx, userID)
+	if err != nil {
+		return SubscriptionView{}, err
+	}
+	view := SubscriptionView{Plan: string(ent.Plan()), Status: "none"}
+
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return SubscriptionView{}, err
+	}
+	sub, err := s.store.Find(ctx, uid)
+	if err != nil {
+		if errors.Is(err, ErrSubscriptionNotFound) {
+			return view, nil // 行なし＝無料
+		}
+		return SubscriptionView{}, err
+	}
+	view.Status = string(sub.Status)
+	view.CurrentPeriodEnd = sub.CurrentPeriodEnd
+	view.CancelAtPeriodEnd = sub.CancelAtPeriodEnd
+	view.HasPortal = sub.ProviderCustomerID != ""
+	return view, nil
+}
+
+// CreatePortalSession は顧客ポータルのセッションを作り URL を返す。
+// Stripe 顧客が無い（手動付与・未加入）場合は ErrNoBillingCustomer。
+func (s *BillingService) CreatePortalSession(ctx context.Context, userID string) (string, error) {
+	uid, err := domain.ParseUserID(userID)
+	if err != nil {
+		return "", err
+	}
+	sub, err := s.store.Find(ctx, uid)
+	if err != nil {
+		if errors.Is(err, ErrSubscriptionNotFound) {
+			return "", ErrNoBillingCustomer
+		}
+		return "", err
+	}
+	if sub.ProviderCustomerID == "" {
+		return "", ErrNoBillingCustomer
+	}
+	return s.gateway.CreateBillingPortalSession(ctx, sub.ProviderCustomerID, s.accountURL)
 }
 
 // CreateCheckoutSession は Checkout セッションを作り URL を返す。

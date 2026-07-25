@@ -159,6 +159,7 @@ func run() error {
 		entitlementSvc, subscriptionRepo, paymentGateway,
 		frontendOrigin+"/checkout/complete?session_id={CHECKOUT_SESSION_ID}",
 		frontendOrigin+"/checkout",
+		frontendOrigin+"/account",
 		trialDays, time.Now)
 	billingHandler := handler.NewBillingHandler(billingSvc, tokens)
 

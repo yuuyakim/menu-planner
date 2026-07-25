@@ -36,10 +36,13 @@ func (f fakeEnt) For(_ context.Context, _ string) (domain.Entitlement, error) {
 }
 
 type fakeGateway struct {
-	lastParams service.CheckoutParams
-	url        string
-	event      service.WebhookEvent
-	parseErr   error
+	lastParams       service.CheckoutParams
+	url              string
+	event            service.WebhookEvent
+	parseErr         error
+	portalURL        string
+	portalCustomerID string
+	portalReturnURL  string
 }
 
 func (f *fakeGateway) CreateCheckoutSession(_ context.Context, p service.CheckoutParams) (string, error) {
@@ -49,15 +52,17 @@ func (f *fakeGateway) CreateCheckoutSession(_ context.Context, p service.Checkou
 func (f *fakeGateway) ParseWebhookEvent(_ []byte, _ string) (service.WebhookEvent, error) {
 	return f.event, f.parseErr
 }
-func (f *fakeGateway) CreateBillingPortalSession(_ context.Context, _, _ string) (string, error) {
-	return f.url, nil
+func (f *fakeGateway) CreateBillingPortalSession(_ context.Context, customerID, returnURL string) (string, error) {
+	f.portalCustomerID = customerID
+	f.portalReturnURL = returnURL
+	return f.portalURL, nil
 }
 
 const validUID = "11111111-1111-1111-1111-111111111111"
 
 func newBilling(store service.SubscriptionStore, ent service.Entitlements, gw service.PaymentGateway) *service.BillingService {
 	now := func() time.Time { return time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC) }
-	return service.NewBillingService(ent, store, gw, "https://app/checkout/complete", "https://app/checkout", 5, now)
+	return service.NewBillingService(ent, store, gw, "https://app/checkout/complete", "https://app/checkout", "https://app/account", 5, now)
 }
 
 // --- tests ---
@@ -269,5 +274,68 @@ func TestBilling_CreateCheckoutSession_PastDueLiveSubscription_AlreadySubscribed
 	_, err := svc.CreateCheckoutSession(context.Background(), validUID)
 	if !errors.Is(err, service.ErrAlreadySubscribed) {
 		t.Fatalf("past_due の生きているサブスクは already-subscribed。got %v", err)
+	}
+}
+
+// --- Task 2: Subscription 取得と PortalSession 作成 ---
+
+func TestBilling_Subscription_NoRow(t *testing.T) {
+	svc := newBilling(&fakeStore{found: false}, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	v, err := svc.Subscription(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("Subscription: %v", err)
+	}
+	if v.Plan != "free" || v.Status != "none" || v.HasPortal {
+		t.Errorf("行なしは free/none/hasPortal=false。got %+v", v)
+	}
+}
+
+func TestBilling_Subscription_PremiumActive(t *testing.T) {
+	end := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Plan: domain.PlanPremium, Status: domain.SubscriptionActive,
+		CurrentPeriodEnd: end, ProviderCustomerID: "cus_1",
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, &fakeGateway{})
+	v, err := svc.Subscription(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("Subscription: %v", err)
+	}
+	if v.Plan != "premium" || v.Status != "active" || !v.HasPortal || !v.CurrentPeriodEnd.Equal(end) {
+		t.Errorf("不正: %+v", v)
+	}
+}
+
+func TestBilling_CreatePortalSession_NoCustomer(t *testing.T) {
+	// customer 空（手動付与相当）
+	store := &fakeStore{found: true, sub: domain.Subscription{Status: domain.SubscriptionActive}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, &fakeGateway{})
+	if _, err := svc.CreatePortalSession(context.Background(), validUID); !errors.Is(err, service.ErrNoBillingCustomer) {
+		t.Fatalf("customer 無しは ErrNoBillingCustomer。got %v", err)
+	}
+}
+
+func TestBilling_CreatePortalSession_NoRow(t *testing.T) {
+	svc := newBilling(&fakeStore{found: false}, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	if _, err := svc.CreatePortalSession(context.Background(), validUID); !errors.Is(err, service.ErrNoBillingCustomer) {
+		t.Fatalf("行なしは ErrNoBillingCustomer。got %v", err)
+	}
+}
+
+func TestBilling_CreatePortalSession_OK(t *testing.T) {
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionActive, ProviderCustomerID: "cus_9",
+	}}
+	gw := &fakeGateway{portalURL: "https://stripe/portal"}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, gw)
+	url, err := svc.CreatePortalSession(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("CreatePortalSession: %v", err)
+	}
+	if url != "https://stripe/portal" {
+		t.Errorf("url = %q", url)
+	}
+	if gw.portalCustomerID != "cus_9" || gw.portalReturnURL != "https://app/account" {
+		t.Errorf("gateway 引数が不正: cus=%q return=%q", gw.portalCustomerID, gw.portalReturnURL)
 	}
 }
