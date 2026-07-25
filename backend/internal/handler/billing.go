@@ -34,7 +34,8 @@ func NewBillingHandler(svc BillingUseCase, tokens *auth.JWT) *BillingHandler {
 }
 
 // RegisterRoutes はルーティングを登録する。
-// preview / checkout-session は本人の加入を作るため認証必須。
+// preview / checkout-session / subscription / portal-session は本人の情報を
+// 扱うため認証必須。
 // webhook は Stripe が直接叩くため認証を付けず、署名検証で守る。
 func (h *BillingHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
@@ -114,7 +115,11 @@ type subscriptionDTO struct {
 //
 // 未認証は401。
 func (h *BillingHandler) Subscription(c echo.Context) error {
-	userID, _ := UserIDFromContext(c)
+	userID, ok := UserIDFromContext(c)
+	if !ok {
+		return auth.ErrTokenInvalid
+	}
+
 	v, err := h.svc.Subscription(c.Request().Context(), userID)
 	if err != nil {
 		return err
@@ -136,7 +141,11 @@ func (h *BillingHandler) Subscription(c echo.Context) error {
 //
 // Stripe 顧客が無い場合は409、未認証は401。
 func (h *BillingHandler) PortalSession(c echo.Context) error {
-	userID, _ := UserIDFromContext(c)
+	userID, ok := UserIDFromContext(c)
+	if !ok {
+		return auth.ErrTokenInvalid
+	}
+
 	url, err := h.svc.CreatePortalSession(c.Request().Context(), userID)
 	if err != nil {
 		return err // ErrNoBillingCustomer は problem マッピングで 409

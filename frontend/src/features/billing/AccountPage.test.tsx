@@ -104,14 +104,48 @@ describe('アカウント設定 > プランの管理', () => {
     expect(screen.getByText(/2026年8月1日/)).toBeVisible()
   })
 
-  it('手動付与などポータルが無いプランはボタンを出さず状態のみ表示する', async () => {
-    respondSubscription(subscription({ hasPortal: false }))
+  it('手動付与などポータルが無い有料ステータスはボタンを出さず「まで有効」を表示する（次回請求ではない）', async () => {
+    respondSubscription(
+      subscription({
+        plan: 'premium',
+        status: 'active',
+        hasPortal: false,
+        currentPeriodEnd: '2026-08-01T01:00:00Z',
+      }),
+    )
     renderWithProviders(<AccountPage />)
 
-    expect(await screen.findByText(/次回請求/)).toBeVisible()
+    expect(await screen.findByText(/まで有効/)).toBeVisible()
+    expect(screen.getByText(/2026年8月1日/)).toBeVisible()
+    expect(screen.queryByText(/次回請求/)).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'プランを管理する' }),
     ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'プレミアムにアップグレード' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('支払い確認中（past_due）でポータルがあれば、カード更新の案内と「プランを管理する」を出し、アップグレード導線は出さない', async () => {
+    // plan は 'free' のままでも（例: Webhook 反映前など）status/hasPortal を
+    // 優先して表示・導線を決める必要がある。plan 駆動だとここでアップグレード
+    // リンクが出て /checkout → ErrAlreadySubscribed の行き止まりになる。
+    respondSubscription(
+      subscription({
+        plan: 'free',
+        status: 'past_due',
+        hasPortal: true,
+        currentPeriodEnd: '2026-08-01T01:00:00Z',
+      }),
+    )
+    renderWithProviders(<AccountPage />)
+
+    expect(
+      await screen.findByText(/お支払いの確認中。カード情報の更新をお願いします/),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'プランを管理する' }),
+    ).toBeVisible()
     expect(
       screen.queryByRole('link', { name: 'プレミアムにアップグレード' }),
     ).not.toBeInTheDocument()

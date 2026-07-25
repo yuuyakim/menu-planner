@@ -1747,7 +1747,7 @@ export interface components {
              */
             plan: string;
             /**
-             * @description 加入状態（Stripe の subscription status、free なら空文字）。
+             * @description 加入状態（Stripe の subscription status、free なら `none`）。
              * @example active
              */
             status: string;

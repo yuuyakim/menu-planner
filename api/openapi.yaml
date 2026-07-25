@@ -1381,7 +1381,7 @@ components:
           example: premium
         status:
           type: string
-          description: 加入状態（Stripe の subscription status、free なら空文字）。
+          description: 加入状態（Stripe の subscription status、free なら `none`）。
           example: active
         currentPeriodEnd:
           type: string
