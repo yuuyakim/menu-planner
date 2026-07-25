@@ -31,11 +31,6 @@ export default defineConfig({
     // コンテナ外からアクセスできるよう 0.0.0.0 で待ち受ける
     host: true,
     port: 5173,
-    fs: {
-      // frontend の1つ上（repoルート）まで raw import を許可する。
-      // 法務文書(docs/legal/*.md)を `?raw` で直接読み込むために必要。
-      allow: ['..'],
-    },
     proxy: {
       // ブラウザから見て同一オリジンにするため /api を backend に転送する。
       // これによりCookieがクロスオリジン扱いにならない。
