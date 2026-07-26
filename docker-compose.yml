@@ -45,6 +45,14 @@ services:
       - ./backend:/app
       # ホスト側のtmp/がコンテナのビルド成果物と衝突しないよう分離する
       - backend-tmp:/app/tmp
+      # Go のビルド/モジュールキャッシュを永続化して service 全体で共有する。
+      # `docker compose run --rm backend go run ...`（マイグレーション・seed・
+      # E2E の grantPremium）は --rm でコンテナ使い捨てのため、これが無いと
+      # 毎回 backend 全体（stripe-go 含む）をフルコンパイルする。E2E は grant を
+      # 何度も呼ぶので、キャッシュ非共有だと CI ランナーのCPUを食い潰し、
+      # Vite dev の応答が遅れて後半テストが navigation タイムアウトする。
+      - go-build-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
     depends_on:
       db:
         condition: service_healthy
@@ -73,3 +81,5 @@ services:
 volumes:
   db-data:
   backend-tmp:
+  go-build-cache:
+  go-mod-cache:
