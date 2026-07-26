@@ -24,6 +24,8 @@ const recorded: HistoryItem = {
   searchedAt: '2026-07-20T10:00:00Z',
 }
 
+// plan は premium にしておく。週間献立（premium 限定、Task 7）を
+// 使うテストがここに含まれるため。
 function loggedIn() {
   server.use(
     http.get('/api/v1/auth/me', () =>
@@ -32,6 +34,7 @@ function loggedIn() {
           id: '018f0000-0000-7000-8000-000000000009',
           email: 'user@example.com',
           displayName: 'ユーザー',
+          plan: 'premium',
         },
       }),
     ),
@@ -94,7 +97,8 @@ describe('検索と履歴のつながり', () => {
     expect(await screen.findByText(/まだ履歴がありません/)).toBeVisible()
 
     await user.click(screen.getByRole('link', { name: '1週間の献立' }))
-    await user.click(screen.getByRole('button', { name: '1週間分を作る' }))
+    // premium 判定（/auth/me）が解決するまでは生成ボタンがまだ無い。
+    await user.click(await screen.findByRole('button', { name: '1週間分を作る' }))
     await screen.findAllByRole('listitem')
 
     await user.click(screen.getByRole('link', { name: '履歴' }))

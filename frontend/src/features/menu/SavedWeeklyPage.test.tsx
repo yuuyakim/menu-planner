@@ -38,6 +38,24 @@ function respondList(weeks: SavedWeeklyMenu[]) {
   )
 }
 
+// respondMe は現在のユーザーの応答を仕込む（WeeklyPage.test.tsx と同じ流儀）。
+// 本物の WeeklyPage は premium ゲートの内側にあるため、そこに載せ替える
+// テストだけ premium で応答させる。
+function respondMe(plan: 'free' | 'premium') {
+  server.use(
+    http.get('/api/v1/auth/me', () =>
+      HttpResponse.json({
+        user: {
+          id: '018f0000-0000-7000-8000-000000000001',
+          email: 'user@example.com',
+          displayName: 'ユーザー',
+          plan,
+        },
+      }),
+    ),
+  )
+}
+
 // 週間献立画面の代わりを置き、「開く」でそこへ移ったことと
 // 開いた週が出ていることを確かめられるようにする。
 function renderPage() {
@@ -70,12 +88,40 @@ function WeeklyStub() {
 // 2026-07-22 12:34 に保存されたことにする。
 const savedAt = new Date(2026, 6, 22, 12, 34).toISOString()
 
+describe('プレミアムゲート', () => {
+  it('free はロックを出し保存一覧を取得しない', async () => {
+    respondMe('free')
+    let listed = false
+    server.use(
+      http.get('/api/v1/weekly-menus', () => {
+        listed = true
+        return HttpResponse.json({ weeklyMenus: [] })
+      }),
+    )
+    renderPage()
+
+    // PremiumLock の見出し。「プレミアム」は本文にも出るため一意な見出しで判定する。
+    expect(await screen.findByText('保存した週間献立')).toBeInTheDocument()
+    // free では一覧 API を叩かない（403 になる無駄打ちを避ける）。
+    expect(listed).toBe(false)
+  })
+
+  it('premium は保存一覧を出す', async () => {
+    respondMe('premium')
+    respondList([])
+    renderPage()
+
+    expect(await screen.findByText(/まだ保存した週間献立がありません/)).toBeVisible()
+  })
+})
+
 describe('保存した週間献立', () => {
   beforeEach(() => {
     sessionStorage.clear()
   })
 
   it('保存日時と中身の一部を並べる', async () => {
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     renderPage()
 
@@ -86,6 +132,7 @@ describe('保存した週間献立', () => {
   })
 
   it('1件も無ければ、作って保存するよう促す', async () => {
+    respondMe('premium')
     respondList([])
     renderPage()
 
@@ -95,6 +142,7 @@ describe('保存した週間献立', () => {
 
   it('開くと週間献立画面に移り、その週が出ている', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     renderPage()
 
@@ -114,6 +162,7 @@ describe('保存した週間献立', () => {
       'menu-planner:weekly.filter',
       JSON.stringify({ genre: 'chinese' }),
     )
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     renderPage()
 
@@ -130,6 +179,7 @@ describe('保存した週間献立', () => {
 
   it('開いた週は本物の週間献立画面でそのまま続けられる', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     // スタブではなく本物の WeeklyPage に載せ替える。
     // 「開く」が sessionStorage に書き戻すだけで済む、という設計（spec.md 5.3）が
@@ -160,6 +210,7 @@ describe('保存した週間献立', () => {
   it('削除すると一覧から消える', async () => {
     const user = userEvent.setup()
     let deleted: string | undefined
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     server.use(
       http.delete('/api/v1/weekly-menus/:id', ({ params }) => {
@@ -181,6 +232,7 @@ describe('保存した週間献立', () => {
 
   it('削除に失敗しても一覧は残る', async () => {
     const user = userEvent.setup()
+    respondMe('premium')
     respondList([savedWeek('w-1', savedAt)])
     server.use(
       http.delete('/api/v1/weekly-menus/:id', () =>

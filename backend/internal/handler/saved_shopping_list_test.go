@@ -47,14 +47,17 @@ func (f *fakeSavedShoppingList) ReplaceOverrides(
 }
 
 // savedShoppingListApp は SavedShoppingListHandler のみを積んだ echo アプリを組み立てる。
-// saved_weekly_test.go の savedWeeklyApp に倣う。
-func savedShoppingListApp(t *testing.T, svc handler.SavedShoppingListUseCase) (*echo.Echo, *auth.JWT) {
+// saved_weekly_test.go の savedWeeklyApp に倣う。GET/PUT は premium 限定になった（Task 5）
+// ため、ent を明示的に渡す。既存の呼び出しは premiumEnt を渡し、従来の 200/204 の期待を保つ。
+func savedShoppingListApp(
+	t *testing.T, svc handler.SavedShoppingListUseCase, ent fakeEntitlements,
+) (*echo.Echo, *auth.JWT) {
 	t.Helper()
 	tokens, err := auth.NewJWT([]byte(authTestSecret))
 	require.NoError(t, err)
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewSavedShoppingListHandler(svc, tokens).RegisterRoutes(e)
+	handler.NewSavedShoppingListHandler(svc, tokens, ent).RegisterRoutes(e)
 	return e, tokens
 }
 
@@ -72,9 +75,11 @@ func getShoppingList(t *testing.T, e *echo.Echo, access, id string) *httptest.Re
 
 // doAuthedPut は getShoppingList に倣い、認証済みトークンを発行してから
 // PUT /weekly-menus/:id/shopping-list を叩く共通ヘルパ。
-func doAuthedPut(t *testing.T, svc handler.SavedShoppingListUseCase, path, body string) *httptest.ResponseRecorder {
+func doAuthedPut(
+	t *testing.T, svc handler.SavedShoppingListUseCase, ent fakeEntitlements, path, body string,
+) *httptest.ResponseRecorder {
 	t.Helper()
-	e, tokens := savedShoppingListApp(t, svc)
+	e, tokens := savedShoppingListApp(t, svc, ent)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -118,7 +123,7 @@ func TestSavedShoppingListHandler_Get_200(t *testing.T) {
 			Hidden: true,
 		},
 	}}
-	e, tokens := savedShoppingListApp(t, svc)
+	e, tokens := savedShoppingListApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -160,7 +165,7 @@ func TestSavedShoppingListHandler_Get_0件でもnullではなく空配列(t *tes
 	t.Parallel()
 
 	svc := &fakeSavedShoppingList{items: nil}
-	e, tokens := savedShoppingListApp(t, svc)
+	e, tokens := savedShoppingListApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -174,7 +179,7 @@ func TestSavedShoppingListHandler_Get_他人の週は404(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedShoppingList{err: service.ErrSavedWeeklyMenuNotFound}
-	e, tokens := savedShoppingListApp(t, svc)
+	e, tokens := savedShoppingListApp(t, svc, premiumEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
@@ -188,7 +193,7 @@ func TestSavedShoppingListHandler_Get_未認証は401(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedShoppingList{}
-	e, _ := savedShoppingListApp(t, svc)
+	e, _ := savedShoppingListApp(t, svc, premiumEnt)
 
 	rec := getShoppingList(t, e, "", domain.NewSavedWeeklyMenuID().String())
 
@@ -196,12 +201,30 @@ func TestSavedShoppingListHandler_Get_未認証は401(t *testing.T) {
 	assert.Empty(t, svc.lastUserID, "未認証なら service を呼ばないべき")
 }
 
+// GET/PUT の premium 判定自体は RequirePremium（Task 2）の責務なので、ここでは
+// 「ハンドラのルーティングに RequireAuth → RequirePremium が実際に掛かっているか」
+// だけを固定する。判定ロジック自体は middleware_test.go で見る。
+func TestSavedShoppingListHandler_Get_freeは403(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeSavedShoppingList{}
+	e, tokens := savedShoppingListApp(t, svc, freeEnt)
+	access, err := tokens.Issue("user-abc")
+	require.NoError(t, err)
+
+	rec := getShoppingList(t, e, access, domain.NewSavedWeeklyMenuID().String())
+
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Empty(t, svc.lastUserID, "freeなら service を呼ばないべき")
+}
+
 func TestSavedShoppingListHandler_Put_204(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedShoppingList{}
 	body := `{"items":[{"name":"にんじん","category":"vegetable","origin":"derived","checked":true,"hidden":false}]}`
-	rec := doAuthedPut(t, svc, "/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", body)
+	rec := doAuthedPut(t, svc, premiumEnt,
+		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", body)
 	require.Equal(t, http.StatusNoContent, rec.Code)
 	require.Len(t, svc.replaced, 1)
 	require.Equal(t, "にんじん", svc.replaced[0].Name)
@@ -211,8 +234,8 @@ func TestSavedShoppingListHandler_Put_freeは403(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedShoppingList{replaceErr: service.ErrPremiumRequired}
-	rec := doAuthedPut(t, svc, "/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list",
-		`{"items":[]}`)
+	rec := doAuthedPut(t, svc, premiumEnt,
+		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", `{"items":[]}`)
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
 
@@ -220,8 +243,8 @@ func TestSavedShoppingListHandler_Put_上限で409(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedShoppingList{replaceErr: service.ErrShoppingListItemLimitReached}
-	rec := doAuthedPut(t, svc, "/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list",
-		`{"items":[]}`)
+	rec := doAuthedPut(t, svc, premiumEnt,
+		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", `{"items":[]}`)
 	require.Equal(t, http.StatusConflict, rec.Code)
 }
 
@@ -229,7 +252,7 @@ func TestSavedShoppingListHandler_Put_壊れたボディは400(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedShoppingList{}
-	rec := doAuthedPut(t, svc, "/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list",
-		`{`)
+	rec := doAuthedPut(t, svc, premiumEnt,
+		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", `{`)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }

@@ -128,7 +128,8 @@ func run() error {
 
 	savedWeeklyRepo := repository.NewSavedWeeklyMenuRepository(pool)
 	savedWeeklySvc := service.NewSavedWeeklyMenuService(savedWeeklyRepo, entitlementSvc)
-	savedWeeklyHandler := handler.NewSavedWeeklyMenuHandler(savedWeeklySvc, tokens)
+	// 保存/一覧/削除は premium 限定のため entitlementSvc も渡す。
+	savedWeeklyHandler := handler.NewSavedWeeklyMenuHandler(savedWeeklySvc, tokens, entitlementSvc)
 
 	ingredientRepo := repository.NewIngredientRepository(pool)
 
@@ -136,7 +137,8 @@ func run() error {
 	recipeCache := repository.NewRecipeLinkCache(pool)
 	menuSvc := service.NewMenuService(menuRepo, random.NewCrypto(), recipeGateway, recipeCache)
 	// 献立検索は履歴（RecentMenuIDs / Record）とトークン（OptionalAuth）を使う。
-	menuHandler := handler.NewMenuHandler(menuSvc, historySvc, tokens)
+	// 週間献立（suggest-weekly / reroll-day）は premium 限定のため entitlementSvc も渡す。
+	menuHandler := handler.NewMenuHandler(menuSvc, historySvc, tokens, entitlementSvc)
 
 	// 買い物リストと食材は同じ service が担う（どちらも献立×食材を扱うため）。
 	shoppingSvc := service.NewShoppingListService(menuRepo, ingredientRepo)
@@ -149,7 +151,8 @@ func run() error {
 	overrideRepo := repository.NewShoppingListOverrideRepository(pool)
 	savedShoppingListSvc := service.NewSavedShoppingListService(
 		shoppingSvc, savedWeeklyRepo, overrideRepo, entitlementSvc)
-	savedShoppingListHandler := handler.NewSavedShoppingListHandler(savedShoppingListSvc, tokens)
+	// GET/PUT の買い物リストも premium 限定のため entitlementSvc も渡す。
+	savedShoppingListHandler := handler.NewSavedShoppingListHandler(savedShoppingListSvc, tokens, entitlementSvc)
 
 	// トライアル期間はspec.md/課金の仕様で決まる固定値（初回加入者のみ適用）。
 	const trialDays = 5

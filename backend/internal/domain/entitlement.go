@@ -49,3 +49,9 @@ func (e Entitlement) SavedWeeklyMenuLimit() int {
 func (e Entitlement) CanPersistShoppingList() bool {
 	return e.Plan() == PlanPremium
 }
+
+// CanUseWeeklyPlanning は週間献立の計画一式（提案・保存・週間の買い物リスト）を
+// 使えるかを返す。premium だけ true。ゼロ値は free に落ちるため false（安全側）。
+func (e Entitlement) CanUseWeeklyPlanning() bool {
+	return e.Plan() == PlanPremium
+}

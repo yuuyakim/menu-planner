@@ -20,25 +20,23 @@ const menu: Menu = {
 describe('未ログインでお気に入りを押したとき', () => {
   it('ログインしたら元の画面に戻る', async () => {
     const user = userEvent.setup()
-    // 既定は未ログイン。週間献立は未認証でも使える画面。
+    // 既定は未ログイン。検索画面は未認証でも使える画面。
+    // （週間献立は premium 限定＝Task 7 で未認証では使えなくなったため、
+    // ここでの確認先には使えない。）
     server.use(
-      http.post('/api/v1/menus/suggest-weekly', () =>
-        HttpResponse.json({
-          week: Array.from({ length: 7 }, (_, i) => ({ day: i + 1, menu })),
-        }),
-      ),
+      http.get('/api/v1/menus/suggest', () => HttpResponse.json({ menu })),
       http.get('/api/v1/favorites', () => HttpResponse.json({ favorites: [] })),
     )
-    renderWithProviders(<App />, { route: '/weekly' })
+    renderWithProviders(<App />, { route: '/search' })
 
-    await user.click(screen.getByRole('button', { name: '1週間分を作る' }))
-    await screen.findAllByRole('listitem')
+    await user.click(screen.getByRole('button', { name: '献立を探す' }))
+    await screen.findByRole('article')
 
     // 星を押すと案内が出る。
-    const stars = await screen.findAllByRole('button', {
+    const star = await screen.findByRole('button', {
       name: 'お気に入りに追加',
     })
-    await user.click(stars[0])
+    await user.click(star)
     const dialog = within(await screen.findByRole('dialog'))
 
     // 案内からログインへ。
@@ -62,9 +60,9 @@ describe('未ログインでお気に入りを押したとき', () => {
     await user.type(screen.getByLabelText('パスワード'), 'password123')
     await user.click(screen.getByRole('button', { name: 'ログイン' }))
 
-    // ホームや検索画面ではなく、お気に入りにしたかった画面へ戻る。
+    // ホームではなく、お気に入りにしたかった画面へ戻る。
     expect(
-      await screen.findByRole('heading', { level: 1, name: '1週間の献立' }),
+      await screen.findByRole('heading', { level: 1, name: '献立を探す' }),
     ).toBeVisible()
   })
 })
