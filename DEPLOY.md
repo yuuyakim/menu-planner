@@ -55,11 +55,22 @@ flowchart LR
 | `SEARCH_RATE_LIMIT_PER_MIN` | `0`（無制限） | `60`（spec値） |
 | `TRUSTED_PROXY_SECRET` | 未設定 | **Pages と共有する秘密**（`openssl rand -base64 32`） |
 | `PORT` | `8080` | Cloud Run が注入（`8080`） |
+| `STRIPE_SECRET_KEY` | テストモードのダミー値 | **本番の秘密鍵**（`sk_live_...`）。GCP Secret Manager → Cloud Run |
+| `STRIPE_WEBHOOK_SECRET` | テストモードのダミー値 | **本番Webhookエンドポイントの署名シークレット**（`whsec_...`）。同上 |
+| `STRIPE_PRICE_ID` | テストモードのダミー値 | **本番の価格ID**（`price_...`）。同上 |
 
 > **`TRUSTED_PROXY_SECRET` は Cloud Run と Cloudflare Pages の両方に同じ値**を設定する。
 > backend はこの秘密が一致したリクエストの `X-Forwarded-For` だけを実クライアントIPとして
 > 信頼する。backend のURLは公開されており直接叩けるため、これが無いとIPを詐称するだけで
 > レート制限を回避できてしまう。未設定なら転送ヘッダを信頼せず接続元IPを使う（安全側）。
+
+> **Stripe Webhook は `/api/*` プロキシを経由しない。** Stripe は Cloud Run の公開URL
+> （`https://menu-planner-backend-xxxx.a.run.app/api/v1/billing/webhook`）へ直接叩く
+> （Cloudflare Pages 経由にするとリトライや遅延の要因が増えるため）。認証Cookieは
+> 使えない（Stripe はブラウザではない）ため、この経路は `STRIPE_WEBHOOK_SECRET` による
+> 署名検証だけで守る。Stripe ダッシュボードでWebhookエンドポイントを登録する際は
+> Cloud Run のURLを直接指定すること。`STRIPE_SECRET_KEY` / `STRIPE_PRICE_ID` / `STRIPE_WEBHOOK_SECRET`
+> の3つは未設定だと起動時に落ちる（`cmd/server/main.go`）。
 
 ## 手順
 

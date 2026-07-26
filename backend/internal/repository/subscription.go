@@ -30,16 +30,16 @@ func (r *SubscriptionRepository) Find(
 ) (domain.Subscription, error) {
 	row := r.pool.QueryRow(ctx,
 		`SELECT plan, status, current_period_end, cancel_at_period_end,
-		        provider, provider_subscription_id
+		        provider, provider_subscription_id, provider_customer_id
 		   FROM subscriptions WHERE user_id = $1`, userID.String())
 
 	var (
-		rawPlan, rawStatus, provider string
-		providerSubID                *string
-		sub                          domain.Subscription
+		rawPlan, rawStatus, provider  string
+		providerSubID, providerCustID *string
+		sub                           domain.Subscription
 	)
 	if err := row.Scan(&rawPlan, &rawStatus, &sub.CurrentPeriodEnd,
-		&sub.CancelAtPeriodEnd, &provider, &providerSubID); err != nil {
+		&sub.CancelAtPeriodEnd, &provider, &providerSubID, &providerCustID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Subscription{}, service.ErrSubscriptionNotFound
 		}
@@ -49,7 +49,7 @@ func (r *SubscriptionRepository) Find(
 	// **未知の値でエラーにしない。** ここで弾くと EntitlementService がそれを返し、
 	// /auth/me が 500 になって、ログイン済みの利用者がアプリを一切使えなくなる。
 	// 未知のプランは domain.Entitlement が free に落とし、未知の状態は
-	// IsActiveAt が false にするため、そのまま通しても安全側に倒れる
+	// GivesPremiumAt が false にするため、そのまま通しても安全側に倒れる
 	// （プレミアムとして通ってしまう経路は無い）。
 	// 000010 が CHECK 制約を張らず「決済事業者ごとに増える値を DDL の変更なしに
 	// 受けられる」ことを狙っているのも、この読み方があってはじめて成立する。
@@ -69,6 +69,9 @@ func (r *SubscriptionRepository) Find(
 	if providerSubID != nil {
 		sub.ProviderSubscriptionID = *providerSubID
 	}
+	if providerCustID != nil {
+		sub.ProviderCustomerID = *providerCustID
+	}
 	return sub, nil
 }
 
@@ -80,12 +83,16 @@ func (r *SubscriptionRepository) Upsert(ctx context.Context, sub domain.Subscrip
 	if sub.ProviderSubscriptionID != "" {
 		providerSubID = &sub.ProviderSubscriptionID
 	}
+	var providerCustID *string
+	if sub.ProviderCustomerID != "" {
+		providerCustID = &sub.ProviderCustomerID
+	}
 
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO subscriptions
 		   (user_id, plan, status, current_period_end, cancel_at_period_end,
-		    provider, provider_subscription_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		    provider, provider_subscription_id, provider_customer_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT (user_id) DO UPDATE SET
 		   plan                     = EXCLUDED.plan,
 		   status                   = EXCLUDED.status,
@@ -93,9 +100,10 @@ func (r *SubscriptionRepository) Upsert(ctx context.Context, sub domain.Subscrip
 		   cancel_at_period_end     = EXCLUDED.cancel_at_period_end,
 		   provider                 = EXCLUDED.provider,
 		   provider_subscription_id = EXCLUDED.provider_subscription_id,
+		   provider_customer_id     = EXCLUDED.provider_customer_id,
 		   updated_at               = now()`,
 		sub.UserID.String(), sub.Plan.String(), sub.Status.String(),
-		sub.CurrentPeriodEnd, sub.CancelAtPeriodEnd, sub.Provider, providerSubID)
+		sub.CurrentPeriodEnd, sub.CancelAtPeriodEnd, sub.Provider, providerSubID, providerCustID)
 	if err != nil {
 		return fmt.Errorf("加入の保存に失敗しました: %w", err)
 	}

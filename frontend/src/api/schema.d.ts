@@ -1328,6 +1328,249 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 申込確認画面の表示値を取得する
+         * @description 自前の申込確認画面（特商法12条の6）に出す価格・トライアル・初回課金日を返す。
+         *     トライアルは初回加入のみ（過去に加入行があれば trialEligible は false）。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 申込確認画面の表示値 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingPreviewResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/checkout-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stripe Checkout セッションを作成する
+         * @description Stripe Checkout（ホスト型。カード情報は自社を通さない）のセッションURLを返す。
+         *     フロントはこのURLへリダイレクトする。加入状態の真実は Webhook が持つため、
+         *     このAPI自身は subscriptions を更新しない。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Checkout セッションのURL */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CheckoutSessionResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description 既にプレミアムに加入している */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 現在のプラン状態を取得する
+         * @description アカウント設定 > プランの管理 画面の表示値。
+         *     加入状態の真実の源は Webhook が更新する subscriptions で、このAPIは読むだけ。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 現在のプラン状態 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SubscriptionResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/portal-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stripe 顧客ポータルのセッションを作成する
+         * @description Stripe 顧客ポータル（ホスト型）のセッションURLを返す。フロントはこのURLへ
+         *     リダイレクトする。解約・カード変更・請求履歴の閲覧はポータル側で行われ、
+         *     その結果は既存の Webhook（/billing/webhook）が同期する。このAPI自身は
+         *     subscriptions を更新しない。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description 顧客ポータルセッションのURL */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PortalSessionResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                /** @description Stripe 顧客が紐づいていない（手動付与・未加入） */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problem"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stripe Webhook を受け取る
+         * @description Stripe が直接叩くエンドポイント。クライアントから呼ぶものではない。
+         *     認証Cookieは付かず、`Stripe-Signature` ヘッダの署名検証で保護する。
+         *     加入状態（subscriptions）の真実の源はここで、preview / checkout-session は
+         *     表示・申込導線に過ぎない。
+         *
+         *     Stripe は RFC 7807 を解釈しないため、problem+json ではなく素の応答を返す。
+         *     署名不正・本文解釈失敗は 400（Stripeに再送させない）、こちら側の不調
+         *     （DB障害など）は 500（Stripeに再送してほしい）。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header: {
+                    /** @description Stripe が発行する署名。ペイロードの改竄・偽装元を検証する。 */
+                    "Stripe-Signature": string;
+                };
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            responses: {
+                /** @description 同期した（対象外イベントも200で受理する） */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description 署名不正、または本文を解釈できない */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1535,6 +1778,69 @@ export interface components {
         };
         MenuMatchesResponse: {
             matches: components["schemas"]["MenuMatch"][];
+        };
+        /** @description 申込確認画面（特商法12条の6）の表示値。 */
+        BillingPreviewResponse: {
+            /**
+             * @description 月額料金（最小単位。currency=jpy なら円）。
+             * @example 300
+             */
+            price: number;
+            /** @example jpy */
+            currency: string;
+            /**
+             * @description トライアル期間の日数。
+             * @example 5
+             */
+            trialDays: number;
+            /** @description 初回加入なら true。過去に加入行があれば false（トライアルは初回のみ）。 */
+            trialEligible: boolean;
+            /**
+             * Format: date-time
+             * @description 初回の課金日。トライアル適格ならトライアル終了日、そうでなければ現在時刻。
+             */
+            firstBillingAt: string;
+            /**
+             * @description 解約・プラン変更の導線名（アカウント設定 > プランの管理）。
+             * @example アカウント設定 > プランの管理
+             */
+            planManagementPath: string;
+        };
+        CheckoutSessionResponse: {
+            /**
+             * Format: uri
+             * @description Stripe Checkout（ホスト型）のセッションURL。フロントはここへリダイレクトする。
+             */
+            url: string;
+        };
+        /** @description アカウント設定 > プランの管理 画面の表示値。 */
+        SubscriptionResponse: {
+            /**
+             * @description 現在のプラン。
+             * @example premium
+             */
+            plan: string;
+            /**
+             * @description 加入状態（Stripe の subscription status、free なら `none`）。
+             * @example active
+             */
+            status: string;
+            /**
+             * Format: date-time
+             * @description 現在の請求期間の終了日時。free、または未加入なら null。
+             */
+            currentPeriodEnd: string | null;
+            /** @description 期末解約が予約されているか（顧客ポータルで解約すると true になる）。 */
+            cancelAtPeriodEnd: boolean;
+            /** @description Stripe 顧客が紐づいているか。false なら手動付与や未加入で、プランの管理ボタンは出さない。 */
+            hasPortal: boolean;
+        };
+        PortalSessionResponse: {
+            /**
+             * Format: uri
+             * @description Stripe 顧客ポータル（ホスト型）のセッションURL。フロントはここへリダイレクトする。
+             */
+            url: string;
         };
         /** @description RFC 7807 の Problem Details。 */
         Problem: {

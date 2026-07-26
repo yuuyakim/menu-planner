@@ -214,3 +214,36 @@ type ShoppingListOverrideStore interface {
 	// Replace は当該週の差分を丸ごと置き換える。削除と挿入を1トランザクションで行う。
 	Replace(ctx context.Context, id domain.SavedWeeklyMenuID, overrides []domain.ShoppingListOverride) error
 }
+
+// CheckoutParams は Checkout セッション作成の入力。
+type CheckoutParams struct {
+	UserID     string // client_reference_id と subscription metadata に入れる
+	CustomerID string // 再利用する既存 Stripe Customer。空なら Stripe が新規作成する
+	WithTrial  bool   // 初回加入のみ true（トライアル付与）
+	SuccessURL string
+	CancelURL  string
+}
+
+// WebhookEvent は Stripe の Webhook を正規化したもの。
+// Type が空のイベントは処理対象外（handler / service は無視する）。
+type WebhookEvent struct {
+	Type              string // "subscription" のとき加入状態として処理する。空は無視
+	UserID            string
+	SubscriptionID    string
+	CustomerID        string
+	Status            domain.SubscriptionStatus
+	CurrentPeriodEnd  time.Time
+	CancelAtPeriodEnd bool
+}
+
+// PaymentGateway は決済事業者との境界。実装は repository.StripePaymentGateway。
+// service/handler は stripe-go に直接依存せず、この port 越しに使う。
+type PaymentGateway interface {
+	// CreateCheckoutSession は Checkout セッションを作り、リダイレクト先 URL を返す。
+	CreateCheckoutSession(ctx context.Context, p CheckoutParams) (string, error)
+	// ParseWebhookEvent は署名を検証し、Stripe イベントを WebhookEvent に正規化する。
+	// 署名不正・本文の解釈失敗はエラー。処理対象外のイベントは Type="" で err=nil を返す。
+	ParseWebhookEvent(payload []byte, sigHeader string) (WebhookEvent, error)
+	// CreateBillingPortalSession は Stripe 顧客ポータルのセッションを作り、遷移先 URL を返す。
+	CreateBillingPortalSession(ctx context.Context, customerID, returnURL string) (string, error)
+}

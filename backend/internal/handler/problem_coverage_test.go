@@ -62,6 +62,10 @@ var intentionallyUnmapped = map[string]string{
 	// リクエスト経路では ShoppingListOverride.Validate が ErrInvalidOverride に
 	// 丸めるため、この生のエラーは handler まで届かない（ParseOrigin は入力検証に使わない）。
 	"domain.ErrInvalidOrigin": "リクエスト経路では ErrInvalidOverride に丸める",
+
+	// ErrWebhookSignature は Webhook でのみ使い、client へ problem+json として
+	// 返さない（Stripe には素の 400 を返す）。よって写像しない。
+	"service.ErrWebhookSignature": "Webhookのみで使用。Stripeには素の400/500を返し、problem+jsonにはしない",
 }
 
 // mappedErrors は problem.go の写像表に載っているエラーを "pkg.Name" で返す。

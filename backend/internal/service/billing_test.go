@@ -1,0 +1,341 @@
+package service_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/yuuyakim/menu-planner/backend/internal/domain"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
+)
+
+// --- fakes ---
+
+type fakeStore struct {
+	sub      domain.Subscription
+	found    bool
+	upserted *domain.Subscription
+}
+
+func (f *fakeStore) Find(_ context.Context, _ domain.UserID) (domain.Subscription, error) {
+	if !f.found {
+		return domain.Subscription{}, service.ErrSubscriptionNotFound
+	}
+	return f.sub, nil
+}
+func (f *fakeStore) Upsert(_ context.Context, sub domain.Subscription) error {
+	f.upserted = &sub
+	return nil
+}
+
+type fakeEnt struct{ plan domain.Plan }
+
+func (f fakeEnt) For(_ context.Context, _ string) (domain.Entitlement, error) {
+	return domain.NewEntitlement(f.plan), nil
+}
+
+type fakeGateway struct {
+	lastParams       service.CheckoutParams
+	url              string
+	event            service.WebhookEvent
+	parseErr         error
+	portalURL        string
+	portalCustomerID string
+	portalReturnURL  string
+}
+
+func (f *fakeGateway) CreateCheckoutSession(_ context.Context, p service.CheckoutParams) (string, error) {
+	f.lastParams = p
+	return f.url, nil
+}
+func (f *fakeGateway) ParseWebhookEvent(_ []byte, _ string) (service.WebhookEvent, error) {
+	return f.event, f.parseErr
+}
+func (f *fakeGateway) CreateBillingPortalSession(_ context.Context, customerID, returnURL string) (string, error) {
+	f.portalCustomerID = customerID
+	f.portalReturnURL = returnURL
+	return f.portalURL, nil
+}
+
+const validUID = "11111111-1111-1111-1111-111111111111"
+
+func newBilling(store service.SubscriptionStore, ent service.Entitlements, gw service.PaymentGateway) *service.BillingService {
+	now := func() time.Time { return time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC) }
+	return service.NewBillingService(ent, store, gw, "https://app/checkout/complete", "https://app/checkout", "https://app/account", 5, now)
+}
+
+// --- tests ---
+
+func TestBilling_CreateCheckoutSession_AlreadyPremium(t *testing.T) {
+	svc := newBilling(&fakeStore{}, fakeEnt{plan: domain.PlanPremium}, &fakeGateway{})
+	_, err := svc.CreateCheckoutSession(context.Background(), validUID)
+	if !errors.Is(err, service.ErrAlreadySubscribed) {
+		t.Fatalf("premium は already-subscribed。got %v", err)
+	}
+}
+
+func TestBilling_CreateCheckoutSession_FirstTimeGetsTrial(t *testing.T) {
+	gw := &fakeGateway{url: "https://stripe/session"}
+	svc := newBilling(&fakeStore{found: false}, fakeEnt{plan: domain.PlanFree}, gw)
+	url, err := svc.CreateCheckoutSession(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("CreateCheckoutSession: %v", err)
+	}
+	if url != "https://stripe/session" {
+		t.Errorf("url = %q", url)
+	}
+	if !gw.lastParams.WithTrial {
+		t.Error("初回はトライアル付与すべき")
+	}
+	if gw.lastParams.CustomerID != "" {
+		t.Error("初回は Customer 再利用しない")
+	}
+}
+
+func TestBilling_CreateCheckoutSession_ReturningReusesCustomerNoTrial(t *testing.T) {
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionCanceled, ProviderCustomerID: "cus_old",
+	}}
+	gw := &fakeGateway{url: "https://stripe/session"}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanFree}, gw)
+	if _, err := svc.CreateCheckoutSession(context.Background(), validUID); err != nil {
+		t.Fatalf("CreateCheckoutSession: %v", err)
+	}
+	if gw.lastParams.WithTrial {
+		t.Error("再申込はトライアル無し")
+	}
+	if gw.lastParams.CustomerID != "cus_old" {
+		t.Errorf("Customer を再利用すべき。got %q", gw.lastParams.CustomerID)
+	}
+}
+
+func TestBilling_Preview_FirstTime(t *testing.T) {
+	svc := newBilling(&fakeStore{found: false}, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	got, err := svc.Preview(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+	if !got.TrialEligible || got.Price != 300 || got.TrialDays != 5 {
+		t.Errorf("preview 不正: %+v", got)
+	}
+	want := time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC) // now + 5日
+	if !got.FirstBillingAt.Equal(want) {
+		t.Errorf("FirstBillingAt = %v, want %v", got.FirstBillingAt, want)
+	}
+}
+
+func TestBilling_HandleWebhook_UpsertsSubscription(t *testing.T) {
+	store := &fakeStore{}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_1",
+		CustomerID: "cus_1", Status: domain.SubscriptionActive,
+		CurrentPeriodEnd: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanFree}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted == nil {
+		t.Fatal("upsert されていない")
+	}
+	if store.upserted.Provider != domain.ProviderStripe ||
+		store.upserted.Plan != domain.PlanPremium ||
+		store.upserted.ProviderSubscriptionID != "sub_1" ||
+		store.upserted.ProviderCustomerID != "cus_1" {
+		t.Errorf("upsert 内容が不正: %+v", *store.upserted)
+	}
+}
+
+func TestBilling_HandleWebhook_SignatureError(t *testing.T) {
+	gw := &fakeGateway{parseErr: errors.New("bad sig")}
+	svc := newBilling(&fakeStore{}, fakeEnt{plan: domain.PlanFree}, gw)
+	err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig")
+	if !errors.Is(err, service.ErrWebhookSignature) {
+		t.Fatalf("署名エラーは ErrWebhookSignature。got %v", err)
+	}
+}
+
+func TestBilling_HandleWebhook_IgnoredEvent(t *testing.T) {
+	store := &fakeStore{}
+	gw := &fakeGateway{event: service.WebhookEvent{Type: ""}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanFree}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted != nil {
+		t.Error("対象外イベントは upsert しない")
+	}
+}
+
+// --- #3: 古い/別subscriptionのイベントによる上書き防止 ---
+
+func TestBilling_HandleWebhook_StaleOtherSubscriptionEvent_NotUpserted(t *testing.T) {
+	// sub_new が現在有効（active）なのに、古い sub_old の deleted イベントが遅れて届いた。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionActive, ProviderSubscriptionID: "sub_new",
+		ProviderCustomerID: "cus_1",
+		CurrentPeriodEnd:   time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_old",
+		CustomerID: "cus_1", Status: domain.SubscriptionCanceled,
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted != nil {
+		t.Error("有効な別サブスクを古いイベントで上書きしてはいけない")
+	}
+}
+
+func TestBilling_HandleWebhook_SameSubscriptionDowngrade_IsApplied(t *testing.T) {
+	// 同一 subscription の past_due/canceled への遷移は通常の更新として適用する。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionActive, ProviderSubscriptionID: "sub_1",
+		ProviderCustomerID: "cus_1",
+		CurrentPeriodEnd:   time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_1",
+		CustomerID: "cus_1", Status: domain.SubscriptionPastDue,
+		CurrentPeriodEnd: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted == nil {
+		t.Fatal("同一サブスクの更新は適用すべき")
+	}
+	if store.upserted.Status != domain.SubscriptionPastDue {
+		t.Errorf("Status = %v", store.upserted.Status)
+	}
+}
+
+func TestBilling_HandleWebhook_ManualGrantTakeover_IsApplied(t *testing.T) {
+	// 手動付与（ProviderSubscriptionID 空）はStripeイベントが来たら乗っ取ってよい。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionActive, Provider: domain.ProviderManual,
+		ProviderSubscriptionID: "",
+		CurrentPeriodEnd:       time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_1",
+		CustomerID: "cus_1", Status: domain.SubscriptionActive,
+		CurrentPeriodEnd: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted == nil {
+		t.Fatal("手動付与はStripeイベントで乗っ取るべき")
+	}
+	if store.upserted.ProviderSubscriptionID != "sub_1" {
+		t.Errorf("ProviderSubscriptionID = %q", store.upserted.ProviderSubscriptionID)
+	}
+}
+
+func TestBilling_HandleWebhook_ExistingCanceledRow_IsApplied(t *testing.T) {
+	// 既存行が canceled（無効）なら、別サブスクのイベントでも適用してよい。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionCanceled, ProviderSubscriptionID: "sub_old",
+		CurrentPeriodEnd: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	}}
+	gw := &fakeGateway{event: service.WebhookEvent{
+		Type: "subscription", UserID: validUID, SubscriptionID: "sub_new",
+		CustomerID: "cus_2", Status: domain.SubscriptionActive,
+		CurrentPeriodEnd: time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC),
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanFree}, gw)
+	if err := svc.HandleWebhook(context.Background(), []byte("{}"), "sig"); err != nil {
+		t.Fatalf("HandleWebhook: %v", err)
+	}
+	if store.upserted == nil {
+		t.Fatal("既存行が無効なら新サブスクのイベントは適用すべき")
+	}
+	if store.upserted.ProviderSubscriptionID != "sub_new" {
+		t.Errorf("ProviderSubscriptionID = %q", store.upserted.ProviderSubscriptionID)
+	}
+}
+
+// --- #4: 二重加入防止 ---
+
+func TestBilling_CreateCheckoutSession_PastDueLiveSubscription_AlreadySubscribed(t *testing.T) {
+	// past_due が猶予を超えて entitlement は free に落ちても、Stripe側の
+	// サブスクはまだ生きている（キャンセルされていない）ので二重加入させない。
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionPastDue, ProviderSubscriptionID: "sub_1",
+		ProviderCustomerID: "cus_1",
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	_, err := svc.CreateCheckoutSession(context.Background(), validUID)
+	if !errors.Is(err, service.ErrAlreadySubscribed) {
+		t.Fatalf("past_due の生きているサブスクは already-subscribed。got %v", err)
+	}
+}
+
+// --- Task 2: Subscription 取得と PortalSession 作成 ---
+
+func TestBilling_Subscription_NoRow(t *testing.T) {
+	svc := newBilling(&fakeStore{found: false}, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	v, err := svc.Subscription(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("Subscription: %v", err)
+	}
+	if v.Plan != "free" || v.Status != "none" || v.HasPortal {
+		t.Errorf("行なしは free/none/hasPortal=false。got %+v", v)
+	}
+}
+
+func TestBilling_Subscription_PremiumActive(t *testing.T) {
+	end := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Plan: domain.PlanPremium, Status: domain.SubscriptionActive,
+		CurrentPeriodEnd: end, ProviderCustomerID: "cus_1",
+	}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, &fakeGateway{})
+	v, err := svc.Subscription(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("Subscription: %v", err)
+	}
+	if v.Plan != "premium" || v.Status != "active" || !v.HasPortal || !v.CurrentPeriodEnd.Equal(end) {
+		t.Errorf("不正: %+v", v)
+	}
+}
+
+func TestBilling_CreatePortalSession_NoCustomer(t *testing.T) {
+	// customer 空（手動付与相当）
+	store := &fakeStore{found: true, sub: domain.Subscription{Status: domain.SubscriptionActive}}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, &fakeGateway{})
+	if _, err := svc.CreatePortalSession(context.Background(), validUID); !errors.Is(err, service.ErrNoBillingCustomer) {
+		t.Fatalf("customer 無しは ErrNoBillingCustomer。got %v", err)
+	}
+}
+
+func TestBilling_CreatePortalSession_NoRow(t *testing.T) {
+	svc := newBilling(&fakeStore{found: false}, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	if _, err := svc.CreatePortalSession(context.Background(), validUID); !errors.Is(err, service.ErrNoBillingCustomer) {
+		t.Fatalf("行なしは ErrNoBillingCustomer。got %v", err)
+	}
+}
+
+func TestBilling_CreatePortalSession_OK(t *testing.T) {
+	store := &fakeStore{found: true, sub: domain.Subscription{
+		Status: domain.SubscriptionActive, ProviderCustomerID: "cus_9",
+	}}
+	gw := &fakeGateway{portalURL: "https://stripe/portal"}
+	svc := newBilling(store, fakeEnt{plan: domain.PlanPremium}, gw)
+	url, err := svc.CreatePortalSession(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("CreatePortalSession: %v", err)
+	}
+	if url != "https://stripe/portal" {
+		t.Errorf("url = %q", url)
+	}
+	if gw.portalCustomerID != "cus_9" || gw.portalReturnURL != "https://app/account" {
+		t.Errorf("gateway 引数が不正: cus=%q return=%q", gw.portalCustomerID, gw.portalReturnURL)
+	}
+}

@@ -14,6 +14,7 @@ type SubscriptionStatus string
 // 定義済みの加入状態。DBの subscriptions.status に格納される値と一致する。
 const (
 	SubscriptionActive   SubscriptionStatus = "active"
+	SubscriptionTrialing SubscriptionStatus = "trialing"
 	SubscriptionPastDue  SubscriptionStatus = "past_due"
 	SubscriptionCanceled SubscriptionStatus = "canceled"
 )
@@ -21,6 +22,14 @@ const (
 // ProviderManual は運用者が手で付与した加入を表す provider の値。
 // 決済を導入したら "stripe" などが増える。
 const ProviderManual = "manual"
+
+// ProviderStripe は Stripe 決済で作られた加入を表す provider の値。
+const ProviderStripe = "stripe"
+
+// PaymentGracePeriod は支払い失敗（past_due）後もプレミアムを維持する猶予。
+// 利用規約4条7項の「7日間の猶予期間」に対応する。実際の打ち切りは Stripe の
+// 督促設定が行い、この猶予は安全弁として二重に効かせる。
+const PaymentGracePeriod = 7 * 24 * time.Hour
 
 // ParseSubscriptionStatus は文字列を SubscriptionStatus に変換する。
 func ParseSubscriptionStatus(s string) (SubscriptionStatus, error) {
@@ -34,7 +43,7 @@ func ParseSubscriptionStatus(s string) (SubscriptionStatus, error) {
 // Valid は定義済みの状態かどうかを返す。
 func (s SubscriptionStatus) Valid() bool {
 	switch s {
-	case SubscriptionActive, SubscriptionPastDue, SubscriptionCanceled:
+	case SubscriptionActive, SubscriptionTrialing, SubscriptionPastDue, SubscriptionCanceled:
 		return true
 	default:
 		return false
@@ -60,6 +69,9 @@ type Subscription struct {
 	Provider string
 	// ProviderSubscriptionID は決済事業者側の加入ID。手動付与では空。
 	ProviderSubscriptionID string
+	// ProviderCustomerID は決済事業者側の顧客ID。手動付与では空。
+	// 顧客の再利用と将来の解約/ポータル画面で使う。
+	ProviderCustomerID string
 }
 
 // IsActiveAt は指定時刻に加入が有効かを返す。
@@ -68,4 +80,20 @@ type Subscription struct {
 // バッチが停止すると、課金していない利用者がプレミアムのまま残るため。
 func (s Subscription) IsActiveAt(t time.Time) bool {
 	return s.Status == SubscriptionActive && s.CurrentPeriodEnd.After(t)
+}
+
+// GivesPremiumAt は now 時点でこの加入がプレミアム権限を与えるかを返す。
+//
+// active / trialing は期間内なら premium。past_due は支払い失敗後の状態だが、
+// 利用規約の猶予（PaymentGracePeriod）内はプレミアムを維持する。それ以外
+// （canceled や未知の状態）は権限を与えない（安全側）。
+func (s Subscription) GivesPremiumAt(now time.Time) bool {
+	switch s.Status {
+	case SubscriptionActive, SubscriptionTrialing:
+		return s.CurrentPeriodEnd.After(now)
+	case SubscriptionPastDue:
+		return now.Before(s.CurrentPeriodEnd.Add(PaymentGracePeriod))
+	default:
+		return false
+	}
 }

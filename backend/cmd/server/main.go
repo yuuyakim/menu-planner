@@ -81,6 +81,14 @@ func run() error {
 		return fmt.Errorf("JWTの初期化に失敗しました: %w", err)
 	}
 
+	// Stripe の設定が無いと課金APIが機能しないサーバになる。起動時に落とす。
+	stripeSecret := os.Getenv("STRIPE_SECRET_KEY")
+	stripeWebhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
+	stripePriceID := os.Getenv("STRIPE_PRICE_ID")
+	if stripeSecret == "" || stripeWebhookSecret == "" || stripePriceID == "" {
+		return errors.New("STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / STRIPE_PRICE_ID が設定されていません")
+	}
+
 	// Google SSO は任意。未設定でも起動し、/auth/google だけ 503 になる。
 	googleOAuth := auth.NewGoogleOAuth(
 		os.Getenv("GOOGLE_CLIENT_ID"),
@@ -146,6 +154,18 @@ func run() error {
 	// GET/PUT の買い物リストも premium 限定のため entitlementSvc も渡す。
 	savedShoppingListHandler := handler.NewSavedShoppingListHandler(savedShoppingListSvc, tokens, entitlementSvc)
 
+	// トライアル期間はspec.md/課金の仕様で決まる固定値（初回加入者のみ適用）。
+	const trialDays = 5
+	paymentGateway := repository.NewStripePaymentGateway(
+		stripeSecret, stripeWebhookSecret, stripePriceID, int64(trialDays))
+	billingSvc := service.NewBillingService(
+		entitlementSvc, subscriptionRepo, paymentGateway,
+		frontendOrigin+"/checkout/complete?session_id={CHECKOUT_SESSION_ID}",
+		frontendOrigin+"/checkout",
+		frontendOrigin+"/account",
+		trialDays, time.Now)
+	billingHandler := handler.NewBillingHandler(billingSvc, tokens)
+
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -159,6 +179,10 @@ func run() error {
 	e.HTTPErrorHandler = handler.ErrorHandler()
 
 	e.Use(middleware.Recover())
+	// Webhook（未認証で叩ける公開エンドポイント）が io.ReadAll で本文を無制限に
+	// 読み込むためのDoS対策。Stripeの実ペイロードは数十KB程度、他エンドポイントの
+	// 本文もごく小さいため 1M で十分safe側。
+	e.Use(middleware.BodyLimit("1M"))
 	e.Use(middleware.RequestID())
 	// RequestID の後に置く。request_id を全ログに伝播させ、1リクエスト1行の
 	// アクセスログを出す。本文・機微なヘッダ・クエリは記録しない。
@@ -185,6 +209,7 @@ func run() error {
 	favoriteHandler.RegisterRoutes(e)
 	savedWeeklyHandler.RegisterRoutes(e)
 	savedShoppingListHandler.RegisterRoutes(e)
+	billingHandler.RegisterRoutes(e)
 
 	addr := ":" + env("PORT", "8080")
 

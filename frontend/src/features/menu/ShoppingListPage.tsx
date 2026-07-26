@@ -382,9 +382,17 @@ export function ShoppingListPage() {
           <p>
             プレミアムプランなら、チェックした買い物リストがそのまま残ります。
           </p>
-          <button type="button" onClick={() => setShowGuidance(false)}>
-            閉じる
-          </button>
+          <div className="mt-2 flex items-center gap-3">
+            <Link
+              to="/checkout"
+              className="inline-block rounded-full bg-kon-leaf px-4 py-1 font-medium text-white hover:bg-kon-leaf/90"
+            >
+              アップグレードする
+            </Link>
+            <button type="button" onClick={() => setShowGuidance(false)}>
+              閉じる
+            </button>
+          </div>
         </div>
       )}
 
