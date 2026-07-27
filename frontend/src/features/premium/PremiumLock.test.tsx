@@ -62,7 +62,9 @@ describe('PremiumLock', () => {
     respondMe('free')
     renderWithProviders(<PremiumLock {...props} />)
 
-    expect(await screen.findByText(/月額300円・5日間無料/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/月額300円（税込）・はじめての方は5日間無料/),
+    ).toBeInTheDocument()
   })
 
   // 料金が引けなくても導線は残す。ここで丸ごと隠すと、この修正が直そうと

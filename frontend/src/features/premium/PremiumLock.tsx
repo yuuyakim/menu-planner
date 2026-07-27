@@ -41,10 +41,14 @@ export function PremiumLock({ title, description }: Props) {
       </Link>
 
       {/* 料金が引けないときは、この行だけを落とす。カードごと隠すと
-          加入導線まで消え、この画面が直そうとした不具合に戻る。 */}
+          加入導線まで消え、この画面が直そうとした不具合に戻る。
+          無料期間は初回加入に限るため「はじめての方は」を必ず添える
+          （解約して free に戻った人にはトライアルが付かない）。 */}
       {plan.data && (
         <p className="mt-2 text-sm text-kon-ink/70">
-          月額{plan.data.price}円・{plan.data.trialDays}日間無料
+          月額{plan.data.price}円（税込）
+          {plan.data.trialDays > 0 &&
+            `・はじめての方は${plan.data.trialDays}日間無料`}
         </p>
       )}
 

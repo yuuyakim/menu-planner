@@ -18,6 +18,11 @@ const features = [
   { label: '買い物リストのチェックを残す', free: false },
 ] as const
 
+// 2つの CTA（premium 向け・free 向け）で見た目を揃えるための共通クラス。
+// 文言と遷移先だけが違うので、逐語重複を避けて1箇所にまとめる。
+const ctaLinkClassName =
+  'inline-block rounded-full bg-kon-leaf px-6 py-2.5 font-medium text-white transition-colors hover:brightness-95'
+
 // PricingPage は料金と機能の比較を出す公開ページ。
 //
 // 未ログインでも見える（RequireAuth で包まない）。加入を検討する前に見る
@@ -50,7 +55,7 @@ export function PricingPage() {
               {/* 料金が引けないときはこの行だけ落とす。表そのものは出す。 */}
               {plan.data && (
                 <span className="mt-0.5 block text-xs font-normal text-kon-ink/70">
-                  月額{plan.data.price}円
+                  月額{plan.data.price}円（税込）
                 </span>
               )}
             </th>
@@ -84,17 +89,11 @@ export function PricingPage() {
           （AuthMenu が同じ理由で判定前の描画を避けている）。 */}
       {!isLoading &&
         (user?.plan === 'premium' ? (
-          <Link
-            to="/account"
-            className="inline-block rounded-full bg-kon-leaf px-6 py-2.5 font-medium text-white transition-colors hover:brightness-95"
-          >
+          <Link to="/account" className={ctaLinkClassName}>
             プランを管理する
           </Link>
         ) : (
-          <Link
-            to="/checkout"
-            className="inline-block rounded-full bg-kon-leaf px-6 py-2.5 font-medium text-white transition-colors hover:brightness-95"
-          >
+          <Link to="/checkout" className={ctaLinkClassName}>
             プレミアムを試す
           </Link>
         ))}

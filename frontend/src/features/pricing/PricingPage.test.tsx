@@ -25,7 +25,7 @@ describe('料金プラン画面', () => {
   it('未ログインでも料金と比較表が見える', async () => {
     renderWithProviders(<PricingPage />)
 
-    expect(await screen.findByText(/月額300円/)).toBeInTheDocument()
+    expect(await screen.findByText(/月額300円（税込）/)).toBeInTheDocument()
     expect(screen.getByText('1週間の献立を組み立てる')).toBeInTheDocument()
   })
 
@@ -75,12 +75,14 @@ describe('料金プラン画面', () => {
   })
 
   // 上限の数値をフロントが持つと二重管理になる（spec.md「上限の数値を返さない理由」）。
+  // /50/ だけだと価格が500円・1500円になった日に価格表示へ誤検知するため、
+  // 「50件」という保存件数の書式に絞る。
   it('保存件数の数値を表示しない', async () => {
     respondMe('free')
     renderWithProviders(<PricingPage />)
 
     await screen.findByRole('link', { name: 'プレミアムを試す' })
-    expect(screen.queryByText(/50/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/50件/)).not.toBeInTheDocument()
   })
 
   it('特定商取引法に基づく表記へのリンクを添える', async () => {
