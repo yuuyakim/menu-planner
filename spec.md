@@ -316,6 +316,13 @@ free =「今日の1食」、premium =「1週間まとめて計画」。単発の
 保存した週間献立があっても、データは削除しないが free の間は一覧が403で見えなくなる
 （2.8、設計§3.4）。
 
+> **`PremiumLock` は両者に同じアップグレード CTA を出す形で分岐を実現する**
+> （`2026-07-27-upgrade-entrypoints-design.md` §3.3）。401/403 で別々の導線を作る
+> 代わりに、両者へ同一の「プレミアムにアップグレード」（→`/checkout`）を出し、
+> 未ログインにだけ「ログインが必要です」を添えて区別する。`/checkout` は
+> `RequireAuth` に守られており、押すとログイン画面を経て `/checkout` に戻るため、
+> 結果として未ログインにはログイン導線としても機能する。
+
 > **これは意図的な「取り上げ」である。** 週間献立は現在 free で本番稼働中の看板機能であり、
 > これを premium に移すのは下の「上限は上乗せであり取り上げではない」からの意図的な逸脱。
 > 転換率の向上と引き換えに、既存の無料利用者から機能を取り上げる戦略転換であることを
@@ -877,6 +884,15 @@ WHERE user_id = $1
 | POST | `/billing/webhook` | 不要（署名検証） | Stripe からの通知を受け加入状態を同期する |
 | GET | `/billing/subscription` | 必須 | `/account`（アカウント設定 > プランの管理）の表示値。プラン・加入状態・期末日・期末解約予約・ポータル導線の有無 |
 | POST | `/billing/portal-session` | 必須 | Stripe 顧客ポータルのセッションを作成しURLを返す。Stripe 顧客が無い場合は409（`no-billing-customer`） |
+
+**`GET /billing/plan` レスポンス例**
+```json
+{ "price": 300, "currency": "jpy", "trialDays": 5 }
+```
+
+- 個人に依る値（`trialEligible` / `firstBillingAt`）は**含めない**。それらは要認証の
+  `/billing/preview` の責務であり、未認証で推測値を返すと申込内容とずれる（設計§3.1）
+- 料金ページ `/pricing` を未ログインにも見せるため、このAPIだけ認証を要さない
 
 **`GET /billing/preview` レスポンス例**
 ```json
