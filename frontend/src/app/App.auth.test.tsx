@@ -41,18 +41,19 @@ describe('未認証のとき', () => {
     expect(screen.getByRole('button', { name: '献立を探す' })).toBeEnabled()
   })
 
-  // 週間献立は premium 限定（Task 7）。未ログインは生成画面ではなくロックへ誘導する。
+  // 週間献立は premium 限定（Task 7）。未ログインは生成画面ではなく、premium と
+  // 同じ加入導線（PremiumLock、Task 2 で spec.md 2.11 準拠に変更）へ誘導する。
   //
-  // 名前は完全一致で 'ログインする'（PremiumLock 自身のCTA）に絞る。正規表現
-  // /ログイン/ だとヘッダの「ログイン」導線にもマッチし、両方が同時に存在する
-  // ため「複数要素にマッチした」エラーになる（PremiumLock のローディング委譲化
-  // でヘッダとほぼ同時に描画されるようになったため、以前は稀にしか露呈しなかった）。
+  // 名前は完全一致で 'プレミアムにアップグレード'（PremiumLock 自身のCTA）に絞る。
+  // 正規表現 /ログイン/ だとヘッダの「ログイン」導線や PremiumLock の
+  // 「ログインが必要です」表示にもマッチしうるため、ここは完全一致で
+  // PremiumLock の加入導線だけを指す。
   it('週間献立はロックへ誘導する', async () => {
     loggedOut()
     renderWithProviders(<App />, { route: '/weekly' })
 
     expect(
-      await screen.findByRole('link', { name: 'ログインする' }),
+      await screen.findByRole('link', { name: 'プレミアムにアップグレード' }),
     ).toBeVisible()
     expect(
       screen.queryByRole('heading', { level: 1, name: '1週間の献立' }),
