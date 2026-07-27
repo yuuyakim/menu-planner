@@ -36,3 +36,15 @@ export function getSubscription(): Promise<SubscriptionInfo> {
 export function createPortalSession(): Promise<{ url: string }> {
   return apiPost<{ url: string }>('/billing/portal-session')
 }
+
+/** PlanInfo は誰にでも同じ、プランの公開情報。 */
+export interface PlanInfo {
+  price: number
+  currency: string
+  trialDays: number
+}
+
+/** getPlan はプランの公開情報を取得する（未ログインでも呼べる）。 */
+export function getPlan(): Promise<PlanInfo> {
+  return apiGet<PlanInfo>('/billing/plan')
+}

@@ -24,33 +24,73 @@ function respondMe(plan: 'free' | 'premium') {
   )
 }
 
+const props = {
+  title: '1週間まとめて計画',
+  description: '1週間分の献立をまとめて計画できます。',
+}
+
 describe('PremiumLock', () => {
-  it('未ログインはログイン導線を出す', async () => {
-    renderWithProviders(
-      <PremiumLock title="1週間まとめて計画" description="1週間分の献立をまとめて計画できます。" />,
-    )
+  it('ログイン済み free は加入画面へのリンクを出す', async () => {
+    respondMe('free')
+    renderWithProviders(<PremiumLock {...props} />)
 
     expect(
-      await screen.findByRole('link', { name: /ログイン/ }),
-    ).toBeInTheDocument()
+      await screen.findByRole('link', { name: 'プレミアムにアップグレード' }),
+    ).toHaveAttribute('href', '/checkout')
   })
 
-  it('ログイン済み free はアップグレード導線を出す', async () => {
-    respondMe('free')
-    renderWithProviders(
-      <PremiumLock title="1週間まとめて計画" description="1週間分の献立をまとめて計画できます。" />,
-    )
+  // 未ログインにも同じ導線を出す。/checkout は RequireAuth で守られており、
+  // 押すとログイン画面を経て /checkout へ戻る。
+  it('未ログインも同じ加入導線と、ログインが要る旨を出す', async () => {
+    renderWithProviders(<PremiumLock {...props} />)
 
-    expect(await screen.findByText(/プレミアム/)).toBeInTheDocument()
     expect(
-      screen.queryByRole('link', { name: /ログイン/ }),
-    ).not.toBeInTheDocument()
+      await screen.findByRole('link', { name: 'プレミアムにアップグレード' }),
+    ).toHaveAttribute('href', '/checkout')
+    expect(screen.getByText('ログインが必要です')).toBeInTheDocument()
+  })
+
+  it('ログイン済み free には「ログインが必要です」を出さない', async () => {
+    respondMe('free')
+    renderWithProviders(<PremiumLock {...props} />)
+
+    await screen.findByRole('link', { name: 'プレミアムにアップグレード' })
+    expect(screen.queryByText('ログインが必要です')).not.toBeInTheDocument()
+  })
+
+  it('料金と無料期間を出す', async () => {
+    respondMe('free')
+    renderWithProviders(<PremiumLock {...props} />)
+
+    expect(await screen.findByText(/月額300円・5日間無料/)).toBeInTheDocument()
+  })
+
+  // 料金が引けなくても導線は残す。ここで丸ごと隠すと、この修正が直そうと
+  // している「加入画面に行けない」状態に戻ってしまう。
+  it('料金の取得に失敗しても加入導線は残る', async () => {
+    respondMe('free')
+    server.use(
+      http.get('/api/v1/billing/plan', () => HttpResponse.error()),
+    )
+    renderWithProviders(<PremiumLock {...props} />)
+
+    expect(
+      await screen.findByRole('link', { name: 'プレミアムにアップグレード' }),
+    ).toHaveAttribute('href', '/checkout')
+    expect(screen.queryByText(/月額/)).not.toBeInTheDocument()
+  })
+
+  it('プランの詳細へのリンクを出す', async () => {
+    respondMe('free')
+    renderWithProviders(<PremiumLock {...props} />)
+
+    expect(
+      await screen.findByRole('link', { name: 'プランの詳細を見る' }),
+    ).toHaveAttribute('href', '/pricing')
   })
 
   it('判定が付くまではローディング表示を出す', () => {
-    renderWithProviders(
-      <PremiumLock title="1週間まとめて計画" description="1週間分の献立をまとめて計画できます。" />,
-    )
+    renderWithProviders(<PremiumLock {...props} />)
 
     expect(screen.getByRole('status')).toBeInTheDocument()
   })

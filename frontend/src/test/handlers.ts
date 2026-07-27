@@ -37,4 +37,10 @@ export const handlers = [
       { status: 401, headers: { 'Content-Type': 'application/problem+json' } },
     ),
   ),
+
+  // 料金はロック画面と料金ページが引く。既定を置かないと、PremiumLock を
+  // 描画する既存のテスト（WeeklyPage / SavedWeeklyPage）が未処理リクエストで落ちる。
+  http.get('/api/v1/billing/plan', () =>
+    HttpResponse.json({ price: 300, currency: 'jpy', trialDays: 5 }),
+  ),
 ]
