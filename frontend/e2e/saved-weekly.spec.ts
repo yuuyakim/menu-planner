@@ -77,13 +77,17 @@ test('作った週を保存し、別画面を経て開き直して買い物リ�
 
 test('未ログインでは保存できず、ログインへ案内する', async ({ page }) => {
   // 週間機能自体が premium 限定になったため、未ログインでは
-  // 生成ボタンにすら進めず、ロック画面から直接ログインへ案内される。
+  // 生成ボタンにすら進めず、ロック画面（PremiumLock）が出る。
+  // PremiumLock は未ログインにも premium と同じ加入導線「プレミアムに
+  // アップグレード」（/checkout）を出す。/checkout は RequireAuth で守られて
+  // いるため、押すとログイン画面に着く（案内文言「ログインが必要です」も添える）。
   await page.goto('/weekly')
 
   await expect(
     page.getByRole('button', { name: '1週間分を作る' }),
   ).toHaveCount(0)
-  await page.getByRole('link', { name: 'ログインする' }).click()
+  await expect(page.getByText('ログインが必要です')).toBeVisible()
+  await page.getByRole('link', { name: 'プレミアムにアップグレード' }).click()
 
   await expect(
     page.getByRole('heading', { level: 1, name: 'ログイン' }),

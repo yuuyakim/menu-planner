@@ -787,6 +787,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /api/v1/billing/plan:
+    get:
+      tags: [billing]
+      summary: プランの公開情報を取得する
+      description: |
+        料金ページ（/pricing）に出す、誰にでも同じプラン情報。
+        料金の提示は未ログインにも見せるため認証を要さない。
+        個人に依る値（トライアル適格・初回課金日）は含めない。それらは
+        /billing/preview（要認証・特商法12条の6の申込確認）が返す。
+      security: []
+      responses:
+        '200':
+          description: プランの公開情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingPlanResponse'
+
   /api/v1/billing/preview:
     get:
       tags: [billing]
@@ -1386,6 +1404,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MenuMatch'
+
+    BillingPlanResponse:
+      type: object
+      description: プランの公開情報（誰にでも同じ。/pricing が使う）。
+      required: [price, currency, trialDays]
+      properties:
+        price:
+          type: integer
+          description: 月額料金（最小単位。currency=jpy なら円）。
+          example: 300
+        currency:
+          type: string
+          example: jpy
+        trialDays:
+          type: integer
+          description: トライアル期間の日数。
+          example: 5
 
     BillingPreviewResponse:
       type: object

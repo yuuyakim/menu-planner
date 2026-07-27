@@ -15,6 +15,7 @@ import (
 
 // BillingUseCase は課金APIが必要とする操作。実装は service.BillingService。
 type BillingUseCase interface {
+	Plan() service.PlanInfo
 	Preview(ctx context.Context, userID string) (service.PreviewResult, error)
 	CreateCheckoutSession(ctx context.Context, userID string) (string, error)
 	HandleWebhook(ctx context.Context, payload []byte, sigHeader string) error
@@ -36,15 +37,37 @@ func NewBillingHandler(svc BillingUseCase, tokens *auth.JWT) *BillingHandler {
 // RegisterRoutes はルーティングを登録する。
 // preview / checkout-session / subscription / portal-session は本人の情報を
 // 扱うため認証必須。
+// plan は誰にでも同じ公開情報で、料金ページ（/pricing）を未ログインに見せる
+// ために認証を付けない。
 // webhook は Stripe が直接叩くため認証を付けず、署名検証で守る。
 func (h *BillingHandler) RegisterRoutes(e *echo.Echo) {
 	g := e.Group(APIBasePath)
 	requireAuth := RequireAuth(h.tokens)
+	g.GET("/billing/plan", h.Plan)
 	g.GET("/billing/preview", h.Preview, requireAuth)
 	g.POST("/billing/checkout-session", h.CreateCheckoutSession, requireAuth)
 	g.POST("/billing/webhook", h.Webhook)
 	g.GET("/billing/subscription", h.Subscription, requireAuth)
 	g.POST("/billing/portal-session", h.PortalSession, requireAuth)
+}
+
+// planDTO はプランの公開情報。個人に依る値は含めない。
+type planDTO struct {
+	Price     int    `json:"price"`
+	Currency  string `json:"currency"`
+	TrialDays int    `json:"trialDays"`
+}
+
+// Plan はプランの公開情報を返す。
+//
+//	GET /api/v1/billing/plan
+//
+// 認証は要らない。料金ページ（/pricing）が未ログインにも料金を出すために使う。
+func (h *BillingHandler) Plan(c echo.Context) error {
+	p := h.svc.Plan()
+	return c.JSON(http.StatusOK, planDTO{
+		Price: p.Price, Currency: p.Currency, TrialDays: p.TrialDays,
+	})
 }
 
 // previewDTO は申込確認画面の表示値。

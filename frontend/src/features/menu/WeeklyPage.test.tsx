@@ -99,11 +99,12 @@ describe('プレミアムゲート', () => {
     ).toBeInTheDocument()
   })
 
-  it('未ログインはロック（ログイン導線）', async () => {
+  it('未ログインもロック（加入導線）', async () => {
     renderWithProviders(<WeeklyPage today={monday} />)
 
+    // 未ログインにも premium と同じ加入導線を出す（PremiumLock.test.tsx で仕様化）。
     expect(
-      await screen.findByRole('link', { name: /ログイン/ }),
+      await screen.findByRole('link', { name: 'プレミアムにアップグレード' }),
     ).toBeInTheDocument()
   })
 })

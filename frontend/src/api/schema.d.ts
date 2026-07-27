@@ -1328,6 +1328,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * プランの公開情報を取得する
+         * @description 料金ページ（/pricing）に出す、誰にでも同じプラン情報。
+         *     料金の提示は未ログインにも見せるため認証を要さない。
+         *     個人に依る値（トライアル適格・初回課金日）は含めない。それらは
+         *     /billing/preview（要認証・特商法12条の6の申込確認）が返す。
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description プランの公開情報 */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["BillingPlanResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/preview": {
         parameters: {
             query?: never;
@@ -1778,6 +1820,21 @@ export interface components {
         };
         MenuMatchesResponse: {
             matches: components["schemas"]["MenuMatch"][];
+        };
+        /** @description プランの公開情報（誰にでも同じ。/pricing が使う）。 */
+        BillingPlanResponse: {
+            /**
+             * @description 月額料金（最小単位。currency=jpy なら円）。
+             * @example 300
+             */
+            price: number;
+            /** @example jpy */
+            currency: string;
+            /**
+             * @description トライアル期間の日数。
+             * @example 5
+             */
+            trialDays: number;
         };
         /** @description 申込確認画面（特商法12条の6）の表示値。 */
         BillingPreviewResponse: {

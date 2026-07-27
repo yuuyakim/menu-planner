@@ -21,6 +21,7 @@ import { SearchByIngredientsPage } from '../features/menu/SearchByIngredientsPag
 import { SearchPage } from '../features/menu/SearchPage'
 import { ShoppingListPage } from '../features/menu/ShoppingListPage'
 import { WeeklyPage } from '../features/menu/WeeklyPage'
+import { PricingPage } from '../features/pricing/PricingPage'
 
 // navItems はヘッダに並べるリンク。増減はここだけで済ませる。
 const navItems = [
@@ -151,6 +152,9 @@ export function App() {
                 </RequireAuth>
               }
             />
+            {/* 料金の提示は未ログインにも見せる。加入を検討する前に見る画面で、
+                ログインを要求すると意味を成さない。 */}
+            <Route path="/pricing" element={<PricingPage />} />
             <Route path="/login" element={<LoginPage />} />
             {/* 法務3ページは/loginと同じく未認証でも見える必要があるため、
                 RequireAuth で包まない（表示義務のあるページのため）。 */}
