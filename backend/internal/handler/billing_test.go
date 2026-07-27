@@ -35,6 +35,10 @@ type fakeBilling struct {
 	portalErr error
 }
 
+func (f *fakeBilling) Plan() service.PlanInfo {
+	return service.PlanInfo{Price: 300, Currency: "jpy", TrialDays: 5}
+}
+
 func (f *fakeBilling) Preview(context.Context, string) (service.PreviewResult, error) {
 	return service.PreviewResult{
 		Price: 300, Currency: "jpy", TrialDays: 5, TrialEligible: true,
@@ -271,4 +275,41 @@ func TestBillingHandler_Webhook_ProcessingError(t *testing.T) {
 
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.True(t, svc.handleCalled)
+}
+
+// 料金の提示は未ログインにも見せる。認証を付けると /pricing が成り立たない。
+func TestBillingHandler_Plan_NoAuthReturns200(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeBilling{}
+	e, _ := billingApp(t, svc)
+
+	rec := doBillingRequest(t, e, http.MethodGet, "/api/v1/billing/plan", "", "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body struct {
+		Price     int    `json:"price"`
+		Currency  string `json:"currency"`
+		TrialDays int    `json:"trialDays"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, 300, body.Price)
+	assert.Equal(t, "jpy", body.Currency)
+	assert.Equal(t, 5, body.TrialDays)
+}
+
+// 個人に依る値を公開ルートに載せない。載せると未ログインに、実際の申込内容と
+// ずれた「初回課金日」を見せることになる（特商法の表示は /billing/preview の責務）。
+func TestBillingHandler_Plan_OmitsPersonalFields(t *testing.T) {
+	t.Parallel()
+
+	svc := &fakeBilling{}
+	e, _ := billingApp(t, svc)
+
+	rec := doBillingRequest(t, e, http.MethodGet, "/api/v1/billing/plan", "", "")
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "trialEligible")
+	assert.NotContains(t, rec.Body.String(), "firstBillingAt")
+	assert.NotContains(t, rec.Body.String(), "planManagementPath")
 }
