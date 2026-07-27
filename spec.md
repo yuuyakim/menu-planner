@@ -861,6 +861,7 @@ WHERE user_id = $1
 
 | Method | Path | 認証 | 説明 |
 | --- | --- | --- | --- |
+| GET | `/billing/plan` | 不要 | プランの公開情報（価格・通貨・無料日数）。料金ページ `/pricing` の表示に使う。個人に依る値は含めない |
 | GET | `/billing/preview` | 必須 | 申込確認画面の表示値（価格・トライアル・初回課金日） |
 | POST | `/billing/checkout-session` | 必須 | Stripe Checkout セッションを作成しURLを返す |
 | POST | `/billing/webhook` | 不要（署名検証） | Stripe からの通知を受け加入状態を同期する |
