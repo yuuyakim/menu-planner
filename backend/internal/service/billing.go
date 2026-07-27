@@ -25,6 +25,14 @@ var ErrWebhookSignature = errors.New("Webフックの検証に失敗しました
 // planManagementPath は解約導線の文言。特商法・利用規約が名指しする画面名。
 const planManagementPath = "アカウント設定 > プランの管理"
 
+// PlanInfo は誰にでも同じ、プランの公開情報。
+// 個人に依る値（トライアル適格・初回課金日）は含めない。未ログインに返すため。
+type PlanInfo struct {
+	Price     int
+	Currency  string
+	TrialDays int
+}
+
 // PreviewResult は申込確認画面の表示値。
 type PreviewResult struct {
 	Price              int
@@ -71,18 +79,27 @@ type SubscriptionView struct {
 	HasPortal         bool // provider_customer_id があり顧客ポータルを開けるか
 }
 
+// Plan はプランの公開情報を返す。
+//
+// **価格の定義はここだけに置く。** Preview もこれを通すことで、
+// 値上げのときに直す場所が1つで済む。
+func (s *BillingService) Plan() PlanInfo {
+	return PlanInfo{Price: 300, Currency: "jpy", TrialDays: s.trialDays}
+}
+
 // Preview は申込確認画面の表示値を返す。
 func (s *BillingService) Preview(ctx context.Context, userID string) (PreviewResult, error) {
 	eligible, _, err := s.trialEligibility(ctx, userID)
 	if err != nil {
 		return PreviewResult{}, err
 	}
+	plan := s.Plan()
 	first := s.now()
 	if eligible {
-		first = first.Add(time.Duration(s.trialDays) * 24 * time.Hour)
+		first = first.Add(time.Duration(plan.TrialDays) * 24 * time.Hour)
 	}
 	return PreviewResult{
-		Price: 300, Currency: "jpy", TrialDays: s.trialDays,
+		Price: plan.Price, Currency: plan.Currency, TrialDays: plan.TrialDays,
 		TrialEligible: eligible, FirstBillingAt: first,
 		PlanManagementPath: planManagementPath,
 	}, nil

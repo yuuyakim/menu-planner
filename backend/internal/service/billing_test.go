@@ -339,3 +339,25 @@ func TestBilling_CreatePortalSession_OK(t *testing.T) {
 		t.Errorf("gateway 引数が不正: cus=%q return=%q", gw.portalCustomerID, gw.portalReturnURL)
 	}
 }
+
+func TestBilling_Plan_PublicInfo(t *testing.T) {
+	svc := newBilling(&fakeStore{}, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	got := svc.Plan()
+	if got.Price != 300 || got.Currency != "jpy" || got.TrialDays != 5 {
+		t.Errorf("plan 不正: %+v", got)
+	}
+}
+
+// 価格の定義が1箇所であることを守る。Plan() だけ直して Preview が古い値を
+// 返す、という取りこぼしを検知する。値を直書きで比べず、両者を突き合わせる。
+func TestBilling_Preview_UsesPlanValues(t *testing.T) {
+	svc := newBilling(&fakeStore{found: false}, fakeEnt{plan: domain.PlanFree}, &fakeGateway{})
+	plan := svc.Plan()
+	got, err := svc.Preview(context.Background(), validUID)
+	if err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+	if got.Price != plan.Price || got.Currency != plan.Currency || got.TrialDays != plan.TrialDays {
+		t.Errorf("Preview は Plan と同じ値を返すべき。preview=%+v plan=%+v", got, plan)
+	}
+}
