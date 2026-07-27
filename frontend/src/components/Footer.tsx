@@ -1,8 +1,9 @@
 import { Link } from 'react-router'
 
-// footerLinks は法務3ページへの導線。表示義務のあるページなので、
-// どの画面からでも辿れるよう全ページ共通のフッターに置く。
+// footerLinks は常設の導線。法務3ページは表示義務があり、料金プランは
+// 加入前に料金を確かめる先。どちらもどの画面からでも辿れる必要がある。
 const footerLinks = [
+  { to: '/pricing', label: '料金プラン' },
   { to: '/legal/tokushoho', label: '特定商取引法に基づく表記' },
   { to: '/legal/terms', label: '利用規約' },
   { to: '/legal/privacy', label: 'プライバシーポリシー' },
