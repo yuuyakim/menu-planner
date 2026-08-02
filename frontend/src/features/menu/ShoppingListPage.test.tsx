@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import type { Menu, ShoppingItem } from '../../api/types'
 import { renderWithProviders } from '../../test/render'
@@ -77,10 +77,6 @@ function withSavedId(id: string) {
 }
 
 describe('ShoppingListPage', () => {
-  // 「一度きり」フラグは localStorage に残るため、他のテストへ漏れないよう消す。
-  // 共通の setup.ts は sessionStorage しか消していない。
-  afterEach(() => localStorage.clear())
-
   it('週間献立の食材を、どの献立で使うか付きで並べる', async () => {
     withWeek([nikujaga, oyakodon])
     const bodies = respondShoppingList([
@@ -226,7 +222,7 @@ describe('ShoppingListPage', () => {
     })
   })
 
-  it('free はチェックしても PUT を投げない（その場限り）', async () => {
+  it('free でも保存済みの週ならチェックがサーバに送られる', async () => {
     const savedId = '11111111-1111-1111-1111-111111111111'
     withWeek([nikujaga])
     withSavedId(savedId)
@@ -235,53 +231,6 @@ describe('ShoppingListPage', () => {
       http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
         HttpResponse.json({
           items: [
-            {
-              name: 'にんじん',
-              category: 'vegetable',
-              origin: 'derived',
-              checked: false,
-              hidden: false,
-              usedIn: [],
-            },
-          ],
-        }),
-      ),
-    )
-    let put = false
-    server.use(
-      http.put(`/api/v1/weekly-menus/${savedId}/shopping-list`, () => {
-        put = true
-        return new HttpResponse(null, { status: 204 })
-      }),
-    )
-
-    renderWithProviders(<ShoppingListPage />)
-    await userEvent.click(
-      await screen.findByRole('checkbox', { name: /にんじん/ }),
-    )
-    expect(
-      await screen.findByRole('checkbox', { name: /にんじん/ }),
-    ).toBeChecked()
-    expect(put).toBe(false)
-  })
-
-  it('free が初めてチェックすると案内が1回だけ出る', async () => {
-    const savedId = '11111111-1111-1111-1111-111111111111'
-    withWeek([nikujaga])
-    withSavedId(savedId)
-    respondMe('free')
-    server.use(
-      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
-        HttpResponse.json({
-          items: [
-            {
-              name: 'にんじん',
-              category: 'vegetable',
-              origin: 'derived',
-              checked: false,
-              hidden: false,
-              usedIn: [],
-            },
             {
               name: 'たまねぎ',
               category: 'vegetable',
@@ -294,31 +243,37 @@ describe('ShoppingListPage', () => {
         }),
       ),
     )
+    const puts: unknown[] = []
+    server.use(
+      http.put(
+        `/api/v1/weekly-menus/${savedId}/shopping-list`,
+        async ({ request }) => {
+          puts.push(await request.json())
+          return new HttpResponse(null, { status: 204 })
+        },
+      ),
+    )
 
     renderWithProviders(<ShoppingListPage />)
     await userEvent.click(
-      await screen.findByRole('checkbox', { name: /にんじん/ }),
+      await screen.findByRole('checkbox', { name: /たまねぎ/ }),
     )
-    expect(await screen.findByText(/プレミアム/)).toBeInTheDocument()
 
-    // 閉じる
-    await userEvent.click(screen.getByRole('button', { name: /閉じる/ }))
-    expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
-
-    // 別の（まだ未チェックの）品目を初めてチェックする、正真正銘の2度目の
-    // 「追加」操作。ここで案内が再度出ないことこそが「1回だけ」の本質。
-    // 同じ品目を再クリックすると外す操作（adding === false）になり、
-    // adding のガードだけで通ってしまって guidanceDone 側の検証にならない。
-    await userEvent.click(
-      screen.getByRole('checkbox', { name: /たまねぎ/ }),
-    )
-    expect(
-      screen.getByRole('checkbox', { name: /たまねぎ/ }),
-    ).toBeChecked()
-    expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
+    await waitFor(() => expect(puts.length).toBe(1))
+    expect(puts[0]).toEqual({
+      items: [
+        {
+          name: 'たまねぎ',
+          category: 'vegetable',
+          origin: 'derived',
+          checked: true,
+          hidden: false,
+        },
+      ],
+    })
   })
 
-  it('free が初めてチェックしたときの案内に /checkout へのリンクがある', async () => {
+  it('チェックしてもプレミアムの勧誘は出ない', async () => {
     const savedId = '11111111-1111-1111-1111-111111111111'
     withWeek([nikujaga])
     withSavedId(savedId)
@@ -328,40 +283,7 @@ describe('ShoppingListPage', () => {
         HttpResponse.json({
           items: [
             {
-              name: 'にんじん',
-              category: 'vegetable',
-              origin: 'derived',
-              checked: false,
-              hidden: false,
-              usedIn: [],
-            },
-          ],
-        }),
-      ),
-    )
-
-    renderWithProviders(<ShoppingListPage />)
-    await userEvent.click(
-      await screen.findByRole('checkbox', { name: /にんじん/ }),
-    )
-    expect(await screen.findByText(/プレミアム/)).toBeInTheDocument()
-
-    // 案内から /checkout へ進める導線がある。
-    const link = screen.getByRole('link', { name: /プレミアム|アップグレード/ })
-    expect(link).toHaveAttribute('href', '/checkout')
-  })
-
-  it('premium にはチェックしても案内を出さない', async () => {
-    const savedId = '11111111-1111-1111-1111-111111111111'
-    withWeek([nikujaga])
-    withSavedId(savedId)
-    respondMe('premium')
-    server.use(
-      http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
-        HttpResponse.json({
-          items: [
-            {
-              name: 'にんじん',
+              name: 'たまねぎ',
               category: 'vegetable',
               origin: 'derived',
               checked: false,
@@ -375,11 +297,15 @@ describe('ShoppingListPage', () => {
         new HttpResponse(null, { status: 204 }),
       ),
     )
+
     renderWithProviders(<ShoppingListPage />)
     await userEvent.click(
-      await screen.findByRole('checkbox', { name: /にんじん/ }),
+      await screen.findByRole('checkbox', { name: /たまねぎ/ }),
     )
-    expect(screen.queryByText(/プレミアム/)).not.toBeInTheDocument()
+
+    expect(
+      screen.queryByText(/プレミアムプランなら、チェックした買い物リスト/),
+    ).not.toBeInTheDocument()
   })
 
   it('premium が品目を手で足すと manual として PUT に載る', async () => {
