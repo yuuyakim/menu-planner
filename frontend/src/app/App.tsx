@@ -93,14 +93,24 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/weekly" element={<WeeklyPage />} />
+            {/* 週間献立は backend の suggest-weekly / reroll-day が RequireAuth で
+                守られているため、未ログインでは使えない。フォームを見せてから
+                401 で断るより、先にログインへ送る。 */}
+            <Route
+              path="/weekly"
+              element={
+                <RequireAuth>
+                  <WeeklyPage />
+                </RequireAuth>
+              }
+            />
             {/* 冷蔵庫から探すのは検索と同じ扱いで、未認証でも使える（spec.md 2.9）。 */}
             <Route path="/from-fridge" element={<SearchByIngredientsPage />} />
             {/* 買い物リストは週間献立から作る。未認証でも使える（spec.md 2.7）。 */}
             <Route path="/shopping-list" element={<ShoppingListPage />} />
             <Route path="/menus/:id" element={<MenuDetailPage />} />
             {/* 履歴とお気に入りは本人のものだけを扱うため認証必須。
-                検索と週間献立は未認証でも使える（spec.md 1.3）。 */}
+                検索は未認証でも使える（spec.md 1.3）。 */}
             <Route
               path="/histories"
               element={

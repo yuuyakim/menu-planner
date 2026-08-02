@@ -41,23 +41,14 @@ describe('未認証のとき', () => {
     expect(screen.getByRole('button', { name: '献立を探す' })).toBeEnabled()
   })
 
-  // 週間献立は premium 限定（Task 7）。未ログインは生成画面ではなく、premium と
-  // 同じ加入導線（PremiumLock、Task 2 で spec.md 2.11 準拠に変更）へ誘導する。
-  //
-  // 名前は完全一致で 'プレミアムにアップグレード'（PremiumLock 自身のCTA）に絞る。
-  // 正規表現 /ログイン/ だとヘッダの「ログイン」導線や PremiumLock の
-  // 「ログインが必要です」表示にもマッチしうるため、ここは完全一致で
-  // PremiumLock の加入導線だけを指す。
-  it('週間献立はロックへ誘導する', async () => {
-    loggedOut()
+  // suggest-weekly は backend で RequireAuth に守られており、
+  // フォームを見せても送信で 401 になる。先にログインへ送る。
+  it('未ログインで /weekly を開くとログイン画面へ送られる', async () => {
     renderWithProviders(<App />, { route: '/weekly' })
 
     expect(
-      await screen.findByRole('link', { name: 'プレミアムにアップグレード' }),
-    ).toBeVisible()
-    expect(
-      screen.queryByRole('heading', { level: 1, name: '1週間の献立' }),
-    ).not.toBeInTheDocument()
+      await screen.findByRole('heading', { name: 'ログイン' }),
+    ).toBeInTheDocument()
   })
 
   it('履歴画面はログインへ誘導する', async () => {

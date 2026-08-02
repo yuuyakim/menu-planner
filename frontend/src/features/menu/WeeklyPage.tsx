@@ -6,9 +6,7 @@ import type { DayMenu } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotStatus } from '../../components/MascotStatus'
 import { useSessionState } from '../../hooks/useSessionState'
-import { useCurrentUser } from '../auth/useCurrentUser'
 import { historiesQueryKey } from '../history/api'
-import { PremiumLock } from '../premium/PremiumLock'
 import { rerollDay, saveWeeklyMenu, savedWeeklyMenusQueryKey, suggestWeekly } from './api'
 import { MenuCard } from './MenuCard'
 import { SearchForm } from './SearchForm'
@@ -92,9 +90,6 @@ export function WeeklyPage({ today = new Date() }: Props) {
     },
   })
 
-  // 保存は認証が要る（spec.md 2.8）。未ログインなら押させずログインへ誘う。
-  const { user } = useCurrentUser()
-
   const save = useMutation({
     mutationFn: () => saveWeeklyMenu(week ?? []),
     onSuccess: (newId) => {
@@ -112,19 +107,6 @@ export function WeeklyPage({ today = new Date() }: Props) {
   }
 
   const error = create.error ?? reroll.error
-
-  // 週間献立の作成・保存は premium 限定（フックはここより上ですべて呼び終えている）。
-  // ローディング中は user が undefined のためここに入り、<PremiumLock> が自身の
-  // ローディング表示を出す。WeeklyPage 側で別のローディング表示を挟まないため、
-  // <PremiumLock> がマウントされたまま維持され、/auth/me の再取得ループが起きない。
-  if (user?.plan !== 'premium') {
-    return (
-      <PremiumLock
-        title="1週間まとめて計画"
-        description="プレミアムプランなら、1週間分の献立をまとめて作って保存し、買い物リストも週単位で使えます。"
-      />
-    )
-  }
 
   return (
     <section className="space-y-6">
