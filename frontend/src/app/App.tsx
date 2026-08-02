@@ -6,9 +6,6 @@ import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RequireAuth } from '../features/auth/RequireAuth'
 import { AuthMenu } from '../features/auth/AuthMenu'
-import { AccountPage } from '../features/billing/AccountPage'
-import { CheckoutCompletePage } from '../features/billing/CheckoutCompletePage'
-import { CheckoutPage } from '../features/billing/CheckoutPage'
 import { FavoritePage } from '../features/favorite/FavoritePage'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
@@ -21,7 +18,6 @@ import { SearchByIngredientsPage } from '../features/menu/SearchByIngredientsPag
 import { SearchPage } from '../features/menu/SearchPage'
 import { ShoppingListPage } from '../features/menu/ShoppingListPage'
 import { WeeklyPage } from '../features/menu/WeeklyPage'
-import { PricingPage } from '../features/pricing/PricingPage'
 
 // navItems はヘッダに並べるリンク。増減はここだけで済ませる。
 const navItems = [
@@ -136,35 +132,6 @@ export function App() {
                 </RequireAuth>
               }
             />
-            {/* 加入は本人に紐づくため認証必須。 */}
-            <Route
-              path="/checkout"
-              element={
-                <RequireAuth>
-                  <CheckoutPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/checkout/complete"
-              element={
-                <RequireAuth>
-                  <CheckoutCompletePage />
-                </RequireAuth>
-              }
-            />
-            {/* プランの管理は本人のものだけを扱うため認証必須。 */}
-            <Route
-              path="/account"
-              element={
-                <RequireAuth>
-                  <AccountPage />
-                </RequireAuth>
-              }
-            />
-            {/* 料金の提示は未ログインにも見せる。加入を検討する前に見る画面で、
-                ログインを要求すると意味を成さない。 */}
-            <Route path="/pricing" element={<PricingPage />} />
             <Route path="/login" element={<LoginPage />} />
             {/* 法務3ページは/loginと同じく未認証でも見える必要があるため、
                 RequireAuth で包まない（表示義務のあるページのため）。 */}

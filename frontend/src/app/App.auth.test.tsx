@@ -102,6 +102,15 @@ describe('未認証のとき', () => {
       header.queryByRole('button', { name: 'ログアウト' }),
     ).not.toBeInTheDocument()
   })
+
+  it.each(['/checkout', '/checkout/complete', '/account', '/pricing'])(
+    '%s は撤廃済みで 404 になる',
+    async (path) => {
+      renderWithProviders(<App />, { route: path })
+
+      expect(await screen.findByText('ページが見つかりません')).toBeInTheDocument()
+    },
+  )
 })
 
 describe('認証済みのとき', () => {

@@ -137,24 +137,6 @@ export function HomePage() {
           </li>
         ))}
       </ul>
-
-      {/* プレミアムの案内。判定が付くまでは出さない（決めつけると premium の
-          利用者に一瞬勧誘が見える）。加入済みには出さない。
-          押し売りにしないため、ここでは加入画面ではなく料金ページへ送る。 */}
-      {!isLoading && user?.plan !== 'premium' && (
-        <div className="rounded-2xl border border-kon-leaf-soft bg-white p-4 sm:flex sm:items-center sm:gap-4">
-          <p className="min-w-0 flex-1 text-sm text-kon-ink/85">
-            1週間分の献立をまとめて組み立てたり、買い物リストのチェックを残したりするには
-            プレミアムプランをどうぞ。
-          </p>
-          <Link
-            to="/pricing"
-            className="mt-3 inline-block whitespace-nowrap rounded-full bg-kon-leaf px-4 py-1.5 text-sm font-medium text-white transition-colors hover:brightness-95 sm:mt-0"
-          >
-            プランを見る
-          </Link>
-        </div>
-      )}
     </section>
   )
 }

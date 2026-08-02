@@ -31,13 +31,4 @@ describe('Footer', () => {
       screen.getByRole('link', { name: 'プライバシーポリシー' }),
     ).toHaveAttribute('href', '/legal/privacy')
   })
-
-  it('料金プランへのリンクを持つ', () => {
-    renderWithProviders(<Footer />)
-
-    expect(screen.getByRole('link', { name: '料金プラン' })).toHaveAttribute(
-      'href',
-      '/pricing',
-    )
-  })
 })
