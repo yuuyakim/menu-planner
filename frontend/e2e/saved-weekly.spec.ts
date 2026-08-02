@@ -66,6 +66,12 @@ test('未ログインで保存一覧を開くとログイン画面へ送られ�
   await expect(page.getByRole('heading', { name: 'ログイン' })).toBeVisible()
 })
 
+test('未ログインで週間献立を開くとログイン画面へ送られる', async ({ page }) => {
+  await page.goto('/weekly')
+
+  await expect(page.getByRole('heading', { name: 'ログイン' })).toBeVisible()
+})
+
 test('保存した週を削除できる', async ({ page }) => {
   const email = uniqueEmail('saved-weekly-del')
   await signUp(page, email)
