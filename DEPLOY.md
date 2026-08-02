@@ -59,6 +59,11 @@ flowchart LR
 | `STRIPE_WEBHOOK_SECRET` | テストモードのダミー値 | **本番Webhookエンドポイントの署名シークレット**（`whsec_...`）。同上 |
 | `STRIPE_PRICE_ID` | テストモードのダミー値 | **本番の価格ID**（`price_...`）。同上 |
 
+> **サブスク撤廃後も `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID` は必要。**
+> 2026-08-02 にサブスクを撤廃したが、backend の課金配管（`/billing/*`・webhook・
+> `cmd/grant`）は復活に備えて残してある。`cmd/server/main.go` はこの3つが未設定だと
+> 起動時に落ちるため、設定は消せない。設定が欠けたまま起動できる方が危険という判断。
+
 > **`TRUSTED_PROXY_SECRET` は Cloud Run と Cloudflare Pages の両方に同じ値**を設定する。
 > backend はこの秘密が一致したリクエストの `X-Forwarded-For` だけを実クライアントIPとして
 > 信頼する。backend のURLは公開されており直接叩けるため、これが無いとIPを詐称するだけで

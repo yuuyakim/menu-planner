@@ -94,7 +94,8 @@ describe('プランによらず使える', () => {
     expect(
       await screen.findByRole('heading', { name: '保存した週間献立' }),
     ).toBeInTheDocument()
-    // PremiumLock の title が出ていないこと。
+    // アップグレード誘導（撤廃済みの PremiumLock が出していた文言）が
+    // 再発していないこと。
     expect(screen.queryByText('プレミアムにアップグレード')).not.toBeInTheDocument()
   })
 
