@@ -338,20 +338,32 @@ CREATE INDEX ingredient_resolutions_unresolved_idx
 DROP TABLE IF EXISTS ingredient_resolutions;
 ```
 
-- [ ] **Step 4: マイグレーションを流してテストが通ることを確認**
+- [ ] **Step 4: テストが通ることを確認**
 
 ```bash
-cd backend && make migrate   # ローカルDBに当てる（docker-compose のURLで上書きされる）
-go test ./internal/repository/ -run TestIngredientResolutionsSchema -v
+cd backend && go test ./internal/repository/ -run TestIngredientResolutionsSchema -v
 ```
 Expected: PASS
 
-- [ ] **Step 5: down が通ることも確認**
+> **マイグレーションを手で流す必要はない。** `internal/repository` のテストは
+> `TestMain`（`testhelper_test.go`）が testcontainers で Postgres を起動し、
+> `db.Migrate(sharedDSN, db.MigrateUp)` を自動で実行する。新しい
+> `000013_*.up.sql` はそこで一緒に適用される。
 
-```bash
-cd backend && go run ./cmd/migrate down && go run ./cmd/migrate up
-```
-Expected: エラーなく戻って進む
+> ⛔ **`go run ./cmd/migrate down` を実行しないこと。** `.env` の
+> `DATABASE_URL` は**本番の Neon** を指している。手元で down を流すと
+> 本番のテーブルが落ちる。down の検証は Step 5 の方法で行う。
+
+- [ ] **Step 5: down SQL が正しいことを確認する**
+
+`000013_create_ingredient_resolutions.down.sql` が `up` で作ったものを
+過不足なく落とすかを**目視で確認**する。このマイグレーションで作るのは
+テーブル1つと、その上の部分インデックス1つだけで、インデックスは
+`DROP TABLE` に含まれるため `DROP TABLE IF EXISTS ingredient_resolutions;`
+の1行で足りる。
+
+本番に流す前の実地確認は、ローカルの docker-compose DB に対して
+利用者が行う（デプロイ手順に含める）。**このタスクでは実行しない。**
 
 - [ ] **Step 6: コミット**
 
@@ -389,6 +401,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/repository"
 )
 
@@ -397,11 +410,14 @@ func TestResolutionRepository(t *testing.T) {
 	ctx := context.Background()
 	repo := repository.NewResolutionRepository(pool)
 
-	// 既存の食材を1件借りる（シード済みの前提）。
-	var rawID string
-	if err := pool.QueryRow(ctx, `SELECT id FROM ingredients LIMIT 1`).Scan(&rawID); err != nil {
-		t.Fatalf("食材マスタを引けませんでした: %v", err)
-	}
+	// **既存行を借りない。** テスト用DBの ingredients は
+	// TestMain がシードするものではなく、他のテストが insertIngredient で
+	// 足したものが溜まっているだけ。`SELECT ... LIMIT 1` に頼ると
+	// 実行順に依存し、-run で単独実行したときに落ちる。自分で1件作る。
+	//
+	// insertIngredient は既存のヘルパー（ingredients_schema_test.go）で、
+	// 生のUUID文字列を返す。
+	rawID := insertIngredient(t, pool, "テスト用豚肉", "てすとようぶたにく", "meat")
 	id, err := domain.ParseIngredientID(rawID)
 	if err != nil {
 		t.Fatalf("食材IDを解釈できませんでした: %v", err)
