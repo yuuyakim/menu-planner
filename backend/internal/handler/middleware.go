@@ -66,6 +66,9 @@ func UserIDFromContext(c echo.Context) (string, bool) {
 // userID が無ければ 401（RequireAuth が先に通っていない配線ミス、または未認証）。
 // premium でなければ 403（ErrPremiumRequired）。エンタイトルメントの引き当てに
 // 失敗したら、その err をそのまま返す（500 系）。
+//
+// サブスク撤廃（2026-08-02）により、現在この分岐には到達しない。
+// 配管は復活に備えて残しているため、戻せばここが再び効く。
 func RequirePremium(entitlements service.Entitlements) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

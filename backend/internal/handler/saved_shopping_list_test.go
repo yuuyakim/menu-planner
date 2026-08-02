@@ -204,7 +204,9 @@ func TestSavedShoppingListHandler_Get_未認証は401(t *testing.T) {
 // GET/PUT の premium 判定自体は RequirePremium（Task 2）の責務なので、ここでは
 // 「ハンドラのルーティングに RequireAuth → RequirePremium が実際に掛かっているか」
 // だけを固定する。判定ロジック自体は middleware_test.go で見る。
-func TestSavedShoppingListHandler_Get_freeは403(t *testing.T) {
+//
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestSavedShoppingListHandler_Get_freeも成功する(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedShoppingList{}
@@ -214,8 +216,8 @@ func TestSavedShoppingListHandler_Get_freeは403(t *testing.T) {
 
 	rec := getShoppingList(t, e, access, domain.NewSavedWeeklyMenuID().String())
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Empty(t, svc.lastUserID, "freeなら service を呼ばないべき")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "user-abc", svc.lastUserID)
 }
 
 func TestSavedShoppingListHandler_Put_204(t *testing.T) {
@@ -230,13 +232,17 @@ func TestSavedShoppingListHandler_Put_204(t *testing.T) {
 	require.Equal(t, "にんじん", svc.replaced[0].Name)
 }
 
-func TestSavedShoppingListHandler_Put_freeは403(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestSavedShoppingListHandler_Put_freeも成功する(t *testing.T) {
 	t.Parallel()
 
-	svc := &fakeSavedShoppingList{replaceErr: service.ErrPremiumRequired}
-	rec := doAuthedPut(t, svc, premiumEnt,
-		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", `{"items":[]}`)
-	require.Equal(t, http.StatusForbidden, rec.Code)
+	svc := &fakeSavedShoppingList{}
+	body := `{"items":[{"name":"にんじん","category":"vegetable","origin":"derived","checked":true,"hidden":false}]}`
+	rec := doAuthedPut(t, svc, freeEnt,
+		"/api/v1/weekly-menus/"+domain.NewSavedWeeklyMenuID().String()+"/shopping-list", body)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	require.Len(t, svc.replaced, 1)
+	require.Equal(t, "にんじん", svc.replaced[0].Name)
 }
 
 func TestSavedShoppingListHandler_Put_上限で409(t *testing.T) {

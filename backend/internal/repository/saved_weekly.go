@@ -83,7 +83,7 @@ func isUnknownSavedMenu(err error) bool {
 //
 // 親と子を1本のJOINで取らず2回に分けるのは、親が0件のときに子を引かずに済み、
 // 親の並び順（created_at DESC）と子の並び順（day ASC）を素直に別々に指定できるため。
-// 最大10件×7日と小さいので、往復1回の差は問題にならない。
+// 最大50件×7日と小さいので、往復1回の差は問題にならない。
 func (r *SavedWeeklyMenuRepository) List(
 	ctx context.Context, userID domain.UserID,
 ) ([]domain.SavedWeeklyMenu, error) {

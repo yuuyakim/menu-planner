@@ -6,8 +6,6 @@ import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
 import { useSessionState } from '../../hooks/useSessionState'
-import { useCurrentUser } from '../auth/useCurrentUser'
-import { PremiumLock } from '../premium/PremiumLock'
 import {
   deleteSavedWeeklyMenu,
   fetchSavedWeeklyMenus,
@@ -51,9 +49,6 @@ export function SavedWeeklyPage() {
   // （GET /weekly-menus/:id/shopping-list）を使うようになる。
   const [, setSavedId] = useSessionState<string | null>(savedIdKey, null)
 
-  // 保存一覧の閲覧は premium 限定（フックはここより上ですべて呼び終えている）。
-  const { user } = useCurrentUser()
-
   const {
     data: saved,
     isPending,
@@ -61,8 +56,6 @@ export function SavedWeeklyPage() {
   } = useQuery({
     queryKey: savedWeeklyMenusQueryKey,
     queryFn: fetchSavedWeeklyMenus,
-    // free は 403 になるため、無駄打ちを避けて取得しない。
-    enabled: user?.plan === 'premium',
   })
 
   const remove = useMutation({
@@ -79,17 +72,6 @@ export function SavedWeeklyPage() {
     setFilter(emptyMenuFilter)
     setSavedId(week.id)
     void navigate('/weekly')
-  }
-
-  // ローディング中は user が undefined のためここに入り、<PremiumLock> が自身の
-  // ローディング表示を出す（WeeklyPage と同じ流儀）。
-  if (user?.plan !== 'premium') {
-    return (
-      <PremiumLock
-        title="保存した週間献立"
-        description="プレミアムプランなら、1週間分の献立を保存して、いつでも呼び出せます。"
-      />
-    )
   }
 
   return (

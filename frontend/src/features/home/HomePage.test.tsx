@@ -123,62 +123,12 @@ describe('ホーム画面', () => {
     )
   })
 
-  it('free には料金プランへの案内を出す', async () => {
-    server.use(
-      http.get('/api/v1/auth/me', () =>
-        HttpResponse.json({
-          user: {
-            id: '018f0000-0000-7000-8000-000000000009',
-            email: 'user@example.com',
-            displayName: 'キムさん',
-            plan: 'free',
-          },
-        }),
-      ),
-    )
+  // 課金を撤廃したため、料金プランへの案内自体を出さない。
+  it('料金プランへの案内は出さない', async () => {
+    loggedIn()
     renderWithProviders(<HomePage />)
 
-    expect(
-      await screen.findByRole('link', { name: 'プランを見る' }),
-    ).toHaveAttribute('href', '/pricing')
-  })
-
-  it('未ログインにも料金プランへの案内を出す', async () => {
-    renderWithProviders(<HomePage />)
-
-    expect(
-      await screen.findByRole('link', { name: 'プランを見る' }),
-    ).toHaveAttribute('href', '/pricing')
-  })
-
-  // 加入済みの利用者に勧誘を出さない。
-  it('premium には料金プランへの案内を出さない', async () => {
-    server.use(
-      http.get('/api/v1/auth/me', () =>
-        HttpResponse.json({
-          user: {
-            id: '018f0000-0000-7000-8000-000000000009',
-            email: 'user@example.com',
-            displayName: 'キムさん',
-            plan: 'premium',
-          },
-        }),
-      ),
-    )
-    renderWithProviders(<HomePage />)
-
-    // 先に判定が付いたことを確かめてから「無いこと」を検査する。
-    // 部分一致にするのは既存テスト（:49）と同じ理由で、文言の細部に縛られないため。
-    expect(await screen.findByText(/キムさん/)).toBeVisible()
-    expect(
-      screen.queryByRole('link', { name: 'プランを見る' }),
-    ).not.toBeInTheDocument()
-  })
-
-  // 判定前に出すと、premium の利用者に一瞬勧誘が見える。
-  it('判定が付くまでは案内を出さない', () => {
-    renderWithProviders(<HomePage />)
-
+    await screen.findByText(/キムさん/)
     expect(
       screen.queryByRole('link', { name: 'プランを見る' }),
     ).not.toBeInTheDocument()

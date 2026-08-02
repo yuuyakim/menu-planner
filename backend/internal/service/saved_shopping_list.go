@@ -57,6 +57,10 @@ func NewSavedShoppingListService(
 // 導出は毎回行い、premium のときだけ差分を重ねる。free では差分を無視するため
 // 従来の買い物リストと同じ結果になる（設計 8.2）。
 // 他人の週・存在しない週は ErrSavedWeeklyMenuNotFound（404）。
+//
+// サブスク撤廃（2026-08-02）により、現在 free の分岐には到達しない
+// （CanPersistShoppingList は誰に対しても true を返す）。
+// 配管は復活に備えて残しているため、戻せばここが再び効く。
 func (s *SavedShoppingListService) For(
 	ctx context.Context, userID, savedWeeklyMenuID string,
 ) ([]SavedShoppingItem, error) {
@@ -169,6 +173,9 @@ const maxManualShoppingItems = 100
 
 var (
 	// ErrPremiumRequired はプレミアムプランでのみ使える操作を free が試みたことを表す（403）。
+	//
+	// サブスク撤廃（2026-08-02）により、現在この分岐には到達しない。
+	// 配管は復活に備えて残しているため、戻せばここが再び効く。
 	ErrPremiumRequired = errors.New("プレミアムプランが必要です")
 
 	// ErrShoppingListItemLimitReached は手動品目が上限に達したことを表す（409）。
@@ -189,6 +196,9 @@ type OverrideInput struct {
 // free は ErrPremiumRequired（403）。他人の週は ErrSavedWeeklyMenuNotFound（404）。
 // 手動品目が上限超なら ErrShoppingListItemLimitReached（409）。
 // 名前の重複・不正なカテゴリ/由来は domain.ErrInvalidOverride（400）。
+//
+// サブスク撤廃（2026-08-02）により、現在 free の分岐には到達しない。
+// 配管は復活に備えて残しているため、戻せばここが再び効く。
 func (s *SavedShoppingListService) ReplaceOverrides(
 	ctx context.Context, userID, savedWeeklyMenuID string, inputs []OverrideInput,
 ) error {

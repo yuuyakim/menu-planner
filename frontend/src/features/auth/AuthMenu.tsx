@@ -52,26 +52,7 @@ export function AuthMenu() {
 
   return (
     <span className="ml-auto flex items-center gap-3">
-      {/*
-        プレミアムであることの表示。free には何も出さない。
-        アップグレード導線は買い物リストのバナー等、文脈に応じた場所（→/checkout）
-        で既に案内しているため、ここでは重複した勧誘をせず状態の表示に留める。
-      */}
-      {user.plan === 'premium' && (
-        <span
-          aria-label="プレミアム会員"
-          className="rounded-full bg-kon-leaf/20 px-2 py-0.5 text-xs text-kon-ink"
-        >
-          プレミアム
-        </span>
-      )}
       <span className="text-sm text-kon-ink/80">{user.displayName}</span>
-      <Link
-        to="/account"
-        className="whitespace-nowrap text-sm text-kon-ink/70 underline decoration-kon-leaf underline-offset-2 hover:text-kon-ink"
-      >
-        アカウント設定
-      </Link>
       <button
         type="button"
         onClick={() => logout.mutate(undefined, { onSettled: () => setNotice(true) })}

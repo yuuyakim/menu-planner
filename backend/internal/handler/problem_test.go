@@ -14,6 +14,7 @@ import (
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
 	"github.com/yuuyakim/menu-planner/backend/internal/repository"
+	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
 
 // doErrorHandler はカスタムエラーハンドラにエラーを渡した結果を返す。
@@ -72,12 +73,22 @@ func TestErrorHandler_ドメインのエラーがHTTPステータスに変換さ
 	tests := map[string]struct {
 		err        error
 		wantStatus int
+		// wantType は空なら未検証（NotEmpty だけ見る）。値を入れた場合のみ、
+		// problemBaseURI + wantType との完全一致を見る。
+		wantType string
 	}{
-		"不正なジャンルは400":   {domain.ErrInvalidGenre, http.StatusBadRequest},
-		"不正な難易度は400":    {domain.ErrInvalidDifficulty, http.StatusBadRequest},
-		"不正な献立IDは400":   {domain.ErrInvalidMenuID, http.StatusBadRequest},
-		"不正な献立は400":     {domain.ErrInvalidMenu, http.StatusBadRequest},
-		"献立が見つからないは404": {repository.ErrMenuNotFound, http.StatusNotFound},
+		"不正なジャンルは400":   {domain.ErrInvalidGenre, http.StatusBadRequest, ""},
+		"不正な難易度は400":    {domain.ErrInvalidDifficulty, http.StatusBadRequest, ""},
+		"不正な献立IDは400":   {domain.ErrInvalidMenuID, http.StatusBadRequest, ""},
+		"不正な献立は400":     {domain.ErrInvalidMenu, http.StatusBadRequest, ""},
+		"献立が見つからないは404": {repository.ErrMenuNotFound, http.StatusNotFound, ""},
+		// サブスク撤廃で業務ロジック側からは到達不能になったが（誰も
+		// ErrPremiumRequired を返さなくなった）、写像テーブル自体は
+		// service/billing.go・repository/subscription.go 等の配管とともに
+		// 残しているため、写像が壊れていないかは直接実行で検証し続ける。
+		"プレミアム要求は403": {
+			service.ErrPremiumRequired, http.StatusForbidden, "premium-required",
+		},
 	}
 
 	for name, tt := range tests {
@@ -91,6 +102,9 @@ func TestErrorHandler_ドメインのエラーがHTTPステータスに変換さ
 			assert.InDelta(t, float64(tt.wantStatus), body["status"], 0)
 			assert.NotEmpty(t, body["title"])
 			assert.NotEmpty(t, body["type"])
+			if tt.wantType != "" {
+				assert.Equal(t, "https://menu-planner.example.com/probs/"+tt.wantType, body["type"])
+			}
 		})
 	}
 }

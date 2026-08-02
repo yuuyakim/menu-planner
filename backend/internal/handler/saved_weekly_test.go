@@ -412,21 +412,23 @@ func TestSavedWeeklyMenus_Delete_Unauthorized(t *testing.T) {
 
 var freeEnt = fakeEntitlements{plan: domain.PlanFree}
 
-func TestSavedWeeklyMenus_Save_freeは403(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestSavedWeeklyMenus_Save_freeも成功する(t *testing.T) {
 	t.Parallel()
 
-	svc := &fakeSavedWeeklyService{}
+	svc := &fakeSavedWeeklyService{id: domain.NewSavedWeeklyMenuID()}
 	e, tokens := savedWeeklyApp(t, svc, freeEnt)
 	access, err := tokens.Issue("user-abc")
 	require.NoError(t, err)
 
 	rec := postWeeklyMenu(t, e, access, weekBody())
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Zero(t, svc.saveCalls, "freeなら service を呼ばないべき")
+	require.Equal(t, http.StatusCreated, rec.Code)
+	assert.Equal(t, 1, svc.saveCalls)
 }
 
-func TestSavedWeeklyMenus_List_freeは403(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestSavedWeeklyMenus_List_freeも成功する(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{}
@@ -436,11 +438,12 @@ func TestSavedWeeklyMenus_List_freeは403(t *testing.T) {
 
 	rec := getWeeklyMenus(t, e, access)
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Zero(t, svc.listCalls, "freeなら service を呼ばないべき")
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, 1, svc.listCalls)
 }
 
-func TestSavedWeeklyMenus_Delete_freeは403(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestSavedWeeklyMenus_Delete_freeも成功する(t *testing.T) {
 	t.Parallel()
 
 	svc := &fakeSavedWeeklyService{}
@@ -450,6 +453,6 @@ func TestSavedWeeklyMenus_Delete_freeは403(t *testing.T) {
 
 	rec := deleteWeeklyMenu(t, e, access, domain.NewSavedWeeklyMenuID().String())
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	assert.Zero(t, svc.deleteCalls, "freeなら service を呼ばないべき")
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	assert.Equal(t, 1, svc.deleteCalls)
 }

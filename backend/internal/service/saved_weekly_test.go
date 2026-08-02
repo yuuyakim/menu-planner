@@ -184,8 +184,8 @@ func TestSavedWeeklyService_Save_壊れた献立IDは拒否(t *testing.T) {
 func TestSavedWeeklyService_Save_上限に達していたら断る(t *testing.T) {
 	t.Parallel()
 
-	// 上限ちょうどの状態で保存しようとすると 409 相当になる（free の10件）。
-	store := &fakeSavedWeeklyStore{count: 10}
+	// 上限ちょうどの状態で保存しようとすると 409 相当になる（プランによらず50件）。
+	store := &fakeSavedWeeklyStore{count: 50}
 	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
@@ -196,8 +196,8 @@ func TestSavedWeeklyService_Save_上限に達していたら断る(t *testing.T)
 func TestSavedWeeklyService_Save_上限の1つ手前なら通る(t *testing.T) {
 	t.Parallel()
 
-	// 境界の確認。ちょうど上限に達する保存は成功する（free の10件）。
-	store := &fakeSavedWeeklyStore{count: 9}
+	// 境界の確認。上限の1つ手前の保存は成功する（プランによらず50件）。
+	store := &fakeSavedWeeklyStore{count: 49}
 	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
@@ -301,35 +301,24 @@ func (f fakeEntitlements) For(context.Context, string) (domain.Entitlement, erro
 	return domain.NewEntitlement(f.plan), nil
 }
 
-func TestSavedWeekly_freeは10件で断る(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestSavedWeekly_freeも50件までは保存できる(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{count: 10}
 	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
-	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuLimitReached)
-	assert.Contains(t, err.Error(), "10件",
-		"断る理由の件数はプラン由来で本文に出るべき")
-	assert.Zero(t, store.saveCalls, "上限に達したら保存を呼ばない")
-}
-
-func TestSavedWeekly_premiumは10件でも保存できる(t *testing.T) {
-	t.Parallel()
-
-	store := &fakeSavedWeeklyStore{count: 10}
-	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanPremium})
-
-	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
-	require.NoError(t, err, "premium の上限は50件なので10件目は通る")
+	require.NoError(t, err, "free でも上限は50件なので11件目は通る")
 	assert.Equal(t, 1, store.saveCalls)
 }
 
-func TestSavedWeekly_premiumは50件で断る(t *testing.T) {
+// プランに触れない名前にした。上限はプランによらず一律のため。
+func TestSavedWeekly_50件で断る(t *testing.T) {
 	t.Parallel()
 
 	store := &fakeSavedWeeklyStore{count: 50}
-	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanPremium})
+	svc := service.NewSavedWeeklyMenuService(store, fakeEntitlements{plan: domain.PlanFree})
 
 	_, err := svc.Save(context.Background(), domain.NewUserID().String(), weekInput())
 	require.ErrorIs(t, err, service.ErrSavedWeeklyMenuLimitReached)
@@ -338,7 +327,7 @@ func TestSavedWeekly_premiumは50件で断る(t *testing.T) {
 
 // 上限の文言は「次に何をすればよいか」まで含めてサーバが組み立てる。
 // フロントは detail をそのまま出すだけなので、ここが唯一の情報源になる
-// （フロントが件数を持つと premium に「10件まで」と出る。spec.md 2.11）。
+// （フロントが件数を持つと上限値を変えたときに古い数値のまま出続ける。spec.md 2.11）。
 func TestSavedWeekly_上限の文言に次の行動が入る(t *testing.T) {
 	t.Parallel()
 

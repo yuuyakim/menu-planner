@@ -6,22 +6,17 @@ import { NotFoundPage } from '../components/NotFoundPage'
 import { LoginPage } from '../features/auth/LoginPage'
 import { RequireAuth } from '../features/auth/RequireAuth'
 import { AuthMenu } from '../features/auth/AuthMenu'
-import { AccountPage } from '../features/billing/AccountPage'
-import { CheckoutCompletePage } from '../features/billing/CheckoutCompletePage'
-import { CheckoutPage } from '../features/billing/CheckoutPage'
 import { FavoritePage } from '../features/favorite/FavoritePage'
 import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
 import { PrivacyPage } from '../features/legal/PrivacyPage'
 import { TermsPage } from '../features/legal/TermsPage'
-import { TokushohoPage } from '../features/legal/TokushohoPage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
 import { SavedWeeklyPage } from '../features/menu/SavedWeeklyPage'
 import { SearchByIngredientsPage } from '../features/menu/SearchByIngredientsPage'
 import { SearchPage } from '../features/menu/SearchPage'
 import { ShoppingListPage } from '../features/menu/ShoppingListPage'
 import { WeeklyPage } from '../features/menu/WeeklyPage'
-import { PricingPage } from '../features/pricing/PricingPage'
 
 // navItems はヘッダに並べるリンク。増減はここだけで済ませる。
 const navItems = [
@@ -93,14 +88,24 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/search" element={<SearchPage />} />
-            <Route path="/weekly" element={<WeeklyPage />} />
+            {/* 週間献立は backend の suggest-weekly / reroll-day が RequireAuth で
+                守られているため、未ログインでは使えない。フォームを見せてから
+                401 で断るより、先にログインへ送る。 */}
+            <Route
+              path="/weekly"
+              element={
+                <RequireAuth>
+                  <WeeklyPage />
+                </RequireAuth>
+              }
+            />
             {/* 冷蔵庫から探すのは検索と同じ扱いで、未認証でも使える（spec.md 2.9）。 */}
             <Route path="/from-fridge" element={<SearchByIngredientsPage />} />
             {/* 買い物リストは週間献立から作る。未認証でも使える（spec.md 2.7）。 */}
             <Route path="/shopping-list" element={<ShoppingListPage />} />
             <Route path="/menus/:id" element={<MenuDetailPage />} />
             {/* 履歴とお気に入りは本人のものだけを扱うため認証必須。
-                検索と週間献立は未認証でも使える（spec.md 1.3）。 */}
+                検索は未認証でも使える（spec.md 1.3）。 */}
             <Route
               path="/histories"
               element={
@@ -126,39 +131,9 @@ export function App() {
                 </RequireAuth>
               }
             />
-            {/* 加入は本人に紐づくため認証必須。 */}
-            <Route
-              path="/checkout"
-              element={
-                <RequireAuth>
-                  <CheckoutPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/checkout/complete"
-              element={
-                <RequireAuth>
-                  <CheckoutCompletePage />
-                </RequireAuth>
-              }
-            />
-            {/* プランの管理は本人のものだけを扱うため認証必須。 */}
-            <Route
-              path="/account"
-              element={
-                <RequireAuth>
-                  <AccountPage />
-                </RequireAuth>
-              }
-            />
-            {/* 料金の提示は未ログインにも見せる。加入を検討する前に見る画面で、
-                ログインを要求すると意味を成さない。 */}
-            <Route path="/pricing" element={<PricingPage />} />
             <Route path="/login" element={<LoginPage />} />
-            {/* 法務3ページは/loginと同じく未認証でも見える必要があるため、
+            {/* 法務2ページは/loginと同じく未認証でも見える必要があるため、
                 RequireAuth で包まない（表示義務のあるページのため）。 */}
-            <Route path="/legal/tokushoho" element={<TokushohoPage />} />
             <Route path="/legal/terms" element={<TermsPage />} />
             <Route path="/legal/privacy" element={<PrivacyPage />} />
             {/* どれにも一致しないパスは404画面に落とす。 */}
