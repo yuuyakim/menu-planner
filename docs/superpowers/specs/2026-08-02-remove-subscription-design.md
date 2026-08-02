@@ -45,8 +45,17 @@ handler と service に広く散り、将来サブスクを再開するときに
 | プラン管理 `/account` | あり | 削除 |
 | 特定商取引法に基づく表記 | フッターに常設 | 導線とルートを削除（ファイルは残す） |
 
-未ログインの扱いは変えない。週間献立の提案自体は従来どおり未ログインでも使え、
-保存と保存一覧は本人に紐づくため引き続き `RequireAuth` で守る。
+**週間献立はログイン必須のままとする。** `backend/internal/handler/menu.go` の
+`suggest-weekly` / `reroll-day` は `RequireAuth` → `RequirePremium` の順で守られており、
+プレミアム限定になった時点で未ログインは 401 になっている。プレミアムのゲートを外しても
+`RequireAuth` は残るため、未ログインでは引き続き使えない。
+
+したがって frontend では `/weekly` を `RequireAuth` で包む。包まずにゲートだけ外すと、
+未ログインの人に入力フォームが見えて、送信して初めて 401 で失敗する画面になる。
+`/saved-weekly` は既に `RequireAuth` の内側にあり、変更は要らない。
+
+`App.tsx` の「検索と週間献立は未認証でも使える（spec.md 1.3）」というコメントは、
+プレミアム化以前の記述が残ったもの。実態に合わせて直す。
 
 ## 2. backend
 
@@ -120,7 +129,7 @@ func (e Entitlement) CanUseWeeklyPlanning() bool { return true }
 | `features/home/HomePage.tsx` | `/pricing` への常設導線を削除 |
 | `components/Footer.tsx` | 「料金プラン」「特定商取引法に基づく表記」のリンクを削除 |
 | `features/auth/AuthMenu.tsx` | 「プレミアム会員」バッジと `/account` 導線を削除 |
-| `app/App.tsx` | `/checkout` `/checkout/complete` `/account` `/pricing` `/legal/tokushoho` のルートと import を削除 |
+| `app/App.tsx` | `/checkout` `/checkout/complete` `/account` `/pricing` `/legal/tokushoho` のルートと import を削除。`/weekly` を `RequireAuth` で包む |
 | `test/handlers.ts` | `/billing/plan` の MSW ハンドラを削除 |
 
 `User.plan` は自動的に残る。`api/types.ts` の `User` は `schema.d.ts`（openapi から
@@ -203,8 +212,8 @@ CI（`.github/workflows/ci.yml`）には premium 付与に固有のステップ�
 - `make lint` / golangci-lint が通る（未使用シンボルの警告に注意）
 - e2e が通る
 - 手で確認する動線:
-  1. 未ログインで `/weekly` を開き、献立が提案できる
-  2. ログインして週間献立を保存でき、`/saved-weekly` に出る
+  1. 未ログインで `/weekly` を開くとログイン画面へ送られる
+  2. ログインして週間献立が提案でき、保存でき、`/saved-weekly` に出る
   3. 買い物リストのチェックがリロード後も残る
   4. フッターと画面のどこにも料金・加入への導線が無い
   5. `/pricing` `/checkout` `/account` `/legal/tokushoho` が 404 になる

@@ -19,7 +19,7 @@
 - `cmd/server/main.go` の Stripe 環境変数チェック（未設定なら起動失敗）も据え置く。
 - `domain.Entitlement` の `Plan()` と非公開フィールド `plan` は残す。`/auth/me` が返し続けるため。
 - 403 を検証していたテストは**削除せず「通る」に書き換える**。配管が全員を通すことを検証する価値があるため。
-- 未ログインの扱いは変えない。週間献立の提案は未ログインでも使え、保存と保存一覧は `RequireAuth` で守り続ける。
+- **週間献立はログイン必須のまま。** `menu.go` の `suggest-weekly` / `reroll-day` は `RequireAuth` → `RequirePremium` の順で守られており、プレミアムのゲートを外しても `RequireAuth` は残る。よって frontend の `/weekly` は `RequireAuth` で包む（Task 2）。backend のルーティングは変更しない。
 - コミットメッセージは日本語。本文には「なぜそうしたか」を書く。末尾に `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>` を付ける。
 - テストコマンド: `make test-backend` / `make test-frontend` / `make test` / `make lint`。
 
@@ -346,12 +346,16 @@ EOF
 **Files:**
 - Modify: `frontend/src/features/menu/WeeklyPage.tsx:11,116-127`
 - Modify: `frontend/src/features/menu/SavedWeeklyPage.tsx:10,64-65,84-93`
+- Modify: `frontend/src/app/App.tsx:96,102-103`（`/weekly` を `RequireAuth` で包む）
 - Test: `frontend/src/features/menu/WeeklyPage.test.tsx`
 - Test: `frontend/src/features/menu/SavedWeeklyPage.test.tsx`
+- Test: `frontend/src/app/App.auth.test.tsx`
 
 **Interfaces:**
 - Consumes: Task 1 の backend 挙動（free でも `suggest-weekly` / 保存 / 一覧が 200）
 - Produces: `WeeklyPage` と `SavedWeeklyPage` が `PremiumLock` を import しない状態。Task 4 が `features/premium/` を削除できる前提になる。
+
+**このタスクの要点:** `suggest-weekly` / `reroll-day` は backend で `RequireAuth` に守られており、プレミアムのゲートを外しても未ログインでは 401 になる。`WeeklyPage` のゲートを外すだけだと、未ログインの人に入力フォームが見えて送信で初めて失敗する。だから `/weekly` を `RequireAuth` で包む。
 
 - [ ] **Step 1: WeeklyPage のテストを書き換えて失敗させる**
 
@@ -371,17 +375,11 @@ it('free でも週間献立の画面が出る', async () => {
   expect(screen.queryByText('1週間まとめて計画')).not.toBeInTheDocument()
 })
 
-it('未ログインでも週間献立の画面が出る', async () => {
-  // respondMe を呼ばず、test/handlers.ts の既定（401）に任せる。
-  renderWithProviders(<WeeklyPage />)
-
-  expect(
-    await screen.findByRole('heading', { name: '1週間の献立' }),
-  ).toBeInTheDocument()
-})
 ```
 
 同ファイルの `respondMe('premium')` を使っているケースは、すべて `respondMe('free')` に変える。プランで挙動が変わらないことを示すため。
+
+**未ログインのケースは `WeeklyPage` 単体では検証しない。** 未ログインを弾くのは `/weekly` を包む `RequireAuth` の仕事であり、Step 10 の `App.auth.test.tsx` で検証する。同ファイルに `respondMe()` を呼ばない（＝未ログイン）ケースが既にあれば削除する。
 
 - [ ] **Step 2: 落ちることを確認する**
 
@@ -461,11 +459,65 @@ docker compose run --rm frontend npx vitest run src/features/menu/SavedWeeklyPag
 
 Expected: PASS。
 
-- [ ] **Step 9: コミット**
+- [ ] **Step 9: `/weekly` が未ログインを弾くテストを書いて失敗させる**
+
+`frontend/src/app/App.auth.test.tsx` に次を足す。文言と組み立ては、同ファイルにある `/histories` や `/favorites` の `RequireAuth` を検証している既存ケースに揃える。
+
+```tsx
+it('未ログインで /weekly を開くとログイン画面へ送られる', async () => {
+  // suggest-weekly は backend で RequireAuth に守られており、
+  // フォームを見せても送信で 401 になる。先にログインへ送る。
+  renderWithProviders(<App />, { route: '/weekly' })
+
+  expect(
+    await screen.findByRole('heading', { name: 'ログイン' }),
+  ).toBeInTheDocument()
+})
+```
+
+- [ ] **Step 10: 落ちることを確認する**
+
+```bash
+docker compose run --rm frontend npx vitest run src/app/App.auth.test.tsx
+```
+
+Expected: FAIL。ログイン画面ではなく週間献立の画面が出る。
+
+- [ ] **Step 11: `/weekly` を RequireAuth で包む**
+
+`frontend/src/app/App.tsx` の96行を次に置き換える。
+
+```tsx
+            {/* 週間献立は backend の suggest-weekly / reroll-day が RequireAuth で
+                守られているため、未ログインでは使えない。フォームを見せてから
+                401 で断るより、先にログインへ送る。 */}
+            <Route
+              path="/weekly"
+              element={
+                <RequireAuth>
+                  <WeeklyPage />
+                </RequireAuth>
+              }
+            />
+```
+
+あわせて102-103行のコメント「検索と週間献立は未認証でも使える（spec.md 1.3）」を「検索は未認証でも使える（spec.md 1.3）」に直す。プレミアム化以前の記述が残っていたもの。
+
+- [ ] **Step 12: 通ることを確認する**
+
+```bash
+docker compose run --rm frontend npx vitest run src/app/App.auth.test.tsx
+make test-frontend
+```
+
+Expected: 両方 PASS。
+
+- [ ] **Step 13: コミット**
 
 ```bash
 git add frontend/src/features/menu/WeeklyPage.tsx frontend/src/features/menu/WeeklyPage.test.tsx \
-  frontend/src/features/menu/SavedWeeklyPage.tsx frontend/src/features/menu/SavedWeeklyPage.test.tsx
+  frontend/src/features/menu/SavedWeeklyPage.tsx frontend/src/features/menu/SavedWeeklyPage.test.tsx \
+  frontend/src/app/App.tsx frontend/src/app/App.auth.test.tsx
 git commit -F - <<'EOF'
 feat: 週間献立と保存一覧のプレミアム限定を外す
 
@@ -473,6 +525,11 @@ PremiumLock による差し替えをやめ、プランを見ずに本文を描�
 保存一覧の取得条件はプランからログイン有無に変えた。この画面は
 RequireAuth の内側にあるが、判定が付くまでの一瞬に未認証で取りに行くと
 401 を無駄に踏むため。
+
+/weekly は RequireAuth で包んだ。suggest-weekly と reroll-day は backend で
+RequireAuth に守られており、プレミアム限定を外しても未ログインでは 401 になる。
+包まずにゲートだけ外すと、未ログインの人にフォームが見えて送信で初めて
+失敗する画面になるため。
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
@@ -1068,8 +1125,8 @@ Expected: すべて PASS。
 make up
 ```
 
-1. 未ログインで `/weekly` を開き、献立が提案できる
-2. ログインして週間献立を保存でき、`/saved-weekly` に出る
+1. 未ログインで `/weekly` を開くとログイン画面へ送られる
+2. ログインして週間献立が提案でき、保存でき、`/saved-weekly` に出る
 3. 買い物リストのチェックがリロード後も残る
 4. フッターと画面のどこにも料金・加入への導線が無い
 5. `/pricing` `/checkout` `/account` `/legal/tokushoho` が 404 になる
@@ -1103,6 +1160,7 @@ EOF
 - [ ] `make lint` が通る
 - [ ] `docker compose run --rm frontend npx playwright test` が通る
 - [ ] `/pricing` `/checkout` `/account` `/legal/tokushoho` が 404
-- [ ] 未ログインで週間献立が作れ、ログインすれば保存・買い物リストの永続化ができる
+- [ ] 未ログインで `/weekly` を開くとログイン画面へ送られる
+- [ ] ログインすればプランによらず週間献立の提案・保存・買い物リストの永続化ができる
 - [ ] 画面のどこにも料金・加入への導線が無い
 - [ ] backend の課金配管（`/billing/*`・`cmd/grant`・`subscriptions` テーブル）は残っている
