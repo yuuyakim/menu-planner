@@ -6,7 +6,6 @@ import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
 import { useSessionState } from '../../hooks/useSessionState'
-import { useCurrentUser } from '../auth/useCurrentUser'
 import {
   deleteSavedWeeklyMenu,
   fetchSavedWeeklyMenus,
@@ -50,8 +49,6 @@ export function SavedWeeklyPage() {
   // （GET /weekly-menus/:id/shopping-list）を使うようになる。
   const [, setSavedId] = useSessionState<string | null>(savedIdKey, null)
 
-  const { user } = useCurrentUser()
-
   const {
     data: saved,
     isPending,
@@ -59,9 +56,6 @@ export function SavedWeeklyPage() {
   } = useQuery({
     queryKey: savedWeeklyMenusQueryKey,
     queryFn: fetchSavedWeeklyMenus,
-    // 未ログインでは 401 になるため、無駄打ちを避けて取得しない。
-    // （この画面は RequireAuth の内側だが、判定が付くまでの一瞬がある）
-    enabled: user != null,
   })
 
   const remove = useMutation({

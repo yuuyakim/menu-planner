@@ -107,9 +107,9 @@ export function ShoppingListPage() {
   // 保存済みの週のときだけ、チェックはサーバに残る。
   // 未保存の週はその場限りで、画面を離れると消える。
   //
-  // savedId は保存時か保存済みの週を開いたときにだけ入り、ログアウトで
-  // clearSessionState() により消える。したがって savedId != null は
-  // ログイン済みを含意する。
+  // savedId は保存時か保存済みの週を開いたときにだけ入り、明示的なログアウト
+  // （useLogout / LoginPage の clearSessionState()）では消える。ただし
+  // リフレッシュトークンが黙って失効した場合はここには残り続ける。
   const canPersist = savedId != null
   const queryClient = useQueryClient()
 
