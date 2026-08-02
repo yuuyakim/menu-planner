@@ -8,8 +8,8 @@ import { renderWithProviders } from '../../test/render'
 import { server } from '../../test/server'
 import { ShoppingListPage } from './ShoppingListPage'
 
-// respondMe は現在のユーザーの応答を仕込む。プランだけを差し替える
-// （AuthMenu.test.tsx と同じ流儀）。
+// respondMe は現在のユーザーの応答を仕込む。plan は canPersist の判定に使われないが、
+// 型として必須のため 'free' で揃える（WeeklyPage.test.tsx / SavedWeeklyPage.test.tsx と同じ流儀）。
 function respondMe(plan: 'free' | 'premium') {
   server.use(
     http.get('/api/v1/auth/me', () =>
@@ -171,11 +171,11 @@ describe('ShoppingListPage', () => {
     expect(bodies[0]).toEqual({ menuIds: [nikujaga.id] })
   })
 
-  it('premium が保存済みの週でチェックすると PUT で永続化する', async () => {
+  it('保存済みの週でチェックすると PUT で永続化する', async () => {
     const savedId = '11111111-1111-1111-1111-111111111111'
     withWeek([nikujaga])
     withSavedId(savedId)
-    respondMe('premium')
+    respondMe('free')
     server.use(
       http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
         HttpResponse.json({
@@ -308,11 +308,11 @@ describe('ShoppingListPage', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('premium が品目を手で足すと manual として PUT に載る', async () => {
+  it('保存済みの週で品目を手で足すと manual として PUT に載る', async () => {
     const savedId = '11111111-1111-1111-1111-111111111111'
     withWeek([nikujaga])
     withSavedId(savedId)
-    respondMe('premium')
+    respondMe('free')
     server.use(
       http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
         HttpResponse.json({ items: [] }),
@@ -344,11 +344,11 @@ describe('ShoppingListPage', () => {
     })
   })
 
-  it('premium が導出品目を消すと hidden として PUT に載る', async () => {
+  it('保存済みの週で導出品目を消すと hidden として PUT に載る', async () => {
     const savedId = '11111111-1111-1111-1111-111111111111'
     withWeek([nikujaga])
     withSavedId(savedId)
-    respondMe('premium')
+    respondMe('free')
     server.use(
       http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
         HttpResponse.json({
@@ -394,7 +394,7 @@ describe('ShoppingListPage', () => {
     const savedId = '11111111-1111-1111-1111-111111111111'
     withWeek([nikujaga])
     withSavedId(savedId)
-    respondMe('premium')
+    respondMe('free')
     server.use(
       http.get(`/api/v1/weekly-menus/${savedId}/shopping-list`, () =>
         HttpResponse.json({
