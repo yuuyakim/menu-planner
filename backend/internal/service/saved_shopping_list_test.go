@@ -77,25 +77,35 @@ func setupForTest(t *testing.T, plan domain.Plan, derived []service.ShoppingItem
 	return svc, overrides, uid.String(), id.String()
 }
 
-func TestSavedShoppingListService_For_freeは導出そのまま(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestSavedShoppingListService_For_freeも差分を重ねる(t *testing.T) {
 	t.Parallel()
 	derived := []service.ShoppingItem{
 		ing("にんじん", "にんじん", domain.CategoryVegetable),
 		ing("豚肉", "ぶたにく", domain.CategoryMeat),
+		ing("たまねぎ", "たまねぎ", domain.CategoryVegetable),
 	}
 	svc, overrides, userID, weekID := setupForTest(t, domain.PlanFree, derived)
-	// free でも差分行があっても無視される。
 	wid, _ := domain.ParseSavedWeeklyMenuID(weekID)
 	overrides.byWeek[wid] = []domain.ShoppingListOverride{
 		{SavedWeeklyMenuID: wid, Name: "にんじん", Category: domain.CategoryVegetable, Origin: domain.OriginDerived, Checked: true},
+		{SavedWeeklyMenuID: wid, Name: "たまねぎ", Category: domain.CategoryVegetable, Origin: domain.OriginDerived, Hidden: true},
+		{SavedWeeklyMenuID: wid, Name: "牛乳", Category: domain.CategoryDairyEgg, Origin: domain.OriginManual, Checked: false},
 	}
 
 	items, err := svc.For(context.Background(), userID, weekID)
 	require.NoError(t, err)
-	require.Len(t, items, 2)
+
+	byName := map[string]service.SavedShoppingItem{}
 	for _, it := range items {
-		require.False(t, it.Checked, "free は差分を重ねないので全て未チェック")
+		byName[it.Name] = it
 	}
+	require.True(t, byName["にんじん"].Checked, "チェックが重なる")
+	require.Contains(t, byName, "たまねぎ", "hidden な導出品目も再構築用にGETへ残す")
+	require.True(t, byName["たまねぎ"].Hidden, "hidden フラグが立つ")
+	require.Contains(t, byName, "牛乳", "手動品目が足される")
+	require.Equal(t, domain.OriginManual, byName["牛乳"].Origin)
+	require.Contains(t, byName, "豚肉", "差分の無い導出品目は残る")
 }
 
 func TestSavedShoppingListService_For_premiumは差分を重ねる(t *testing.T) {
@@ -153,12 +163,15 @@ func manualInput(name string) service.OverrideInput {
 	return service.OverrideInput{Name: name, Category: "other", Origin: "manual"}
 }
 
-func TestReplaceOverrides_freeは403(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestReplaceOverrides_freeも保存する(t *testing.T) {
 	t.Parallel()
-	svc, _, userID, weekID := setupForTest(t, domain.PlanFree, nil)
+	svc, overrides, userID, weekID := setupForTest(t, domain.PlanFree, nil)
 	err := svc.ReplaceOverrides(context.Background(), userID, weekID,
 		[]service.OverrideInput{manualInput("牛乳")})
-	require.ErrorIs(t, err, service.ErrPremiumRequired)
+	require.NoError(t, err)
+	wid, _ := domain.ParseSavedWeeklyMenuID(weekID)
+	require.Len(t, overrides.byWeek[wid], 1)
 }
 
 func TestReplaceOverrides_premiumは保存する(t *testing.T) {

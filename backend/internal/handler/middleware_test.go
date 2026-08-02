@@ -49,7 +49,9 @@ func TestRequirePremium_プレミアムは通す(t *testing.T) {
 	require.True(t, *called)
 }
 
-func TestRequirePremium_freeは403(t *testing.T) {
+// サブスク撤廃後、RequirePremium は誰も止めない。ミドルウェアは復活に備えて
+// 配線ごと残してあるため、「free も通す」ことを検証し続ける。
+func TestRequirePremium_freeも通す(t *testing.T) {
 	t.Parallel()
 
 	e, tokens, called := premiumRoute(t, fakeEntitlements{plan: domain.PlanFree})
@@ -61,8 +63,8 @@ func TestRequirePremium_freeは403(t *testing.T) {
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
-	require.False(t, *called)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, *called)
 }
 
 // userID がコンテキストに無い状態（配線ミス・RequireAuth を通していない）を

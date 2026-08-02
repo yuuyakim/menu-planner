@@ -1134,13 +1134,14 @@ func TestSuggestWeekly_未ログインは401(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestSuggestWeekly_freeは403(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestSuggestWeekly_freeも200(t *testing.T) {
 	t.Parallel()
 
 	rec := doWeeklyAuthzRequest(t, &fakeMenuService{week: testWeek()},
 		fakeEntitlements{plan: domain.PlanFree}, true)
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestSuggestWeekly_premiumは200(t *testing.T) {
@@ -1184,13 +1185,14 @@ func TestRerollDay_未ログインは401(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestRerollDay_freeは403(t *testing.T) {
+// サブスク撤廃により free も通る。配管は残しているため検証も残す。
+func TestRerollDay_freeも200(t *testing.T) {
 	t.Parallel()
 
 	rec := doRerollDayAuthzRequest(t, &fakeMenuService{rerolled: domain.DayMenu{Day: 1, Menu: *testMenu()}},
 		fakeEntitlements{plan: domain.PlanFree}, true)
 
-	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestRerollDay_premiumは200(t *testing.T) {
