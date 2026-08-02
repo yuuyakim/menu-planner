@@ -1797,35 +1797,12 @@ cd backend && go test ./internal/handler/ -run TestResolveHandler -v
 ```
 Expected: PASS
 
-- [ ] **Step 6: main.go に結線する**
+> **main.go への結線はこのタスクでは行わない。** `gateway.NewResolver` が
+> まだ存在せずビルドが通らないため、Task 9 Step 7 でまとめて結線する。
+> このタスクの完了条件は「ハンドラ単体のテストが緑」であり、
+> ルートが本番サーバに生えていることは含まない。
 
-`backend/cmd/server/main.go` に追加（`ingredientHandler` の近く）:
-
-```go
-	resolutionRepo := repository.NewResolutionRepository(pool)
-	resolveGateway, err := gateway.NewResolver(gateway.ResolverConfig{
-		Provider: os.Getenv("INGREDIENT_RESOLVER_PROVIDER"),
-		APIKey:   os.Getenv("INGREDIENT_RESOLVER_API_KEY"),
-	})
-	if err != nil {
-		slog.Error("食材解決の設定に失敗しました", "error", err)
-		os.Exit(1)
-	}
-	slog.Info("食材解決を設定しました", "provider", os.Getenv("INGREDIENT_RESOLVER_PROVIDER"))
-
-	resolveSvc := service.NewIngredientResolveService(ingredientRepo, resolutionRepo, resolveGateway)
-	resolveHandler := handler.NewIngredientResolveHandler(resolveSvc)
-```
-
-ルート登録（既存の `ingredientHandler.RegisterRoutes(e, searchLimit)` の近く）:
-
-```go
-	resolveHandler.RegisterRoutes(e, searchLimit)
-```
-
-> `gateway.NewResolver` は Task 9 で作る。このステップでは**先に Task 9 を済ませてから**結線すること。順序を守らないとビルドが通らない。
-
-- [ ] **Step 7: コミット**
+- [ ] **Step 6: コミット**
 
 ```bash
 git add backend/internal/handler/ingredient_resolve.go backend/internal/handler/ingredient_resolve_test.go
@@ -2152,12 +2129,37 @@ cd backend && go mod tidy && go build ./... && go test ./internal/gateway/ -v
 ```
 Expected: PASS
 
-- [ ] **Step 7: main.go に結線する（Task 8 Step 6 の内容）**
+- [ ] **Step 7: main.go に結線する**
 
-Task 8 Step 6 のコードを `main.go` に入れ、ビルドが通ることを確認する。
+`backend/cmd/server/main.go` に追加（`ingredientHandler` の近く）:
+
+```go
+	resolutionRepo := repository.NewResolutionRepository(pool)
+	resolveGateway, err := gateway.NewResolver(gateway.ResolverConfig{
+		Provider: os.Getenv("INGREDIENT_RESOLVER_PROVIDER"),
+		APIKey:   os.Getenv("INGREDIENT_RESOLVER_API_KEY"),
+	})
+	if err != nil {
+		slog.Error("食材解決の設定に失敗しました", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("食材解決を設定しました", "provider", os.Getenv("INGREDIENT_RESOLVER_PROVIDER"))
+
+	resolveSvc := service.NewIngredientResolveService(ingredientRepo, resolutionRepo, resolveGateway)
+	resolveHandler := handler.NewIngredientResolveHandler(resolveSvc)
+```
+
+ルート登録（既存の `ingredientHandler.RegisterRoutes(e, searchLimit)` の近く）:
+
+```go
+	resolveHandler.RegisterRoutes(e, searchLimit)
+```
+
+`ingredientRepo` は既存の変数名。`main.go` で食材リポジトリを受けている実際の
+変数名を確認して合わせること。
 
 ```bash
-cd backend && go build ./... && INGREDIENT_RESOLVER_PROVIDER=stub go test ./... 
+cd backend && go build ./... && INGREDIENT_RESOLVER_PROVIDER=stub go test ./...
 ```
 
 - [ ] **Step 8: DEPLOY.md に環境変数を追記**
