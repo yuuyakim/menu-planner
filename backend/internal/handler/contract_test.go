@@ -391,7 +391,7 @@ func TestContract_ShoppingList_Problem(t *testing.T) {
 }
 
 // newContractSavedShoppingListApp は保存済み週の買い物リストの契約検証用アプリを組み立てる。
-// GET/PUT は premium 限定（Task 5）のため ent を渡す。
+// ハンドラ生成に entitlements が要るため ent を渡す。RequirePremium は今は常に通る。
 func newContractSavedShoppingListApp(
 	t *testing.T, svc handler.SavedShoppingListUseCase, ent fakeEntitlements,
 ) (*echo.Echo, *auth.JWT) {

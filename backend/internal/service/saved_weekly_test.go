@@ -327,7 +327,7 @@ func TestSavedWeekly_50件で断る(t *testing.T) {
 
 // 上限の文言は「次に何をすればよいか」まで含めてサーバが組み立てる。
 // フロントは detail をそのまま出すだけなので、ここが唯一の情報源になる
-// （フロントが件数を持つと premium に「10件まで」と出る。spec.md 2.11）。
+// （フロントが件数を持つと上限値を変えたときに古い数値のまま出続ける。spec.md 2.11）。
 func TestSavedWeekly_上限の文言に次の行動が入る(t *testing.T) {
 	t.Parallel()
 
