@@ -11,7 +11,6 @@ import { HistoryPage } from '../features/history/HistoryPage'
 import { HomePage } from '../features/home/HomePage'
 import { PrivacyPage } from '../features/legal/PrivacyPage'
 import { TermsPage } from '../features/legal/TermsPage'
-import { TokushohoPage } from '../features/legal/TokushohoPage'
 import { MenuDetailPage } from '../features/menu/MenuDetailPage'
 import { SavedWeeklyPage } from '../features/menu/SavedWeeklyPage'
 import { SearchByIngredientsPage } from '../features/menu/SearchByIngredientsPage'
@@ -133,9 +132,8 @@ export function App() {
               }
             />
             <Route path="/login" element={<LoginPage />} />
-            {/* 法務3ページは/loginと同じく未認証でも見える必要があるため、
+            {/* 法務2ページは/loginと同じく未認証でも見える必要があるため、
                 RequireAuth で包まない（表示義務のあるページのため）。 */}
-            <Route path="/legal/tokushoho" element={<TokushohoPage />} />
             <Route path="/legal/terms" element={<TermsPage />} />
             <Route path="/legal/privacy" element={<PrivacyPage />} />
             {/* どれにも一致しないパスは404画面に落とす。 */}

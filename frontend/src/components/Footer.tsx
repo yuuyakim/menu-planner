@@ -3,7 +3,6 @@ import { Link } from 'react-router'
 // footerLinks は常設の導線。法務ページは表示義務があり、
 // どの画面からでも辿れる必要がある。
 const footerLinks = [
-  { to: '/legal/tokushoho', label: '特定商取引法に基づく表記' },
   { to: '/legal/terms', label: '利用規約' },
   { to: '/legal/privacy', label: 'プライバシーポリシー' },
 ] as const

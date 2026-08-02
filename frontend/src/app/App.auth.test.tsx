@@ -103,7 +103,13 @@ describe('未認証のとき', () => {
     ).not.toBeInTheDocument()
   })
 
-  it.each(['/checkout', '/checkout/complete', '/account', '/pricing'])(
+  it.each([
+    '/checkout',
+    '/checkout/complete',
+    '/account',
+    '/pricing',
+    '/legal/tokushoho',
+  ])(
     '%s は撤廃済みで 404 になる',
     async (path) => {
       renderWithProviders(<App />, { route: path })
