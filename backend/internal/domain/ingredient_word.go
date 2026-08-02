@@ -11,7 +11,7 @@ import (
 // 「・」を入れるのは、買い物メモの書き方として一般的なため。既存の画面も
 // 「使える食材: A・B・C」と中黒で並べている。区切り文字を含む食材名は
 // マスタに存在しないため、誤分割の恐れはない。
-const ingredientWordSeparators = "、,，\n\r\t 　・"
+const ingredientWordSeparators = "、,，\n 　・"
 
 // SplitIngredientWords は入力テキストを語に分割する。
 //
