@@ -92,3 +92,20 @@ func (r *ResolutionRepository) Save(
 	}
 	return nil
 }
+
+// DeleteUnresolved は「マスタに無い」と保存された行だけを消す。
+//
+// 食材マスタに新しい食材を足すと、過去に未解決として保存した語が
+// 解決可能になる（設計 5章）。TTL を持たない設計なので、
+// マスタ更新のたびにこれを流して聞き直させる。
+//
+// **解決済みの行は消さない。** 食材の別名は変わらないため、
+// 消すと LLM への問い合わせが無駄に増えるだけになる。
+func (r *ResolutionRepository) DeleteUnresolved(ctx context.Context) (int64, error) {
+	tag, err := r.pool.Exec(ctx,
+		`DELETE FROM ingredient_resolutions WHERE ingredient_id IS NULL`)
+	if err != nil {
+		return 0, fmt.Errorf("未解決キャッシュの削除に失敗しました: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}

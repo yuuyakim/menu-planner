@@ -257,6 +257,19 @@ curl -s https://kondatekun.yuuyakim.com/ | grep -o '<script[^>]*cloudflareinsigh
 タグが返れば注入されている。ブラウザ側では DevTools の Network に `/cdn-cgi/rum` への送信が出る
 （`beacon.min.js` 自体は JS リソースなので Fetch/XHR フィルタには出ない）。
 
+## 運用: 食材マスタを更新したら未解決キャッシュを消す
+
+食材マスタ（`backend/db/seeds/ingredients.sql`）に食材を足したら、次を流す。
+
+```bash
+make purge-unresolved   # 本番は DATABASE_URL=<Neon> go run ./cmd/resolutions purge-unresolved
+```
+
+`ingredient_resolutions` は「この語はマスタに無い」も保存する（保存しないと
+毎回LLMに聞き直してコストがかかる）。**食材を足すと、その保存が古い答えになる。**
+解決キャッシュは TTL を持たない設計なので、シード更新のたびに手で消す。
+消すのは未解決の行だけで、解決済みの行は残る（食材の別名は変わらないため）。
+
 ## ロールバック / 注意
 - backend は Cloud Run のリビジョンで即ロールバック可能。
 - Neon はブランチ/バックアップ機能あり。マイグレーションは `go run ./cmd/migrate down` で1つ戻せる。

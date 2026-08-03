@@ -63,6 +63,11 @@ grant: ## プレミアムを付与する (make grant EMAIL=foo@example.com MONTH
 revoke: ## プレミアムを即時取り消す (make revoke EMAIL=foo@example.com)
 	docker compose run --rm backend go run ./cmd/grant -email=$(EMAIL) -revoke
 
+# 食材マスタに食材を足すと、過去に「マスタに無い」と保存した語が解決可能になる。
+# 解決キャッシュは TTL を持たないので、シード更新のたびに手で流す。
+purge-unresolved: ## 食材マスタ更新後に、未解決の解決キャッシュを消す
+	docker compose run --rm backend go run ./cmd/resolutions purge-unresolved
+
 # ローカルでは -race を使わない（cgo=gcc が必要なため）。CI の Linux 上では有効化している。
 test-backend: ## Goのテストを実行する
 	cd backend && go test ./... -cover

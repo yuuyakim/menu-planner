@@ -92,4 +92,32 @@ func TestResolutionRepository(t *testing.T) {
 			t.Errorf("空であるべきです: got %v", got)
 		}
 	})
+
+	t.Run("未解決の行だけを消せる", func(t *testing.T) {
+		if err := repo.Save(ctx, "けすたいしょう", nil); err != nil {
+			t.Fatalf("Save が失敗しました: %v", err)
+		}
+		if err := repo.Save(ctx, "のこすたいしょう", &id); err != nil {
+			t.Fatalf("Save が失敗しました: %v", err)
+		}
+
+		n, err := repo.DeleteUnresolved(ctx)
+		if err != nil {
+			t.Fatalf("DeleteUnresolved が失敗しました: %v", err)
+		}
+		if n < 1 {
+			t.Errorf("1件以上消えるべきです: %d", n)
+		}
+
+		got, err := repo.FindByWords(ctx, []string{"けすたいしょう", "のこすたいしょう"})
+		if err != nil {
+			t.Fatalf("FindByWords が失敗しました: %v", err)
+		}
+		if _, ok := got["けすたいしょう"]; ok {
+			t.Error("未解決の行が残っています")
+		}
+		if _, ok := got["のこすたいしょう"]; !ok {
+			t.Error("解決済みの行まで消えています")
+		}
+	})
 }
