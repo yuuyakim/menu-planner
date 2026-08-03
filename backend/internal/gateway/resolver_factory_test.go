@@ -43,6 +43,25 @@ func TestNewResolver(t *testing.T) {
 		}
 	})
 
+	t.Run("deepseek はAPIキーが要る", func(t *testing.T) {
+		_, err := gateway.NewResolver(gateway.ResolverConfig{Provider: "deepseek"})
+		if !errors.Is(err, gateway.ErrMissingResolverAPIKey) {
+			t.Errorf("ErrMissingResolverAPIKey を返すべきです: %v", err)
+		}
+	})
+
+	t.Run("deepseek を組み立てられる", func(t *testing.T) {
+		got, err := gateway.NewResolver(gateway.ResolverConfig{
+			Provider: "deepseek", APIKey: "sk-dummy",
+		})
+		if err != nil {
+			t.Fatalf("NewResolver が失敗しました: %v", err)
+		}
+		if got == nil {
+			t.Fatal("nil が返りました")
+		}
+	})
+
 	t.Run("未知のプロバイダはエラー", func(t *testing.T) {
 		_, err := gateway.NewResolver(gateway.ResolverConfig{Provider: "gpt"})
 		if !errors.Is(err, gateway.ErrUnknownResolverProvider) {

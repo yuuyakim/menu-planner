@@ -17,6 +17,8 @@ const (
 	ResolverProviderStub = "stub"
 	// ResolverProviderClaude は Claude Haiku 4.5 を使う。
 	ResolverProviderClaude = "claude"
+	// ResolverProviderDeepSeek は DeepSeek を使う。
+	ResolverProviderDeepSeek = "deepseek"
 )
 
 // ResolverConfig は食材解決ゲートウェイの設定。
@@ -38,9 +40,11 @@ func NewResolver(cfg ResolverConfig) (service.IngredientResolveGateway, error) {
 		return NewStubResolver(nil), nil
 	case ResolverProviderClaude:
 		return NewClaudeResolver(cfg.APIKey)
+	case ResolverProviderDeepSeek:
+		return NewDeepSeekResolver(cfg.APIKey)
 	default:
-		return nil, fmt.Errorf("%w: %q（%s または %s）",
+		return nil, fmt.Errorf("%w: %q（%s / %s / %s）",
 			ErrUnknownResolverProvider, cfg.Provider,
-			ResolverProviderStub, ResolverProviderClaude)
+			ResolverProviderStub, ResolverProviderClaude, ResolverProviderDeepSeek)
 	}
 }
