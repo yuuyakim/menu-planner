@@ -65,6 +65,8 @@ var problemMapping = []struct {
 	{service.ErrInvalidMenuIDs, http.StatusBadRequest, "invalid-menu-ids", "献立の指定が不正です"},
 	// 手持ちの食材の指定が0件（spec.md 5.6）。
 	{service.ErrInvalidIngredientIDs, http.StatusBadRequest, "invalid-ingredient-ids", "食材の指定が不正です"},
+	// 手持ちの食材のテキストに語が1つも無い（区切り文字と空白だけなど）。
+	{service.ErrEmptyResolveText, http.StatusBadRequest, "empty-resolve-text", "食材のテキストが空です"},
 	// 指定された食材の中に存在しないものがある。黙って無視すると、
 	// 利用者の意図と違う条件の結果を正しい答えとして返すことになるため 404 で知らせる。
 	{service.ErrIngredientNotFound, http.StatusNotFound, "ingredient-not-found", "指定された食材が見つかりません"},
