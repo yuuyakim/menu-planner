@@ -35,9 +35,9 @@ func SplitIngredientWords(text string) []string {
 
 // NormalizeIngredientWord は1語を突き合わせ用の形に正規化する（設計 3.4）。
 //
-//	1. 前後の空白を除去
-//	2. NFKC 正規化（全角英数→半角、半角カナ→全角カナ）
-//	3. カタカナ → ひらがな
+//  1. 前後の空白を除去
+//  2. NFKC 正規化（全角英数→半角、半角カナ→全角カナ）
+//  3. カタカナ → ひらがな
 //
 // 3を入れるのは ingredients.name_kana に当たるようにするため。
 // 「タマネギ」→「たまねぎ」で name_kana と一致し、LLM を呼ばずに解決できる。
