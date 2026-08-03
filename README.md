@@ -95,6 +95,8 @@ make seed                 # 献立マスタ380件を投入
 | `JWT_SECRET` | JWT 署名鍵。**本番は `openssl rand -base64 32` で生成** | （開発用のダミー） |
 | `SEARCH_API_PROVIDER` | レシピ検索の実装 | `brave` \| `stub` |
 | `SEARCH_API_KEY` | Brave Search API キー（`stub` なら空でよい） | — |
+| `INGREDIENT_RESOLVER_PROVIDER` | 手持ちの食材テキストの解決（表記揺れ吸収）の実装。**空だと起動に失敗** | `claude` \| `stub` |
+| `INGREDIENT_RESOLVER_API_KEY` | Anthropic のキー（`stub` なら空でよい） | — |
 | `FRONTEND_ORIGIN` | CORS で許可する唯一のオリジン | `http://localhost:5173` |
 | `GOOGLE_CLIENT_ID` / `_SECRET` / `_REDIRECT_URL` | Google SSO（空でもメール認証は動く） | — |
 | `AUTH_RATE_LIMIT_PER_MIN` | 認証エンドポイントの上限（IP/分、0で無制限） | 本番 `10` / compose `0` |

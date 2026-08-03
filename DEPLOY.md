@@ -48,6 +48,8 @@ flowchart LR
 | `JWT_SECRET` | ダミー | **`openssl rand -base64 32` の実値**（Secret Manager 推奨） |
 | `SEARCH_API_PROVIDER` | `stub` | `brave`（または当面 `stub`） |
 | `SEARCH_API_KEY` | 空 | Brave のキー（`brave` の場合） |
+| `INGREDIENT_RESOLVER_PROVIDER` | `stub` | `claude`（または当面 `stub`）。**空にすると起動に失敗する** |
+| `INGREDIENT_RESOLVER_API_KEY` | 空 | Anthropic のキー（`claude` の場合は必須） |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | **公開URL**（`https://kondatekun.yuuyakim.com`） |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | 空可 | 本番のOAuthクライアント |
 | `GOOGLE_REDIRECT_URL` | localhost | **`https://kondatekun.yuuyakim.com/api/v1/auth/google/callback`**（同一オリジン経由） |

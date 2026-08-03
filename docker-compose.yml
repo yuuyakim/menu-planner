@@ -29,6 +29,8 @@ services:
       GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-http://localhost:8080/api/v1/auth/google/callback}
       SEARCH_API_PROVIDER: ${SEARCH_API_PROVIDER:-stub}
       SEARCH_API_KEY: ${SEARCH_API_KEY:-}
+      INGREDIENT_RESOLVER_PROVIDER: ${INGREDIENT_RESOLVER_PROVIDER:-stub}
+      INGREDIENT_RESOLVER_API_KEY: ${INGREDIENT_RESOLVER_API_KEY:-}
       # フロントの Vite プロキシ経由だと全リクエストが単一IPに集約され、
       # 正当な操作でもレート制限に達してしまう。開発・E2Eでは 0（無制限）で切る。
       # 本番は実際のクライアントIPが分かる構成で spec 値（10 / 60）を設定する。

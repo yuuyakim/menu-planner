@@ -146,6 +146,21 @@ func run() error {
 	ingredientSvc := service.NewIngredientService(ingredientRepo, menuRepo)
 	ingredientHandler := handler.NewIngredientHandler(shoppingSvc, ingredientSvc)
 
+	// 手持ちの食材のテキスト入力。①完全一致 →②解決キャッシュ →③LLM の順に解く。
+	resolutionRepo := repository.NewResolutionRepository(pool)
+	resolveGateway, err := gateway.NewResolver(gateway.ResolverConfig{
+		Provider: os.Getenv("INGREDIENT_RESOLVER_PROVIDER"),
+		APIKey:   os.Getenv("INGREDIENT_RESOLVER_API_KEY"),
+	})
+	if err != nil {
+		slog.Error("食材解決の設定に失敗しました", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("食材解決を設定しました", "provider", os.Getenv("INGREDIENT_RESOLVER_PROVIDER"))
+
+	resolveSvc := service.NewIngredientResolveService(ingredientRepo, resolutionRepo, resolveGateway)
+	resolveHandler := handler.NewIngredientResolveHandler(resolveSvc)
+
 	// 保存済み週の買い物リストは、既存の導出（shoppingSvc）に差分（overrideRepo）を
 	// 重ねる。所有者検証は savedWeeklyRepo、premium 判定は entitlementSvc に委ねる。
 	overrideRepo := repository.NewShoppingListOverrideRepository(pool)
@@ -203,6 +218,7 @@ func run() error {
 	menuHandler.RegisterRoutes(e, searchLimit)
 	// 食材・買い物リストは検索系と同じ扱い（未認証で使え、検索の上限を適用）。
 	ingredientHandler.RegisterRoutes(e, searchLimit)
+	resolveHandler.RegisterRoutes(e, searchLimit)
 	shoppingHandler.RegisterRoutes(e, searchLimit)
 	authHandler.RegisterRoutes(e, authLimit)
 	historyHandler.RegisterRoutes(e)

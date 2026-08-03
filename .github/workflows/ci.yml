@@ -214,12 +214,13 @@ jobs:
           # 名前を決め打ちせず db コンテナから引く。
           network=$(docker inspect "$(docker compose ps -q db)" \
             --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')
-          # SEARCH_API_PROVIDER はバイナリ側に既定が無く、未設定だと起動時に落ちる
-          # （既定値を与えていたのは compose だった）。ローカル検証で判明。
+          # SEARCH_API_PROVIDER / INGREDIENT_RESOLVER_PROVIDER はバイナリ側に既定が無く、
+          # 未設定だと起動時に落ちる（既定値を与えていたのは compose だった）。
           docker run -d --name backend-prod --network "$network" \
             -e DATABASE_URL='postgres://app:password@db:5432/menu_planner?sslmode=disable' \
             -e JWT_SECRET='ci-only-secret' \
             -e SEARCH_API_PROVIDER='stub' \
+            -e INGREDIENT_RESOLVER_PROVIDER='stub' \
             -e STRIPE_SECRET_KEY='sk_test_ci_placeholder' \
             -e STRIPE_WEBHOOK_SECRET='whsec_ci_placeholder' \
             -e STRIPE_PRICE_ID='price_ci_placeholder' \
