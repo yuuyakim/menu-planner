@@ -133,8 +133,75 @@ func (s *IngredientResolveService) Resolve(
 		return result, nil
 	}
 
+	// ② 解決キャッシュ。①で解けなかった語だけを引く。
+	pending = s.applyCache(ctx, pending, byName, seen, &result)
+	if len(pending) == 0 {
+		// キャッシュで全部片付いた。LLM を呼ばずに返す。
+		return result, nil
+	}
+
 	s.resolveByGateway(ctx, pending, byName, items, seen, &result)
 	return result, nil
+}
+
+// applyCache はキャッシュで解決できる語を result に足し、残りを返す。
+//
+// キャッシュの引きに失敗しても機能は止めない。③で聞き直すだけで、
+// 余分なコストがかかるものの結果は同じになる。
+func (s *IngredientResolveService) applyCache(
+	ctx context.Context,
+	pending []resolveEntry,
+	byName map[string]domain.Ingredient,
+	seen map[domain.IngredientID]bool,
+	result *ResolveResult,
+) []resolveEntry {
+	words := make([]string, 0, len(pending))
+	for _, e := range pending {
+		words = append(words, e.normalized)
+	}
+
+	cached, err := s.cache.FindByWords(ctx, words)
+	if err != nil {
+		slog.WarnContext(ctx, "解決キャッシュの取得に失敗しました", "error", err)
+		return pending
+	}
+
+	rest := make([]resolveEntry, 0, len(pending))
+	for _, e := range pending {
+		id, ok := cached[e.normalized]
+		if !ok {
+			// まだ問い合わせていない語。③へ回す。
+			rest = append(rest, e)
+			continue
+		}
+		if id == nil {
+			// 「マスタに無い」と確定済み。聞き直さない。
+			result.Unresolved = append(result.Unresolved, e.original)
+			continue
+		}
+		ing, found := findByID(byName, *id)
+		if !found {
+			// 食材が消えた直後などに起こりうる。③へ回して聞き直す。
+			rest = append(rest, e)
+			continue
+		}
+		if !seen[ing.ID] {
+			seen[ing.ID] = true
+			result.Resolved = append(result.Resolved, ResolvedWord{Word: e.original, Ingredient: ing})
+		}
+	}
+	return rest
+}
+
+// findByID は名前索引の中から食材IDで1件引く。
+// 索引は名前引き用なので、IDでの逆引きはここで線形に探す（166件）。
+func findByID(byName map[string]domain.Ingredient, id domain.IngredientID) (domain.Ingredient, bool) {
+	for _, ing := range byName {
+		if ing.ID == id {
+			return ing, true
+		}
+	}
+	return domain.Ingredient{}, false
 }
 
 // resolveByGateway は未解決語を LLM に問い合わせ、結果を result に足す。

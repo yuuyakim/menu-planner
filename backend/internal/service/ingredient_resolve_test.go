@@ -237,3 +237,56 @@ func TestResolve_Gateway(t *testing.T) {
 		}
 	})
 }
+
+func TestResolve_Cache(t *testing.T) {
+	ctx := context.Background()
+	items := testCatalog(t)
+	porkID := items[1].ID // 豚肉
+
+	t.Run("キャッシュにあればGatewayを呼ばない", func(t *testing.T) {
+		gw := &countingResolver{mapping: map[string]string{"豚こま": "豚肉"}}
+		cache := &fakeResolutionRepo{data: map[string]*domain.IngredientID{"豚こま": &porkID}}
+		svc := service.NewIngredientResolveService(&fakeIngredientRepo{all: items}, cache, gw)
+
+		got, err := svc.Resolve(ctx, "豚こま")
+		if err != nil {
+			t.Fatalf("Resolve が失敗しました: %v", err)
+		}
+		if gw.calls != 0 {
+			t.Errorf("Gateway が呼ばれています: %d回", gw.calls)
+		}
+		if len(got.Resolved) != 1 || got.Resolved[0].Ingredient.Name != "豚肉" {
+			t.Errorf("キャッシュから解決するべきです: %+v", got.Resolved)
+		}
+	})
+
+	t.Run("未解決と確定済みならGatewayを呼ばない", func(t *testing.T) {
+		gw := &countingResolver{mapping: map[string]string{}}
+		cache := &fakeResolutionRepo{data: map[string]*domain.IngredientID{"まつたけ": nil}}
+		svc := service.NewIngredientResolveService(&fakeIngredientRepo{all: items}, cache, gw)
+
+		got, _ := svc.Resolve(ctx, "マツタケ")
+		if gw.calls != 0 {
+			t.Errorf("該当なしと確定済みなら聞き直すべきではありません: %d回", gw.calls)
+		}
+		if len(got.Unresolved) != 1 {
+			t.Errorf("未解決に入るべきです: %+v", got)
+		}
+	})
+
+	t.Run("キャッシュに無い語だけがGatewayに渡る", func(t *testing.T) {
+		gw := &countingResolver{mapping: map[string]string{"牛こま": "豚肉"}}
+		cache := &fakeResolutionRepo{data: map[string]*domain.IngredientID{"豚こま": &porkID}}
+		svc := service.NewIngredientResolveService(&fakeIngredientRepo{all: items}, cache, gw)
+
+		if _, err := svc.Resolve(ctx, "豚こま、牛こま"); err != nil {
+			t.Fatalf("Resolve が失敗しました: %v", err)
+		}
+		if gw.calls != 1 {
+			t.Errorf("Gateway は1回だけ呼ばれるべきです: %d回", gw.calls)
+		}
+		if len(gw.lastWords) != 1 || gw.lastWords[0] != "牛こま" {
+			t.Errorf("キャッシュで解けた語まで渡してはいけません: %v", gw.lastWords)
+		}
+	})
+}
