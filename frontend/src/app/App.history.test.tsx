@@ -24,8 +24,9 @@ const recorded: HistoryItem = {
   searchedAt: '2026-07-20T10:00:00Z',
 }
 
-// plan は premium にしておく。週間献立（premium 限定、Task 7）を
-// 使うテストがここに含まれるため。
+// plan は premium にしておく。値自体はもう機能に影響しない（週間献立は
+// サブスク撤廃によりログインのみで使える）が、/auth/me は plan を必須で
+// 返すため何か設定する。
 function loggedIn() {
   server.use(
     http.get('/api/v1/auth/me', () =>
@@ -97,7 +98,7 @@ describe('検索と履歴のつながり', () => {
     expect(await screen.findByText(/まだ履歴がありません/)).toBeVisible()
 
     await user.click(screen.getByRole('link', { name: '1週間の献立' }))
-    // premium 判定（/auth/me）が解決するまでは生成ボタンがまだ無い。
+    // /auth/me の応答が解決するまでは生成ボタンがまだ無い。
     await user.click(await screen.findByRole('button', { name: '1週間分を作る' }))
     await screen.findAllByRole('listitem')
 

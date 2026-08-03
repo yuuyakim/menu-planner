@@ -21,7 +21,7 @@ describe('未ログインでお気に入りを押したとき', () => {
   it('ログインしたら元の画面に戻る', async () => {
     const user = userEvent.setup()
     // 既定は未ログイン。検索画面は未認証でも使える画面。
-    // （週間献立は premium 限定＝Task 7 で未認証では使えなくなったため、
+    // （週間献立は RequireAuth で守られており未認証では使えないため、
     // ここでの確認先には使えない。）
     server.use(
       http.get('/api/v1/menus/suggest', () => HttpResponse.json({ menu })),

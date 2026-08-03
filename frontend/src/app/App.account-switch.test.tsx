@@ -26,8 +26,9 @@ const menuB: Menu = {
   description: 'アカウントBのデータ。',
 }
 
-// plan は premium にしておく。週間献立（premium 限定、Task 7）を使う
-// テストがこのファイルに含まれるため。
+// plan は premium にしておく。値自体はもう機能に影響しない（週間献立は
+// サブスク撤廃によりログインのみで使える）が、/auth/me は plan を必須で
+// 返すため何か設定する。
 function userResponse(id: string, name: string) {
   return {
     user: { id, email: `${name}@example.com`, displayName: name, plan: 'premium' },

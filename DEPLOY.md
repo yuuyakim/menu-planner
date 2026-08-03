@@ -59,6 +59,11 @@ flowchart LR
 | `STRIPE_WEBHOOK_SECRET` | テストモードのダミー値 | **本番Webhookエンドポイントの署名シークレット**（`whsec_...`）。同上 |
 | `STRIPE_PRICE_ID` | テストモードのダミー値 | **本番の価格ID**（`price_...`）。同上 |
 
+> **サブスク撤廃後も `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID` は必要。**
+> 2026-08-02 にサブスクを撤廃したが、backend の課金配管（`/billing/*`・webhook・
+> `cmd/grant`）は復活に備えて残してある。`cmd/server/main.go` はこの3つが未設定だと
+> 起動時に落ちるため、設定は消せない。設定が欠けたまま起動できる方が危険という判断。
+
 > **`TRUSTED_PROXY_SECRET` は Cloud Run と Cloudflare Pages の両方に同じ値**を設定する。
 > backend はこの秘密が一致したリクエストの `X-Forwarded-For` だけを実クライアントIPとして
 > 信頼する。backend のURLは公開されており直接叩けるため、これが無いとIPを詐称するだけで
@@ -209,6 +214,46 @@ Pages Function が上書きするため、偽装しても 429 のまま。Cloud 
 
 > **外形からは検証できない点**: 「異なる実クライアントIPが別枠で数えられる」ことは
 > 単一の送信元からは確かめられない。上記が示すのは「詐称で枠を増やせない」ことまで。
+
+## 監視（アクセス状況）
+
+「何時にどれだけ使われているか」は **Cloudflare Web Analytics** で見る（2026-07-31 有効化）。
+Cloudflare ダッシュボード → Workers & Pages → Pages プロジェクト → **Metrics** から有効化してあり、
+`index.html` へのビーコン注入は Cloudflare 側がデプロイ時に行う。
+**リポジトリ内に `<script>` は無い**ので、grep しても見つからないことに驚かないこと。
+
+| 見たいもの | どこで見るか | 性質 |
+| --- | --- | --- |
+| 時間帯ごとの訪問数・ページビュー、参照元、国、デバイス | Web Analytics | クライアント側計測（ブロックされうる） |
+| リクエスト数・帯域 | Pages プロジェクトの Metrics | サーバー側計測（ブロック不能・bot 込み） |
+| API がどれだけ叩かれたか、5xx、レイテンシ | Cloud Run のメトリクス | backend に届いた分のみ |
+
+**数字の読み方**（そのまま実数として扱わないこと）
+
+- **アドブロッカーで過少に出る。** uBlock / Brave / DuckDuckGo 拡張などはビーコンを止める。
+  実数との差が気になるときは Pages のリクエスト数と突き合わせる。
+- **「訪問数」は Cookie を使わない近似値。** 別ホストからの遷移で始まったページビューを1訪問として数える。
+  厳密なユニーク人数ではなく、同じ人が別日に3回来れば3訪問。
+- **Cloud Run のリクエスト数 ≠ 訪問者数。** フロントは Pages 配信なので、ページを開いただけで
+  API を叩かない動きは Cloud Run に一切現れない。逆に1人が検索を10回すれば10リクエスト。
+- **保持期間**は直近7日が非サンプリング、それ以降は圧縮され最大6ヶ月まで遡れる。
+  長期の推移を残したいなら別途エクスポートが要る。
+
+**計測が壊れる変更**（入れるときはここを読み直す）
+
+- `frontend/` に `_headers` を置いて `Cache-Control: public, no-transform` を返すと、自動注入が行われない。
+- CSP を導入すると、`static.cloudflareinsights.com` を許可しない限りビーコンが読まれない。
+- ルーターをハッシュベースに変えると SPA のルート遷移が計測されなくなる
+  （現状 `frontend/src/main.tsx` は `BrowserRouter` なので追跡される）。
+
+**生きているかの確認**:
+
+```bash
+curl -s https://kondatekun.yuuyakim.com/ | grep -o '<script[^>]*cloudflareinsights[^>]*>'
+```
+
+タグが返れば注入されている。ブラウザ側では DevTools の Network に `/cdn-cgi/rum` への送信が出る
+（`beacon.min.js` 自体は JS リソースなので Fetch/XHR フィルタには出ない）。
 
 ## ロールバック / 注意
 - backend は Cloud Run のリビジョンで即ロールバック可能。

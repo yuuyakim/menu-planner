@@ -73,7 +73,7 @@ type savedWeeklyMenuResponse struct {
 //
 //	POST /api/v1/weekly-menus  {"days": [{"day": 1, "menuId": "..."}, ...]}
 //
-// 7日分ちょうどでなければ 400、上限（10件）に達していれば 409、
+// 7日分ちょうどでなければ 400、上限（50件）に達していれば 409、
 // 存在しない献立を含めば 404、未認証は 401。成功時は 201。
 func (h *SavedWeeklyMenuHandler) Save(c echo.Context) error {
 	userID, ok := UserIDFromContext(c)
@@ -118,7 +118,7 @@ type savedWeeklyMenusResponse struct {
 //
 //	GET /api/v1/weekly-menus
 //
-// 上限が10件と小さいので全件返す（spec.md 2.8）。ページングは設けない。
+// 上限が50件と小さいので全件返す（spec.md 2.8）。ページングは設けない。
 func (h *SavedWeeklyMenuHandler) List(c echo.Context) error {
 	userID, ok := UserIDFromContext(c)
 	if !ok {

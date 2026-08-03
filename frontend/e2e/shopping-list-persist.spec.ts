@@ -1,24 +1,12 @@
-import { execSync } from 'node:child_process'
-
 import { expect, test } from '@playwright/test'
 
 import { signUp, uniqueEmail } from './helpers'
 
-test('premium は保存済み週の買い物リストのチェックがリロード後も残る', async ({
+test('保存済み週の買い物リストのチェックはリロード後も残る', async ({
   page,
 }) => {
   const email = uniqueEmail('slo-persist')
   await signUp(page, email)
-
-  // 決済が無いので付与はCLIで行う（premium.spec.ts と同じ流儀）。
-  execSync(
-    `docker compose run --rm backend go run ./cmd/grant -email=${email} -months=1`,
-    { cwd: '..', stdio: 'inherit' },
-  )
-
-  // useCurrentUser は staleTime 5分でキャッシュするため、取り直しが要る。
-  await page.reload()
-  await expect(page.getByLabel('プレミアム会員')).toBeVisible()
 
   // 週を作って保存し、そこから買い物リストへ進む（saved-weekly.spec.ts と同じ導線）。
   await page.goto('/weekly')

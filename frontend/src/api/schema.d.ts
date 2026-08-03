@@ -1092,7 +1092,7 @@ export interface paths {
          * 組み立てた1週間分の献立を保存する
          * @description 7日分をひとまとまりで保存する（spec.md 2.8）。買い物の場で見返すのが主な用途。
          *
-         *     保存できる件数はプランで決まる（free 10件 / premium 50件、spec.md 2.11）。
+         *     保存できる件数は全員50件（spec.md 2.11）。
          *     件数は応答に含めず、上限に達したときの 409 の detail に文言として入れて返す。
          *     クライアントが件数を持つとサーバとの二重管理になるため。
          *
@@ -1148,7 +1148,7 @@ export interface paths {
                 };
                 404: components["responses"]["NotFound"];
                 /**
-                 * @description 保存の上限に達している。件数はプランで決まるため、
+                 * @description 保存の上限に達している。件数はハードコードを避けるため、
                  *     detail に「保存できるのはN件までです」を入れて返す。
                  */
                 409: {

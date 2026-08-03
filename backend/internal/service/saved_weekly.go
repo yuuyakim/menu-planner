@@ -10,9 +10,9 @@ import (
 
 // ErrSavedWeeklyMenuLimitReached は保存の上限に達していることを表す（409）。
 //
-// 上限はプランによって変わるため、件数は fmt.Errorf("%w: …") でラップして足す
+// 件数は fmt.Errorf("%w: …") でラップして足す
 // （同ファイルの toSavedDays が ErrInvalidWeek に対して取っているのと同じ形）。
-// handler は Detail に err.Error() を入れるので、利用者には自分のプランの件数と
+// handler は Detail に err.Error() を入れるので、利用者には上限の件数と
 // 次に取るべき行動がそのまま届く。
 var ErrSavedWeeklyMenuLimitReached = errors.New("保存できる週間献立の上限に達しました")
 
@@ -82,8 +82,7 @@ func (s *SavedWeeklyMenuService) Save(
 		return domain.SavedWeeklyMenuID{}, err
 	}
 
-	// 上限はプランによって変わる（設計 3.1）。
-	// free は現行の10件を据え置き、premium が上回る。既存利用者の体験は削らない。
+	// 上限は全員50件で一律（domain.Entitlement.SavedWeeklyMenuLimit、サブスク撤廃により統一）。
 	ent, err := s.entitlements.For(ctx, userID)
 	if err != nil {
 		return domain.SavedWeeklyMenuID{}, err
@@ -101,8 +100,8 @@ func (s *SavedWeeklyMenuService) Save(
 		return domain.SavedWeeklyMenuID{}, err
 	}
 	if count >= limit {
-		// 文言はここで組み立てきる。フロントが件数を持つとプランごとに二重管理になり、
-		// premium の利用者に「10件まで」と出るような食い違いが起きる（spec.md 2.11）。
+		// 文言はここで組み立てきる。フロントが件数を持つと二重管理になり、
+		// 上限値を変えたときに古い数値のまま出続ける食い違いが起きる（spec.md 2.11）。
 		return domain.SavedWeeklyMenuID{}, fmt.Errorf(
 			"%w: 保存できるのは%d件までです。「保存した週間献立」から古いものを削除してください",
 			ErrSavedWeeklyMenuLimitReached, limit)

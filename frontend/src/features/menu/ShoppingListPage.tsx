@@ -12,9 +12,7 @@ import { categoryLabels, categoryOrder } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
-import { useOnceFlag } from '../../hooks/useOnceFlag'
 import { useSessionState } from '../../hooks/useSessionState'
-import { useCurrentUser } from '../auth/useCurrentUser'
 import {
   fetchSavedShoppingList,
   fetchShoppingList,
@@ -106,17 +104,20 @@ export function ShoppingListPage() {
           hidden: false,
         }))
 
-  // 保存済みの週かつ premium のときだけ、チェックはサーバに残る。
-  // それ以外（未保存の週／free）はその場限りで、画面を離れると消える。
-  const { user } = useCurrentUser()
-  const canPersist = savedId != null && user?.plan === 'premium'
+  // 保存済みの週のときだけ、チェックはサーバに残る。
+  // 未保存の週はその場限りで、画面を離れると消える。
+  //
+  // savedId は保存時か保存済みの週を開いたときにだけ入り、明示的なログアウト
+  // （useLogout / LoginPage の clearSessionState()）では消える。ただし
+  // リフレッシュトークンが黙って失効した場合はここには残り続ける。
+  const canPersist = savedId != null
   const queryClient = useQueryClient()
 
   // チェック状態はローカルで持つ。全品目に常時チェックボックスを出す
   // という Task 11 の要件のため、未保存の週（サーバ側に checked が無い）
   // でも状態を持てるようにローカルが正になる。
   const [checked, setChecked] = useState<Set<string>>(new Set())
-  // manual は手動追加した品目（premium×保存済みのみ）。hidden は非表示にした
+  // manual は手動追加した品目（保存済みの週のみ）。hidden は非表示にした
   // 導出品目の key。どちらもローカルが正で、PUT のたびに overlay 全体へ含める。
   const [manual, setManual] = useState<
     { name: string; category: IngredientCategory }[]
@@ -178,12 +179,7 @@ export function ShoppingListPage() {
     },
   })
 
-  // free（未認証含む）が買い物リストのチェックを初めて付けたときだけ、
-  // プレミアムの案内を1回出す。端末に恒久的に記録し、以後は出さない。
-  const [guidanceDone, markGuidance] = useOnceFlag('premium-shopping')
-  const [showGuidance, setShowGuidance] = useState(false)
-
-  // 追加フォームの入力値。premium×保存済みのときだけ表示する。
+  // 追加フォームの入力値。保存済みの週のときだけ表示する。
   const [draftName, setDraftName] = useState('')
   const [draftCategory, setDraftCategory] = useState<IngredientCategory>(
     categoryOrder[0],
@@ -195,7 +191,6 @@ export function ShoppingListPage() {
     // （updater は純粋関数であるべきで、副作用を含めてはいけない）。
     // 現在の checked をクロージャから読み、次の Set を先に計算してから
     // setChecked には値を渡し、副作用は updater の外で実行する。
-    const adding = !checked.has(key)
     const next = new Set(checked)
     if (next.has(key)) {
       next.delete(key)
@@ -205,10 +200,6 @@ export function ShoppingListPage() {
     setChecked(next)
     if (canPersist) {
       persist.mutate(buildOverlay(next, hidden, manual))
-    } else if (adding && user?.plan !== 'premium' && !guidanceDone) {
-      // user が undefined（未認証）も free 扱いにするための条件。
-      setShowGuidance(true)
-      markGuidance()
     }
   }
 
@@ -291,9 +282,9 @@ export function ShoppingListPage() {
                   >
                     <label className="flex items-center gap-2">
                       {/*
-                        premium×保存済み以外はその場限り（画面を離れると消える）。
+                        保存済みの週以外はその場限り（画面を離れると消える）。
                         それでもチェックボックス自体は常に出す。買い物中は
-                        premium かどうかを気にせず使える方が自然なため。
+                        保存済みかどうかを気にせず使える方が自然なため。
                       */}
                       <input
                         type="checkbox"
@@ -319,7 +310,7 @@ export function ShoppingListPage() {
                     <span className="ml-2 text-sm text-kon-ink/60">
                       {it.usedIn.map((m) => m.name).join('、')}
                     </span>
-                    {/* 品目の追加・削除は premium×保存済みのときだけ出す。 */}
+                    {/* 品目の追加・削除は保存済みの週のときだけ出す。 */}
                     {canPersist && (
                       <button
                         type="button"
@@ -376,25 +367,6 @@ export function ShoppingListPage() {
       )}
 
       {persist.error && <ErrorMessage error={persist.error} />}
-
-      {showGuidance && (
-        <div role="status" className="rounded-lg bg-kon-leaf/10 p-3 text-sm">
-          <p>
-            プレミアムプランなら、チェックした買い物リストがそのまま残ります。
-          </p>
-          <div className="mt-2 flex items-center gap-3">
-            <Link
-              to="/checkout"
-              className="inline-block rounded-full bg-kon-leaf px-4 py-1 font-medium text-white hover:bg-kon-leaf/90"
-            >
-              アップグレードする
-            </Link>
-            <button type="button" onClick={() => setShowGuidance(false)}>
-              閉じる
-            </button>
-          </div>
-        </div>
-      )}
 
       <p className="text-xs text-kon-ink/60">
         調味料は含みません。実際の材料はレシピ元でご確認ください。
