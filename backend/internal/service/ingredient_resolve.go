@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 )
@@ -114,6 +115,7 @@ func (s *IngredientResolveService) Resolve(
 	result := ResolveResult{Resolved: []ResolvedWord{}, Unresolved: []string{}}
 	seen := map[domain.IngredientID]bool{}
 
+	pending := make([]resolveEntry, 0, len(entries))
 	for _, e := range entries {
 		if ing, ok := byName[e.normalized]; ok {
 			// ① 完全一致。同じ食材に落ちる語が複数あっても1件にまとめる。
@@ -123,9 +125,92 @@ func (s *IngredientResolveService) Resolve(
 			}
 			continue
 		}
-		result.Unresolved = append(result.Unresolved, e.original)
+		pending = append(pending, e)
 	}
+
+	if len(pending) == 0 {
+		// 全語が①で解けた。LLM を呼ばずに返す。
+		return result, nil
+	}
+
+	s.resolveByGateway(ctx, pending, byName, items, seen, &result)
 	return result, nil
+}
+
+// resolveByGateway は未解決語を LLM に問い合わせ、結果を result に足す。
+//
+// **エラーは返さない。** LLM の失敗で機能全体を落とさず、①②で解けた分を
+// 返すため（設計 3.6）。失敗したことは result.Degraded で伝える。
+func (s *IngredientResolveService) resolveByGateway(
+	ctx context.Context,
+	pending []resolveEntry,
+	byName map[string]domain.Ingredient,
+	items []domain.Ingredient,
+	seen map[domain.IngredientID]bool,
+	result *ResolveResult,
+) {
+	words := make([]string, 0, len(pending))
+	for _, e := range pending {
+		words = append(words, e.normalized)
+	}
+
+	answers, err := s.gateway.Resolve(ctx, words, catalogNames(items))
+	if err != nil {
+		// 縮退。未解決語はすべて Unresolved に落とす。
+		// **キャッシュには保存しない。** 失敗した問い合わせを
+		// 「マスタに無い」として焼き付けると、復旧後も誤りが残る。
+		result.Degraded = true
+		for _, e := range pending {
+			result.Unresolved = append(result.Unresolved, e.original)
+		}
+		return
+	}
+
+	byWord := make(map[string]string, len(answers))
+	for _, a := range answers {
+		byWord[a.Word] = a.Name
+	}
+
+	for _, e := range pending {
+		name := domain.NormalizeIngredientWord(byWord[e.normalized])
+		ing, ok := byName[name]
+		if !ok {
+			// 空文字（該当なし）と、マスタに無い名前（ハルシネーション）が
+			// ここに来る。どちらも「マスタに無い」として同じ扱いにする。
+			result.Unresolved = append(result.Unresolved, e.original)
+			s.saveResolution(ctx, e.normalized, nil)
+			continue
+		}
+		id := ing.ID
+		s.saveResolution(ctx, e.normalized, &id)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		result.Resolved = append(result.Resolved, ResolvedWord{Word: e.original, Ingredient: ing})
+	}
+}
+
+// catalogNames は LLM に渡す食材名の一覧を作る。
+// **name のみ。** カナは①の完全一致で既に効いており、③に届く語は
+// カナ一致で拾えなかったものに限られるため、渡してもトークンが倍になるだけ（設計 4.2）。
+func catalogNames(items []domain.Ingredient) []string {
+	names := make([]string, 0, len(items))
+	for _, i := range items {
+		names = append(names, i.Name)
+	}
+	return names
+}
+
+// saveResolution はキャッシュへの保存を試みる。
+// **失敗しても解決自体は成功として扱う。** キャッシュはコスト削減のための
+// 仕組みであり、書けなかったことを利用者に見せる意味がない。
+func (s *IngredientResolveService) saveResolution(
+	ctx context.Context, word string, id *domain.IngredientID,
+) {
+	if err := s.cache.Save(ctx, word, id); err != nil {
+		slog.WarnContext(ctx, "解決キャッシュの保存に失敗しました", "word", word, "error", err)
+	}
 }
 
 // buildResolveEntries はテキストを分割し、正規化して空語を捨てる。

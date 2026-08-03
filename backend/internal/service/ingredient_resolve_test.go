@@ -15,12 +15,16 @@ type countingResolver struct {
 	calls   int
 	mapping map[string]string
 	err     error
+	// lastWords は最後に問い合わされた語。①②で解けた語まで
+	// 渡していないことを検証するために記録する。
+	lastWords []string
 }
 
 func (r *countingResolver) Resolve(
 	_ context.Context, words []string, _ []string,
 ) ([]service.GatewayResolution, error) {
 	r.calls++
+	r.lastWords = words
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -142,6 +146,94 @@ func TestResolve_ExactMatchOnly(t *testing.T) {
 		_, err := svc.Resolve(ctx, "  、 ")
 		if !errors.Is(err, service.ErrEmptyResolveText) {
 			t.Errorf("ErrEmptyResolveText を返すべきです: %v", err)
+		}
+	})
+}
+
+func TestResolve_Gateway(t *testing.T) {
+	ctx := context.Background()
+	items := testCatalog(t)
+
+	newSvc := func(gw *countingResolver, cache *fakeResolutionRepo) *service.IngredientResolveService {
+		return service.NewIngredientResolveService(&fakeIngredientRepo{all: items}, cache, gw)
+	}
+
+	t.Run("未解決語だけがGatewayに渡る", func(t *testing.T) {
+		gw := &countingResolver{mapping: map[string]string{"豚こま": "豚肉"}}
+		got, err := newSvc(gw, &fakeResolutionRepo{}).Resolve(ctx, "玉ねぎ、豚こま")
+		if err != nil {
+			t.Fatalf("Resolve が失敗しました: %v", err)
+		}
+		if gw.calls != 1 {
+			t.Errorf("Gateway は1回だけ呼ばれるべきです: %d回", gw.calls)
+		}
+		if len(gw.lastWords) != 1 || gw.lastWords[0] != "豚こま" {
+			t.Errorf("完全一致で解けた語まで渡してはいけません: %v", gw.lastWords)
+		}
+		if len(got.Resolved) != 2 {
+			t.Errorf("2件解決するべきです: %+v", got.Resolved)
+		}
+	})
+
+	t.Run("解決結果はキャッシュに保存される", func(t *testing.T) {
+		gw := &countingResolver{mapping: map[string]string{"豚こま": "豚肉"}}
+		cache := &fakeResolutionRepo{}
+		if _, err := newSvc(gw, cache).Resolve(ctx, "豚こま"); err != nil {
+			t.Fatalf("Resolve が失敗しました: %v", err)
+		}
+		if len(cache.saved) != 1 || cache.saved[0] != "豚こま" {
+			t.Errorf("正規化済みの語で保存するべきです: %v", cache.saved)
+		}
+	})
+
+	t.Run("未解決(該当なし)もキャッシュに保存される", func(t *testing.T) {
+		gw := &countingResolver{mapping: map[string]string{}}
+		cache := &fakeResolutionRepo{}
+		got, _ := newSvc(gw, cache).Resolve(ctx, "マツタケ")
+		if len(got.Unresolved) != 1 || got.Unresolved[0] != "マツタケ" {
+			t.Errorf("未解決に落ちるべきです: %+v", got)
+		}
+		if len(cache.saved) != 1 {
+			t.Error("該当なしもキャッシュしないと毎回LLMを通ってしまいます")
+		}
+	})
+
+	t.Run("マスタに無い名前が返っても未解決に落ちる", func(t *testing.T) {
+		gw := &countingResolver{mapping: map[string]string{"まつたけ": "存在しない食材"}}
+		got, _ := newSvc(gw, &fakeResolutionRepo{}).Resolve(ctx, "マツタケ")
+		if len(got.Unresolved) != 1 {
+			t.Errorf("マスタに無い名前は未解決に落とすべきです: %+v", got)
+		}
+		if got.Degraded {
+			t.Error("ハルシネーションは障害ではないので Degraded は立てない")
+		}
+	})
+
+	t.Run("Gatewayのエラーは部分成功になる", func(t *testing.T) {
+		gw := &countingResolver{err: errors.New("timeout")}
+		got, err := newSvc(gw, &fakeResolutionRepo{}).Resolve(ctx, "玉ねぎ、豚こま")
+		if err != nil {
+			t.Fatalf("部分成功にするべきです: %v", err)
+		}
+		if !got.Degraded {
+			t.Error("Degraded が立つべきです")
+		}
+		if len(got.Resolved) != 1 || got.Resolved[0].Ingredient.Name != "玉ねぎ" {
+			t.Errorf("完全一致で解けた分は返すべきです: %+v", got.Resolved)
+		}
+		if len(got.Unresolved) != 1 || got.Unresolved[0] != "豚こま" {
+			t.Errorf("解けなかった語は未解決に入れるべきです: %+v", got.Unresolved)
+		}
+	})
+
+	t.Run("Gatewayが落ちてもキャッシュには保存しない", func(t *testing.T) {
+		gw := &countingResolver{err: errors.New("timeout")}
+		cache := &fakeResolutionRepo{}
+		if _, err := newSvc(gw, cache).Resolve(ctx, "豚こま"); err != nil {
+			t.Fatalf("Resolve が失敗しました: %v", err)
+		}
+		if len(cache.saved) != 0 {
+			t.Error("失敗した問い合わせを未解決として焼き付けてはいけません")
 		}
 	})
 }
