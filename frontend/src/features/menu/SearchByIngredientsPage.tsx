@@ -10,13 +10,19 @@ import { MascotStatus } from '../../components/MascotStatus'
 import {
   fetchAllIngredients,
   ingredientsQueryKey,
+  resolveIngredients,
   searchByIngredients,
 } from './api'
 import { IngredientPicker } from './IngredientPicker'
+import { IngredientTextInput } from './IngredientTextInput'
+import { ResolveResultPanel } from './ResolveResultPanel'
 
 // SearchByIngredientsPage は冷蔵庫にあるもので作れる献立を探す画面（spec.md 2.9）。
 export function SearchByIngredientsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [text, setText] = useState('')
+  const [unresolved, setUnresolved] = useState<string[]>([])
+  const [degraded, setDegraded] = useState(false)
 
   const {
     data: ingredients,
@@ -31,6 +37,22 @@ export function SearchByIngredientsPage() {
 
   const search = useMutation({
     mutationFn: () => searchByIngredients([...selected]),
+  })
+
+  const resolve = useMutation({
+    mutationFn: () => resolveIngredients(text),
+    onSuccess: (result) => {
+      // **マージする（置き換えない）。** すでに手で入れたチェックを消さない。
+      setSelected((prev) => {
+        const next = new Set(prev)
+        for (const r of result.resolved) next.add(r.ingredient.id)
+        return next
+      })
+      setUnresolved(result.unresolved)
+      setDegraded(result.degraded)
+      // 食材が変わったので前の検索結果は消す（toggle と同じ理由）。
+      search.reset()
+    },
   })
 
   function toggle(id: string) {
@@ -50,6 +72,11 @@ export function SearchByIngredientsPage() {
 
   function clear() {
     setSelected(new Set())
+    // 選択を捨てたのに読み取り結果の但し書きだけ残ると、
+    // いつの読み取りの話なのか分からなくなる。
+    setUnresolved([])
+    setDegraded(false)
+    resolve.reset()
     search.reset()
   }
 
@@ -62,6 +89,18 @@ export function SearchByIngredientsPage() {
 
       {ingredients && (
         <>
+          <IngredientTextInput
+            value={text}
+            onChange={setText}
+            onSubmit={() => resolve.mutate()}
+            isPending={resolve.isPending}
+          />
+
+          {resolve.error && <ErrorMessage error={resolve.error} />}
+          <ResolveResultPanel unresolved={unresolved} degraded={degraded} />
+
+          <p className="text-sm text-kon-ink/60">または下から選ぶ</p>
+
           <IngredientPicker
             ingredients={ingredients}
             selected={selected}

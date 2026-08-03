@@ -197,3 +197,130 @@ describe('冷蔵庫から探す', () => {
     )
   })
 })
+
+// respondResolve は自由記述の解決結果を仕込み、送られた本文を記録する。
+function respondResolve(result: {
+  resolved: { word: string; ingredient: Ingredient }[]
+  unresolved: string[]
+  degraded: boolean
+}) {
+  const bodies: { text?: string }[] = []
+  server.use(
+    http.post('/api/v1/ingredients/resolve', async ({ request }) => {
+      bodies.push((await request.json()) as { text: string })
+      return HttpResponse.json(result)
+    }),
+  )
+  return bodies
+}
+
+// readAloud はテキストを入力して「読み取る」を押す。
+async function readAloud(
+  user: ReturnType<typeof userEvent.setup>,
+  text: string,
+) {
+  await user.type(await screen.findByLabelText('冷蔵庫にあるものを書く'), text)
+  await user.click(screen.getByRole('button', { name: '読み取る' }))
+}
+
+describe('冷蔵庫の中身を自由記述で入力する', () => {
+  it('読み取るとピッカーにチェックが入る', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    const bodies = respondResolve({
+      resolved: [{ word: 'たまねぎ', ingredient: onion }],
+      unresolved: [],
+      degraded: false,
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'たまねぎ')
+
+    expect(await screen.findByText('1個を選択中')).toBeInTheDocument()
+    expect(bodies).toEqual([{ text: 'たまねぎ' }])
+    // チェックが入れば、そのまま検索に進める。
+    await waitFor(() => expect(searchButton()).toBeEnabled())
+  })
+
+  it('手で入れたチェックを消さずに足す', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({
+      resolved: [{ word: 'たまねぎ', ingredient: onion }],
+      unresolved: [],
+      degraded: false,
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await pick(user, '牛肉')
+    await readAloud(user, 'たまねぎ')
+
+    // 置き換えると、先に手で入れた選択が黙って消える。
+    expect(await screen.findByText('2個を選択中')).toBeInTheDocument()
+  })
+
+  it('未解決の語を明示する', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({
+      resolved: [],
+      unresolved: ['オクラ', 'ゴーヤ'],
+      degraded: false,
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'オクラ、ゴーヤ')
+
+    const status = await screen.findByRole('status', { name: '読み取りの結果' })
+    expect(status).toHaveTextContent('登録がありませんでした')
+    expect(status).toHaveTextContent('オクラ')
+    expect(status).toHaveTextContent('ゴーヤ')
+  })
+
+  it('縮退したことを伝える', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({ resolved: [], unresolved: ['豚こま'], degraded: true })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, '豚こま')
+
+    expect(
+      await screen.findByRole('status', { name: '読み取りの結果' }),
+    ).toHaveTextContent('一部だけ読み取れました')
+  })
+
+  it('空のままでは読み取れない', async () => {
+    respondIngredients()
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    // 押しても 400 になるだけなので押させない。
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '読み取る' })).toBeDisabled(),
+    )
+  })
+
+  it('選択をすべて外すと読み取り結果の表示も消える', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({
+      resolved: [{ word: 'たまねぎ', ingredient: onion }],
+      unresolved: ['オクラ'],
+      degraded: false,
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'たまねぎ、オクラ')
+    expect(
+      await screen.findByRole('status', { name: '読み取りの結果' }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '選択をすべて外す' }))
+
+    // 選択を捨てたのに「登録がありませんでした」だけ残ると、
+    // いつの読み取りの話なのか分からなくなる。
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: '読み取りの結果' })).toBeNull(),
+    )
+  })
+})
