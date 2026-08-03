@@ -28,6 +28,11 @@ export type IngredientCategory = Ingredient['category']
 export type ShoppingItem = Schemas['ShoppingItem']
 export type MenuMatch = Schemas['MenuMatch']
 
+/** ResolvedWord は自由記述から対応づいた食材1件。word は利用者が書いた元の語。 */
+export type ResolvedWord = Schemas['ResolvedWord']
+/** ResolveResult は自由記述の解決結果（spec.md 2.9 / 設計 4.1）。 */
+export type ResolveResult = Schemas['ResolveResult']
+
 /** SavedShoppingItem は保存済み週の買い物リスト1件（差分適用後の形）。 */
 export type SavedShoppingItem = Schemas['SavedShoppingItem']
 /** Origin は差分行の由来。derived=献立由来 / manual=手動追加。 */

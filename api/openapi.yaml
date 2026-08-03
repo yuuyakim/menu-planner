@@ -276,6 +276,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/IngredientsResponse'
 
+  /api/v1/ingredients/resolve:
+    post:
+      tags: [ingredients]
+      summary: 手持ちの食材のテキストを食材に対応づける
+      description: |
+        自由記述で書かれた食材（「豚こま、玉ねぎ、マツタケ」）を食材マスタに
+        対応づける。166種をカテゴリから探してチェックする操作は、冷蔵庫を
+        開けながらやるには重いため、その前段として自由記述を受ける。
+
+        解決は ①食材マスタとの完全一致 → ②解決キャッシュ → ③LLM の順。
+        全語が①で解ければLLMは呼ばない。
+
+        **LLM が落ちても 502 にはしない。** ①②で解けた分を 200 で返し、
+        degraded を立てる。呼び出し側は解釈結果を利用者に見せて確認させる。
+
+        対応づかなかった語は unresolved に入る。検索には使われない。
+        未認証でも使える（検索と同じ扱い）。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  description: |
+                    区切りは「、」「,」「，」改行・空白・「・」。
+                    最大200文字、語は最大20件。
+                  maxLength: 200
+                  example: 豚こま、玉ねぎ、マツタケ
+      responses:
+        '200':
+          description: 解決結果（一部しか解けなくても200）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   /api/v1/shopping-list:
     post:
       tags: [menus]
@@ -1154,6 +1197,40 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Ingredient'
+
+    ResolvedWord:
+      type: object
+      required: [word, ingredient]
+      properties:
+        word:
+          type: string
+          description: |
+            利用者が書いた**元の語**（正規化前）。「マツタケ は登録がありません」と
+            出すとき、書いた通りの文字列の方が伝わるため。
+          example: 豚こま
+        ingredient:
+          $ref: '#/components/schemas/Ingredient'
+
+    ResolveResult:
+      type: object
+      required: [resolved, unresolved, degraded]
+      properties:
+        resolved:
+          type: array
+          description: 食材に対応づいた語。0件でも null にせず空配列を返す。
+          items:
+            $ref: '#/components/schemas/ResolvedWord'
+        unresolved:
+          type: array
+          description: マスタに無かった語（元の語）。検索には使われない。
+          items:
+            type: string
+          example: [マツタケ]
+        degraded:
+          type: boolean
+          description: |
+            LLM への問い合わせをスキップしたか。立っていても①②で解けた分は
+            resolved に入っている。画面は「一部だけ読み取れました」と伝える。
 
     ShoppingListRequest:
       type: object
