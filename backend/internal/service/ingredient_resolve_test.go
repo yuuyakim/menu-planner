@@ -290,3 +290,22 @@ func TestResolve_Cache(t *testing.T) {
 		}
 	})
 }
+
+func TestResolve_GatewayErrorSetsReason(t *testing.T) {
+	ctx := context.Background()
+	items := testCatalog(t)
+	gw := &countingResolver{err: errors.New("LLMが落ちました")}
+	svc := service.NewIngredientResolveService(
+		&fakeIngredientRepo{all: items}, &fakeResolutionRepo{}, gw)
+
+	got, err := svc.Resolve(ctx, "マツタケ")
+	if err != nil {
+		t.Fatalf("Resolve が失敗しました: %v", err)
+	}
+	if !got.Degraded {
+		t.Fatal("degraded が立っていません")
+	}
+	if got.Reason != service.ReasonLLMError {
+		t.Errorf("理由が llm_error ではありません: %q", got.Reason)
+	}
+}

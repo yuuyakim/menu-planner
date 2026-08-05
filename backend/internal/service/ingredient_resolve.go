@@ -54,6 +54,26 @@ type ResolvedWord struct {
 	Ingredient domain.Ingredient
 }
 
+// DegradedReason は LLM への問い合わせをスキップした理由（設計 8章）。
+//
+// bool ひとつでは「LLM が落ちた」と「上限に達した」を区別できず、
+// 画面が出す文言を選べない。値と文言は1対1ではない
+// （counter_unavailable は llm_error と同じ文言を出す）。
+type DegradedReason string
+
+const (
+	// ReasonLLMError は LLM への問い合わせが失敗したことを表す。
+	ReasonLLMError DegradedReason = "llm_error"
+	// ReasonCounterUnavailable は日次カウンタが読めずフェイルクローズしたことを表す（設計 9.1）。
+	ReasonCounterUnavailable DegradedReason = "counter_unavailable"
+	// ReasonAnonDailyLimit は非ログインの日次上限に達したことを表す。
+	ReasonAnonDailyLimit DegradedReason = "anon_daily_limit"
+	// ReasonUserDailyLimit はログインユーザーの日次上限に達したことを表す。
+	ReasonUserDailyLimit DegradedReason = "user_daily_limit"
+	// ReasonServiceDailyLimit はサービス全体の日次上限に達したことを表す。
+	ReasonServiceDailyLimit DegradedReason = "service_daily_limit"
+)
+
 // ResolveResult はテキスト1件ぶんの解決結果。
 type ResolveResult struct {
 	// Resolved は食材に対応づいた語。
@@ -63,6 +83,8 @@ type ResolveResult struct {
 	// Degraded は LLM への問い合わせをスキップしたことを表す（設計 3.6）。
 	// 立っていても①②で解けた分は Resolved に入っている。
 	Degraded bool
+	// Reason は Degraded が立った理由。Degraded が false なら空。
+	Reason DegradedReason
 }
 
 // IngredientResolveService は手持ちの食材テキストを食材IDに解決する。
@@ -227,6 +249,7 @@ func (s *IngredientResolveService) resolveByGateway(
 		// **キャッシュには保存しない。** 失敗した問い合わせを
 		// 「マスタに無い」として焼き付けると、復旧後も誤りが残る。
 		result.Degraded = true
+		result.Reason = ReasonLLMError
 		for _, e := range pending {
 			result.Unresolved = append(result.Unresolved, e.original)
 		}

@@ -156,4 +156,41 @@ func TestResolveHandler(t *testing.T) {
 			t.Errorf("degraded が出ていません: %s", rec.Body.String())
 		}
 	})
+
+	t.Run("縮退の理由をdegradedReasonで返す", func(t *testing.T) {
+		uc := &stubResolveUseCase{result: service.ResolveResult{
+			Resolved:   []service.ResolvedWord{},
+			Unresolved: []string{"マツタケ"},
+			Degraded:   true,
+			Reason:     service.ReasonLLMError,
+		}}
+		rec := postResolve(t, uc, `{"text":"マツタケ"}`)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("200 を期待しましたが %d でした: %s", rec.Code, rec.Body.String())
+		}
+		var got struct {
+			Degraded       bool   `json:"degraded"`
+			DegradedReason string `json:"degradedReason"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("レスポンスを解釈できませんでした: %v", err)
+		}
+		if !got.Degraded || got.DegradedReason != "llm_error" {
+			t.Errorf("degraded=true, degradedReason=llm_error を期待しました: %+v", got)
+		}
+	})
+
+	t.Run("縮退していなければdegradedReasonを出さない", func(t *testing.T) {
+		uc := &stubResolveUseCase{result: service.ResolveResult{
+			Resolved:   []service.ResolvedWord{},
+			Unresolved: []string{},
+			Degraded:   false,
+		}}
+		rec := postResolve(t, uc, `{"text":"玉ねぎ"}`)
+
+		if strings.Contains(rec.Body.String(), "degradedReason") {
+			t.Errorf("縮退していないのに degradedReason が出ています: %s", rec.Body.String())
+		}
+	})
 }

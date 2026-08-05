@@ -59,6 +59,9 @@ type resolveResponse struct {
 	Resolved   []resolvedWordDTO `json:"resolved"`
 	Unresolved []string          `json:"unresolved"`
 	Degraded   bool              `json:"degraded"`
+	// DegradedReason は Degraded が立った理由。立っていなければ出さない。
+	// 画面はこれで文言を選ぶ（設計 10章）。
+	DegradedReason string `json:"degradedReason,omitempty"`
 }
 
 // Resolve は手持ちの食材テキストを食材に対応づける。
@@ -104,5 +107,6 @@ func (h *IngredientResolveHandler) Resolve(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, resolveResponse{
 		Resolved: resolved, Unresolved: unresolved, Degraded: result.Degraded,
+		DegradedReason: string(result.Reason),
 	})
 }
