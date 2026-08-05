@@ -74,6 +74,14 @@ flowchart LR
 > backend はこの秘密が一致したリクエストの `X-Forwarded-For` だけを実クライアントIPとして
 > 信頼する。backend のURLは公開されており直接叩けるため、これが無いとIPを詐称するだけで
 > レート制限を回避できてしまう。未設定なら転送ヘッダを信頼せず接続元IPを使う（安全側）。
+>
+> **`RESOLVE_DAILY_LIMIT_ANON` はこの一致に強く依存する。** 未設定・不一致だと
+> `c.RealIP()` が Cloudflare Pages のプロキシ自身の `RemoteAddr` に落ち、
+> **すべての非ログイン利用者が同一IP＝1つの10/日バケットを共有**する。
+> 症状は「冷蔵庫から探すが、サービス全体でだいたい10回使うと使えなくなる」
+> （利用者ごとに個別の上限に見えない、全員同時に止まる）。この機能が入る前は
+> 同じ設定ミスの影響が「60回/分を全員で共有」で済んでいたが、今は
+> 「10回/日を全員で共有」に格上げされている。
 
 > **Stripe Webhook は `/api/*` プロキシを経由しない。** Stripe は Cloud Run の公開URL
 > （`https://menu-planner-backend-xxxx.a.run.app/api/v1/billing/webhook`）へ直接叩く

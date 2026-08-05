@@ -208,7 +208,17 @@ func run() error {
 	// 本番はプロキシ（Cloudflare Pages の Function）の背後に立つ。共有シークレットが
 	// 一致したリクエストの X-Forwarded-For だけを信頼して実クライアントIPを取り出す。
 	// 未設定なら接続元をそのまま使う（＝転送ヘッダを信用しない安全側）。
-	e.IPExtractor = handler.TrustedProxyIPExtractor(os.Getenv("TRUSTED_PROXY_SECRET"))
+	trustedProxySecret := os.Getenv("TRUSTED_PROXY_SECRET")
+	if trustedProxySecret == "" {
+		// fatal にはしない。ローカル開発はこの値が無いのが普通なので、
+		// 落とすと開発体験そのものを壊す。だが本番で未設定・不一致だと
+		// 全リクエストがプロキシ自身のRemoteAddrに集約され、非ログインの
+		// 読み取り日次上限（RESOLVE_DAILY_LIMIT_ANON）が全利用者で
+		// 1つのバケットに縮む（DEPLOY.md参照）。運用で気付けるよう警告だけ出す。
+		slog.Warn("TRUSTED_PROXY_SECRET が未設定です。" +
+			"全リクエストが単一IPとして扱われ、非ログインの読み取り日次上限を全利用者で共有します")
+	}
+	e.IPExtractor = handler.TrustedProxyIPExtractor(trustedProxySecret)
 
 	// 全てのエラーレスポンスを RFC 7807 形式に統一する
 	e.HTTPErrorHandler = handler.ErrorHandler()
