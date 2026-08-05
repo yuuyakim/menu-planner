@@ -20,7 +20,7 @@ const (
 
 // IngredientResolveUseCase は手持ちの食材テキストを食材に解決する。
 type IngredientResolveUseCase interface {
-	Resolve(ctx context.Context, text string) (service.ResolveResult, error)
+	Resolve(ctx context.Context, text string, policy service.ResolvePolicy) (service.ResolveResult, error)
 }
 
 // IngredientResolveHandler は食材テキスト解決のHTTP境界。
@@ -88,7 +88,8 @@ func (h *IngredientResolveHandler) Resolve(c echo.Context) error {
 			"食材の数が多すぎます（最大20件）")
 	}
 
-	result, err := h.svc.Resolve(c.Request().Context(), req.Text)
+	result, err := h.svc.Resolve(c.Request().Context(), req.Text,
+		service.ResolvePolicy{AllowLLM: true})
 	if err != nil {
 		return err
 	}

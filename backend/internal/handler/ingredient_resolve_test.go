@@ -19,10 +19,15 @@ type stubResolveUseCase struct {
 	result service.ResolveResult
 	err    error
 	calls  int
+	// policy は最後に渡されたポリシー。上限の判定が service まで届くことを確かめる。
+	policy service.ResolvePolicy
 }
 
-func (s *stubResolveUseCase) Resolve(context.Context, string) (service.ResolveResult, error) {
+func (s *stubResolveUseCase) Resolve(
+	_ context.Context, _ string, p service.ResolvePolicy,
+) (service.ResolveResult, error) {
 	s.calls++
+	s.policy = p
 	return s.result, s.err
 }
 

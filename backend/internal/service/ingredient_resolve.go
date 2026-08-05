@@ -87,6 +87,24 @@ type ResolveResult struct {
 	Reason DegradedReason
 }
 
+// ResolveRecorder は LLM を呼んだ実績を数える。
+//
+// 判定（ResolveQuota.Check）は handler が行い、記録だけを service が持つ。
+// LLM を呼んだかどうかは③まで来て初めて分かるため（設計 5章）。
+type ResolveRecorder interface {
+	Record(ctx context.Context, s ResolveSubject) error
+}
+
+// ResolvePolicy は1リクエストぶんの LLM 利用の可否（設計 5章）。
+type ResolvePolicy struct {
+	// AllowLLM が false なら③をスキップする。
+	AllowLLM bool
+	// DenyReason は AllowLLM が false のときの理由。結果の Reason にそのまま載る。
+	DenyReason DegradedReason
+	// Subject は実績を数えるときのキー。
+	Subject ResolveSubject
+}
+
 // IngredientResolveService は手持ちの食材テキストを食材IDに解決する。
 //
 // IngredientService に相乗りさせていないのは、あちらが「食材マスタそのもの」と
@@ -96,6 +114,7 @@ type IngredientResolveService struct {
 	ingredients IngredientRepository
 	cache       ResolutionRepository
 	gateway     IngredientResolveGateway
+	recorder    ResolveRecorder
 }
 
 // NewIngredientResolveService は IngredientResolveService を生成する。
@@ -103,8 +122,11 @@ func NewIngredientResolveService(
 	ingredients IngredientRepository,
 	cache ResolutionRepository,
 	gw IngredientResolveGateway,
+	rec ResolveRecorder,
 ) *IngredientResolveService {
-	return &IngredientResolveService{ingredients: ingredients, cache: cache, gateway: gw}
+	return &IngredientResolveService{
+		ingredients: ingredients, cache: cache, gateway: gw, recorder: rec,
+	}
 }
 
 // resolveEntry は解決の途中経過。元の語と正規化語の対応を保つ。
@@ -121,7 +143,7 @@ type resolveEntry struct {
 //
 // **全語が①で解ければ LLM を一度も呼ばない。**
 func (s *IngredientResolveService) Resolve(
-	ctx context.Context, text string,
+	ctx context.Context, text string, policy ResolvePolicy,
 ) (ResolveResult, error) {
 	entries := buildResolveEntries(text)
 	if len(entries) == 0 {
@@ -162,7 +184,19 @@ func (s *IngredientResolveService) Resolve(
 		return result, nil
 	}
 
-	s.resolveByGateway(ctx, pending, byName, items, seen, &result)
+	if !policy.AllowLLM {
+		// 上限に達している、またはカウンタが読めない。③をスキップする。
+		// ①②で解けた分は返す。よくある食材はここまでで通るため、
+		// 機能が丸ごと死んだようには見えない（設計 5章）。
+		result.Degraded = true
+		result.Reason = policy.DenyReason
+		for _, e := range pending {
+			result.Unresolved = append(result.Unresolved, e.original)
+		}
+		return result, nil
+	}
+
+	s.resolveByGateway(ctx, pending, byName, items, seen, &result, policy.Subject)
 	return result, nil
 }
 
@@ -237,6 +271,7 @@ func (s *IngredientResolveService) resolveByGateway(
 	items []domain.Ingredient,
 	seen map[domain.IngredientID]bool,
 	result *ResolveResult,
+	subject ResolveSubject,
 ) {
 	words := make([]string, 0, len(pending))
 	for _, e := range pending {
@@ -244,6 +279,14 @@ func (s *IngredientResolveService) resolveByGateway(
 	}
 
 	answers, err := s.gateway.Resolve(ctx, words, catalogNames(items))
+
+	// **呼んだ時点で数える。** 失敗してもトークンは消費されている（設計 4章）。
+	if rerr := s.recorder.Record(ctx, subject); rerr != nil {
+		// 呼び出しはもう済んでいる。ここで機能を止めても払った金は戻らない。
+		// 数え漏れは許容する（設計 9.2）。
+		slog.WarnContext(ctx, "読み取りカウンタの加算に失敗しました", "error", rerr)
+	}
+
 	if err != nil {
 		// 縮退。未解決語はすべて Unresolved に落とす。
 		// **キャッシュには保存しない。** 失敗した問い合わせを
