@@ -40,7 +40,11 @@ export function ResolveResultPanel({ unresolved, degraded, reason }: Props) {
   if (unresolved.length === 0 && !degraded) return null
 
   // 理由が無い縮退は、上限ではなく LLM 側の失敗として扱う。
-  const message = degradedMessages[reason ?? 'llm_error']
+  // **未知の値にも partialMessage で落ちる。** reason は型上 DegradedReason
+  // だが実際はAPIから届く値で、backend が先にデプロイされて5値目が増えると
+  // 型では防げない。undefined のまま出すと空の灰色カードになるため、
+  // マップに無ければ partialMessage を使う。
+  const message = degradedMessages[reason ?? 'llm_error'] ?? partialMessage
   // ログインしても増えないケースで導線を出すと誤導になる。
   const showLogin = reason === 'anon_daily_limit'
   const isLimit = reason !== undefined && limitReasons.includes(reason)
