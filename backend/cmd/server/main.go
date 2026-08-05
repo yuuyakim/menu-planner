@@ -161,12 +161,14 @@ func run() error {
 	// 読み取り（LLM）の日次上限（設計 3章）。分単位のバースト制御は searchLimit が
 	// 担い、その上に日次の層を重ねる。0 で無制限にできるのは、Vite プロキシ配下の
 	// 開発・E2E で全リクエストが単一IPに集約されるため。
-	resolveUsageRepo := repository.NewResolveUsageRepository(pool)
-	resolveQuota := service.NewResolveQuota(resolveUsageRepo, service.ResolveQuotaLimits{
+	resolveLimits := service.ResolveQuotaLimits{
 		Anon:  envInt("RESOLVE_DAILY_LIMIT_ANON", 10),
 		User:  envInt("RESOLVE_DAILY_LIMIT_USER", 30),
 		Total: envInt("RESOLVE_DAILY_LIMIT_TOTAL", 300),
-	}, time.Now)
+	}
+	warnUnlimitedResolveLimits(resolveLimits)
+	resolveUsageRepo := repository.NewResolveUsageRepository(pool)
+	resolveQuota := service.NewResolveQuota(resolveUsageRepo, resolveLimits, time.Now)
 
 	// 未設定で起動させない。既定値で動かすと生IPと同じ強度の値が全環境で共有され、
 	// ハッシュ化の意味が無くなる（設計 6.2）。
@@ -283,6 +285,28 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// warnUnlimitedResolveLimits は読み取りの日次上限のうち0以下（無制限）に
+// なっているものを名指しで警告する。「0以下は無制限」は仕様（設計 7章）通りで、
+// 開発・E2E がこれに依存しているため fatal にはしない。ただし
+// RESOLVE_DAILY_LIMIT_TOTAL に負値を渡すと請求額の天井が無言で消えるため、
+// 気付けるようログだけは残す。開発環境では3つとも0のため、ローカル起動の
+// たびにこの行が出るのが正しい。
+func warnUnlimitedResolveLimits(l service.ResolveQuotaLimits) {
+	var unlimited []string
+	if l.Anon <= 0 {
+		unlimited = append(unlimited, "RESOLVE_DAILY_LIMIT_ANON")
+	}
+	if l.User <= 0 {
+		unlimited = append(unlimited, "RESOLVE_DAILY_LIMIT_USER")
+	}
+	if l.Total <= 0 {
+		unlimited = append(unlimited, "RESOLVE_DAILY_LIMIT_TOTAL")
+	}
+	if len(unlimited) > 0 {
+		slog.Warn("読み取りの日次上限が無制限です（0以下）", "unlimited", unlimited)
+	}
 }
 
 // envInt は環境変数を整数として読む。未設定・空・数値でない場合は fallback。
