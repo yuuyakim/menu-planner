@@ -2,11 +2,15 @@ package handler
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/service"
 )
@@ -23,14 +27,30 @@ type IngredientResolveUseCase interface {
 	Resolve(ctx context.Context, text string, policy service.ResolvePolicy) (service.ResolveResult, error)
 }
 
+// ResolveQuotaChecker は今日の残枠を読む。
+type ResolveQuotaChecker interface {
+	Check(ctx context.Context, s service.ResolveSubject) (bool, service.DegradedReason)
+}
+
 // IngredientResolveHandler は食材テキスト解決のHTTP境界。
 type IngredientResolveHandler struct {
-	svc IngredientResolveUseCase
+	svc   IngredientResolveUseCase
+	quota ResolveQuotaChecker
+	// ipHashSecret は IP を復元できない値にするための鍵（設計 6.2）。
+	ipHashSecret []byte
+	tokens       *auth.JWT
 }
 
 // NewIngredientResolveHandler は IngredientResolveHandler を生成する。
-func NewIngredientResolveHandler(svc IngredientResolveUseCase) *IngredientResolveHandler {
-	return &IngredientResolveHandler{svc: svc}
+func NewIngredientResolveHandler(
+	svc IngredientResolveUseCase,
+	quota ResolveQuotaChecker,
+	ipHashSecret string,
+	tokens *auth.JWT,
+) *IngredientResolveHandler {
+	return &IngredientResolveHandler{
+		svc: svc, quota: quota, ipHashSecret: []byte(ipHashSecret), tokens: tokens,
+	}
 }
 
 // RegisterRoutes は解決APIのルーティングを登録する。
@@ -40,7 +60,9 @@ func NewIngredientResolveHandler(svc IngredientResolveUseCase) *IngredientResolv
 // だけで元の状態に戻せる。
 func (h *IngredientResolveHandler) RegisterRoutes(e *echo.Echo, mw ...echo.MiddlewareFunc) {
 	g := e.Group(APIBasePath, mw...)
-	g.POST("/ingredients/resolve", h.Resolve)
+	// OptionalAuth を付けるのは、ログイン中の利用者を IP ではなくユーザーIDで
+	// 数えるため。未認証でも通る（拒否はしない）。
+	g.POST("/ingredients/resolve", h.Resolve, OptionalAuth(h.tokens))
 }
 
 // resolveRequest は POST /ingredients/resolve のリクエストボディ。
@@ -88,8 +110,12 @@ func (h *IngredientResolveHandler) Resolve(c echo.Context) error {
 			"食材の数が多すぎます（最大20件）")
 	}
 
-	result, err := h.svc.Resolve(c.Request().Context(), req.Text,
-		service.ResolvePolicy{AllowLLM: true})
+	subject := h.subjectFor(c)
+	allow, reason := h.quota.Check(c.Request().Context(), subject)
+
+	result, err := h.svc.Resolve(c.Request().Context(), req.Text, service.ResolvePolicy{
+		AllowLLM: allow, DenyReason: reason, Subject: subject,
+	})
 	if err != nil {
 		return err
 	}
@@ -110,4 +136,28 @@ func (h *IngredientResolveHandler) Resolve(c echo.Context) error {
 		Resolved: resolved, Unresolved: unresolved, Degraded: result.Degraded,
 		DegradedReason: string(result.Reason),
 	})
+}
+
+// subjectFor は数え上げのキーを決める。
+//
+// ログイン中はユーザーID、非ログインは IP のHMAC（設計 6.2）。
+// ブラウザ保存で数えないのは、シークレットウィンドウで無限にリセットできるため。
+func (h *IngredientResolveHandler) subjectFor(c echo.Context) service.ResolveSubject {
+	if userID, ok := UserIDFromContext(c); ok {
+		return service.ResolveSubject{Scope: service.ScopeUser, Subject: userID}
+	}
+	return service.ResolveSubject{
+		Scope:   service.ScopeIP,
+		Subject: hashIP(h.ipHashSecret, c.RealIP()),
+	}
+}
+
+// hashIP は IP を元に戻せない文字列にする。
+//
+// 数を数えるにはこれで足り、生のIPを保存しないため
+// プライバシーポリシーの改定が要らない（設計 6.2）。
+func hashIP(secret []byte, ip string) string {
+	mac := hmac.New(sha256.New, secret)
+	mac.Write([]byte(ip))
+	return hex.EncodeToString(mac.Sum(nil))
 }

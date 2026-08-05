@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/yuuyakim/menu-planner/backend/internal/auth"
 	"github.com/yuuyakim/menu-planner/backend/internal/domain"
 	"github.com/yuuyakim/menu-planner/backend/internal/handler"
 	"github.com/yuuyakim/menu-planner/backend/internal/service"
@@ -31,19 +32,55 @@ func (s *stubResolveUseCase) Resolve(
 	return s.result, s.err
 }
 
-func newResolveServer(uc handler.IngredientResolveUseCase) *echo.Echo {
+// stubQuota は上限判定のスタブ。
+type stubQuota struct {
+	allow    bool
+	reason   service.DegradedReason
+	subjects []service.ResolveSubject
+}
+
+func (q *stubQuota) Check(
+	_ context.Context, s service.ResolveSubject,
+) (bool, service.DegradedReason) {
+	q.subjects = append(q.subjects, s)
+	return q.allow, q.reason
+}
+
+const resolveTestHashSecret = "test-secret"
+
+func newResolveServer(uc handler.IngredientResolveUseCase, q handler.ResolveQuotaChecker) *echo.Echo {
+	tokens, err := auth.NewJWT([]byte(authTestSecret))
+	if err != nil {
+		panic("テスト用JWTの生成に失敗しました: " + err.Error())
+	}
 	e := echo.New()
 	e.HTTPErrorHandler = handler.ErrorHandler()
-	handler.NewIngredientResolveHandler(uc).RegisterRoutes(e)
+	handler.NewIngredientResolveHandler(uc, q, resolveTestHashSecret, tokens).RegisterRoutes(e)
 	return e
 }
 
 func postResolve(t *testing.T, uc handler.IngredientResolveUseCase, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	return postResolveWith(t, uc, &stubQuota{allow: true}, body, "")
+}
+
+// postResolveWith は上限のスタブとアクセストークンを指定して叩く。
+// access が空文字なら非ログインとして送る。
+func postResolveWith(
+	t *testing.T,
+	uc handler.IngredientResolveUseCase,
+	q handler.ResolveQuotaChecker,
+	body string,
+	access string,
+) *httptest.ResponseRecorder {
+	t.Helper()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/ingredients/resolve", strings.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	newResolveServer(uc).ServeHTTP(rec, req)
+	if access != "" {
+		req.AddCookie(&http.Cookie{Name: "access_token", Value: access})
+	}
+	newResolveServer(uc, q).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -196,6 +233,80 @@ func TestResolveHandler(t *testing.T) {
 
 		if strings.Contains(rec.Body.String(), "degradedReason") {
 			t.Errorf("縮退していないのに degradedReason が出ています: %s", rec.Body.String())
+		}
+	})
+}
+
+func TestResolveHandler_Quota(t *testing.T) {
+	t.Run("非ログインはIPをハッシュ化して数える", func(t *testing.T) {
+		uc := &stubResolveUseCase{}
+		q := &stubQuota{allow: true}
+		postResolveWith(t, uc, q, `{"text":"玉ねぎ"}`, "")
+
+		if len(q.subjects) != 1 {
+			t.Fatalf("1回判定するはずです: %d回", len(q.subjects))
+		}
+		got := q.subjects[0]
+		if got.Scope != service.ScopeIP {
+			t.Errorf("scope が ip ではありません: %q", got.Scope)
+		}
+		// 生のIPを保存しないことがこの機能の前提（設計 6.2）。
+		if strings.Contains(got.Subject, "192.0.2.1") {
+			t.Errorf("生のIPがキーに入っています: %q", got.Subject)
+		}
+		if len(got.Subject) != 64 {
+			t.Errorf("HMAC-SHA256 の hex は64文字のはずです: %q", got.Subject)
+		}
+	})
+
+	t.Run("ログイン中はユーザーIDで数える", func(t *testing.T) {
+		tokens, err := auth.NewJWT([]byte(authTestSecret))
+		if err != nil {
+			t.Fatalf("JWTの生成に失敗しました: %v", err)
+		}
+		access, err := tokens.Issue("user-1")
+		if err != nil {
+			t.Fatalf("アクセストークンの発行に失敗しました: %v", err)
+		}
+
+		uc := &stubResolveUseCase{}
+		q := &stubQuota{allow: true}
+		postResolveWith(t, uc, q, `{"text":"玉ねぎ"}`, access)
+
+		if len(q.subjects) != 1 {
+			t.Fatalf("1回判定するはずです: %d回", len(q.subjects))
+		}
+		if q.subjects[0].Scope != service.ScopeUser || q.subjects[0].Subject != "user-1" {
+			t.Errorf("ユーザーIDで数えていません: %+v", q.subjects[0])
+		}
+	})
+
+	t.Run("上限に達していたら理由をserviceに渡す", func(t *testing.T) {
+		uc := &stubResolveUseCase{}
+		q := &stubQuota{allow: false, reason: service.ReasonAnonDailyLimit}
+		postResolveWith(t, uc, q, `{"text":"玉ねぎ"}`, "")
+
+		if uc.policy.AllowLLM {
+			t.Error("AllowLLM が false で渡るはずです")
+		}
+		if uc.policy.DenyReason != service.ReasonAnonDailyLimit {
+			t.Errorf("理由が渡っていません: %q", uc.policy.DenyReason)
+		}
+		if uc.policy.Subject.Scope != service.ScopeIP {
+			t.Errorf("キーが渡っていません: %+v", uc.policy.Subject)
+		}
+	})
+
+	t.Run("上限に達していても400の検証が先に効く", func(t *testing.T) {
+		uc := &stubResolveUseCase{}
+		q := &stubQuota{allow: false, reason: service.ReasonAnonDailyLimit}
+		rec := postResolveWith(t, uc, q, `{"text":"`+strings.Repeat("あ", 201)+`"}`, "")
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("400 を期待しましたが %d でした", rec.Code)
+		}
+		if uc.calls != 0 {
+			t.Error("検証で落ちたのに service が呼ばれています")
 		}
 	})
 }
