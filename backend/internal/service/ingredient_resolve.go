@@ -281,7 +281,14 @@ func (s *IngredientResolveService) resolveByGateway(
 	answers, err := s.gateway.Resolve(ctx, words, catalogNames(items))
 
 	// **呼んだ時点で数える。** 失敗してもトークンは消費されている（設計 4章）。
-	if rerr := s.recorder.Record(ctx, subject); rerr != nil {
+	//
+	// **ctx から切り離す。** クライアントが接続を切ると Echo が ctx を
+	// キャンセルするが、その時点で Anthropic へのリクエストはもう飛んでおり
+	// 課金は確定済み。同じ ctx で Record するとキャンセルにつられて加算だけ
+	// 失敗し、「課金は発生したのに枠は減らない」抜け道になる
+	// （POST 直後に切断するだけで日次上限を素通りできてしまう）。
+	// 加算は課金の事後処理であり、リクエストの生死とは別物として扱う。
+	if rerr := s.recorder.Record(context.WithoutCancel(ctx), subject); rerr != nil {
 		// 呼び出しはもう済んでいる。ここで機能を止めても払った金は戻らない。
 		// 数え漏れは許容する（設計 9.2）。
 		slog.WarnContext(ctx, "読み取りカウンタの加算に失敗しました", "error", rerr)

@@ -21,10 +21,15 @@ type countingResolver struct {
 }
 
 func (r *countingResolver) Resolve(
-	_ context.Context, words []string, _ []string,
+	ctx context.Context, words []string, _ []string,
 ) ([]service.GatewayResolution, error) {
 	r.calls++
 	r.lastWords = words
+	// 実際の gateway も、リクエストが Anthropic に飛んだ後でクライアントが
+	// 切断されれば context canceled で返る。そのふるまいをここで模す。
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if r.err != nil {
 		return nil, r.err
 	}
@@ -86,7 +91,14 @@ type fakeRecorder struct {
 	err      error
 }
 
-func (r *fakeRecorder) Record(_ context.Context, s service.ResolveSubject) error {
+func (r *fakeRecorder) Record(ctx context.Context, s service.ResolveSubject) error {
+	// 実際の Increment も pgx 経由の DB 呼び出しなので、キャンセル済みの
+	// context を渡されれば書き込めずに context canceled を返す。ここで
+	// 同じふるまいを模すことで、context.WithoutCancel を外すと
+	// 「呼ばれたのに数えられない」状態を再現できるようにする。
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	r.calls++
 	r.subjects = append(r.subjects, s)
 	return r.err
@@ -403,6 +415,31 @@ func TestResolve_RecordsEvenWhenGatewayFails(t *testing.T) {
 	// 失敗してもトークンは消費されている（設計 4章）。
 	if rec.calls != 1 {
 		t.Errorf("失敗した呼び出しも数えるはずです: %d回", rec.calls)
+	}
+}
+
+func TestResolve_RecordsEvenWhenContextCancelled(t *testing.T) {
+	items := testCatalog(t)
+	gw := &countingResolver{}
+	rec := &fakeRecorder{}
+	svc := service.NewIngredientResolveService(
+		&fakeIngredientRepo{all: items}, &fakeResolutionRepo{}, gw, rec)
+
+	// クライアントが接続を切った後の Echo と同じ状態を作る。
+	// gateway.Resolve が呼ばれた時点でAnthropicへのリクエストはもう飛んでおり、
+	// トークンは消費済み。ここでキャンセルを理由に加算まで諦めると、
+	// 課金だけ発生して枠が一切減らない抜け道になる。
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := svc.Resolve(ctx, "マツタケ", allowAll()); err != nil {
+		t.Fatalf("Resolve が失敗しました: %v", err)
+	}
+	if gw.calls != 1 {
+		t.Fatalf("Gateway は呼ばれるはずです: %d回", gw.calls)
+	}
+	if rec.calls != 1 {
+		t.Errorf("接続が切れていても実績は数えるはずです: %d回", rec.calls)
 	}
 }
 
