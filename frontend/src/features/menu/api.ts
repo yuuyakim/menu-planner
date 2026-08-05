@@ -5,6 +5,7 @@ import type {
   Menu,
   MenuMatch,
   Recipe,
+  ResolveResult,
   SavedShoppingItem,
   SavedWeeklyMenu,
   ShoppingItem,
@@ -181,4 +182,15 @@ export async function saveShoppingListOverrides(
   items: ShoppingListOverride[],
 ): Promise<void> {
   await apiPut(`/weekly-menus/${savedId}/shopping-list`, { items })
+}
+
+/**
+ * resolveIngredients は自由記述の食材テキストを食材に対応づける（設計 4.1）。
+ *
+ * 解決できなかった語は unresolved に入る。**LLM が落ちても 200 が返り**、
+ * degraded が立つ。呼び出し側は resolved をチェック状態に反映しつつ、
+ * degraded なら「一部だけ読み取れました」と伝える。
+ */
+export async function resolveIngredients(text: string): Promise<ResolveResult> {
+  return apiPost<ResolveResult>('/ingredients/resolve', { text })
 }

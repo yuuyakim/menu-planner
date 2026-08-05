@@ -29,11 +29,19 @@ services:
       GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-http://localhost:8080/api/v1/auth/google/callback}
       SEARCH_API_PROVIDER: ${SEARCH_API_PROVIDER:-stub}
       SEARCH_API_KEY: ${SEARCH_API_KEY:-}
+      INGREDIENT_RESOLVER_PROVIDER: ${INGREDIENT_RESOLVER_PROVIDER:-stub}
+      INGREDIENT_RESOLVER_API_KEY: ${INGREDIENT_RESOLVER_API_KEY:-}
       # フロントの Vite プロキシ経由だと全リクエストが単一IPに集約され、
       # 正当な操作でもレート制限に達してしまう。開発・E2Eでは 0（無制限）で切る。
       # 本番は実際のクライアントIPが分かる構成で spec 値（10 / 60）を設定する。
       AUTH_RATE_LIMIT_PER_MIN: ${AUTH_RATE_LIMIT_PER_MIN:-0}
       SEARCH_RATE_LIMIT_PER_MIN: ${SEARCH_RATE_LIMIT_PER_MIN:-0}
+      # 読み取り（LLM）の日次上限。開発・E2Eでは 0（無制限）で切る。
+      # 本番は spec 値（10 / 30 / 300）を設定する。
+      RESOLVE_DAILY_LIMIT_ANON: ${RESOLVE_DAILY_LIMIT_ANON:-0}
+      RESOLVE_DAILY_LIMIT_USER: ${RESOLVE_DAILY_LIMIT_USER:-0}
+      RESOLVE_DAILY_LIMIT_TOTAL: ${RESOLVE_DAILY_LIMIT_TOTAL:-0}
+      RESOLVE_IP_HASH_SECRET: ${RESOLVE_IP_HASH_SECRET:-dev-only-secret-do-not-use-in-production}
       # Stripe。3つとも未設定だと起動時に落ちる。開発・CI(E2E)では実際に
       # Checkout/Webhookを叩かないため、ダミー値で起動できれば十分。
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_dev_only_placeholder}

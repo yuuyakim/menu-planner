@@ -48,6 +48,12 @@ flowchart LR
 | `JWT_SECRET` | ダミー | **`openssl rand -base64 32` の実値**（Secret Manager 推奨） |
 | `SEARCH_API_PROVIDER` | `stub` | `brave`（または当面 `stub`） |
 | `SEARCH_API_KEY` | 空 | Brave のキー（`brave` の場合） |
+| `INGREDIENT_RESOLVER_PROVIDER` | `stub` | `claude`（または当面 `stub`）。**空にすると起動に失敗する** |
+| `INGREDIENT_RESOLVER_API_KEY` | 空 | Anthropic のキー（`claude` の場合は必須） |
+| `RESOLVE_DAILY_LIMIT_ANON` | `0`（無制限） | `10`（spec値）。非ログインの1日あたりの読み取り回数。IP単位 |
+| `RESOLVE_DAILY_LIMIT_USER` | `0`（無制限） | `30`（spec値）。ログインユーザーの1日あたりの読み取り回数 |
+| `RESOLVE_DAILY_LIMIT_TOTAL` | `0`（無制限） | `300`（spec値）。サービス全体の1日あたりの読み取り回数。**請求額の天井はこれで決まる**（名目 約210円/日。Check-then-Record の競合込みで最悪 約320円/日。詳細は設計doc §5・§7.1） |
+| `RESOLVE_IP_HASH_SECRET` | ダミー | **`openssl rand -base64 32` の実値**。IPを数えるためのHMAC鍵。**未設定だと起動に失敗する** |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | **公開URL**（`https://kondatekun.yuuyakim.com`） |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | 空可 | 本番のOAuthクライアント |
 | `GOOGLE_REDIRECT_URL` | localhost | **`https://kondatekun.yuuyakim.com/api/v1/auth/google/callback`**（同一オリジン経由） |
@@ -68,6 +74,14 @@ flowchart LR
 > backend はこの秘密が一致したリクエストの `X-Forwarded-For` だけを実クライアントIPとして
 > 信頼する。backend のURLは公開されており直接叩けるため、これが無いとIPを詐称するだけで
 > レート制限を回避できてしまう。未設定なら転送ヘッダを信頼せず接続元IPを使う（安全側）。
+>
+> **`RESOLVE_DAILY_LIMIT_ANON` はこの一致に強く依存する。** 未設定・不一致だと
+> `c.RealIP()` が Cloudflare Pages のプロキシ自身の `RemoteAddr` に落ち、
+> **すべての非ログイン利用者が同一IP＝1つの10/日バケットを共有**する。
+> 症状は「冷蔵庫から探すが、サービス全体でだいたい10回使うと使えなくなる」
+> （利用者ごとに個別の上限に見えない、全員同時に止まる）。この機能が入る前は
+> 同じ設定ミスの影響が「60回/分を全員で共有」で済んでいたが、今は
+> 「10回/日を全員で共有」に格上げされている。
 
 > **Stripe Webhook は `/api/*` プロキシを経由しない。** Stripe は Cloud Run の公開URL
 > （`https://menu-planner-backend-xxxx.a.run.app/api/v1/billing/webhook`）へ直接叩く
@@ -254,6 +268,27 @@ curl -s https://kondatekun.yuuyakim.com/ | grep -o '<script[^>]*cloudflareinsigh
 
 タグが返れば注入されている。ブラウザ側では DevTools の Network に `/cdn-cgi/rum` への送信が出る
 （`beacon.min.js` 自体は JS リソースなので Fetch/XHR フィルタには出ない）。
+
+## 運用: 食材マスタを更新したら未解決キャッシュを消す
+
+食材マスタ（`backend/db/seeds/ingredients.sql`）に食材を足したら、次を流す。
+
+```bash
+make purge-unresolved   # 本番は DATABASE_URL=<Neon> go run ./cmd/resolutions purge-unresolved
+```
+
+`ingredient_resolutions` は「この語はマスタに無い」も保存する（保存しないと
+毎回LLMに聞き直してコストがかかる）。**食材を足すと、その保存が古い答えになる。**
+解決キャッシュは TTL を持たない設計なので、シード更新のたびに手で消す。
+消すのは未解決の行だけで、解決済みの行は残る（食材の別名は変わらないため）。
+
+## 運用: 読み取りの日次カウンタを月次で消す
+
+`resolve_usage_counters`（読み取りの日次カウンタ）は古い日付の行が溜まり続ける。月1回程度、次を流す。
+
+```bash
+make prune-counters   # 本番は DATABASE_URL=<Neon> go run ./cmd/resolutions prune-counters
+```
 
 ## ロールバック / 注意
 - backend は Cloud Run のリビジョンで即ロールバック可能。

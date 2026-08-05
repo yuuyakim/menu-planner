@@ -468,6 +468,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ingredients/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 手持ちの食材のテキストを食材に対応づける
+         * @description 自由記述で書かれた食材（「豚こま、玉ねぎ、マツタケ」）を食材マスタに
+         *     対応づける。166種をカテゴリから探してチェックする操作は、冷蔵庫を
+         *     開けながらやるには重いため、その前段として自由記述を受ける。
+         *
+         *     解決は ①食材マスタとの完全一致 → ②解決キャッシュ → ③LLM の順。
+         *     全語が①で解ければLLMは呼ばない。
+         *
+         *     **LLM が落ちても 502 にはしない。** ①②で解けた分を 200 で返し、
+         *     degraded を立てる。呼び出し側は解釈結果を利用者に見せて確認させる。
+         *
+         *     対応づかなかった語は unresolved に入る。検索には使われない。
+         *     未認証でも使える（検索と同じ扱い）。
+         *
+         *     「読み取る」は LLM を呼ぶため日次の上限がある（非ログインはIP単位）。
+         *     上限に達しても 502 にはせず、①②で解けた分を 200 で返して
+         *     degraded と degradedReason を立てる。チェックボックスから選ぶ経路は
+         *     上限の対象外で、いつでも使える。
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /**
+                         * @description 区切りは「、」「,」「，」改行・空白・「・」。
+                         *     最大200文字、語は最大20件。
+                         * @example 豚こま、玉ねぎ、マツタケ
+                         */
+                        text: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description 解決結果（一部しか解けなくても200） */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ResolveResult"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shopping-list": {
         parameters: {
             query?: never;
@@ -1694,6 +1761,38 @@ export interface components {
         };
         IngredientsResponse: {
             ingredients: components["schemas"]["Ingredient"][];
+        };
+        ResolvedWord: {
+            /**
+             * @description 利用者が書いた**元の語**（正規化前）。「マツタケ は登録がありません」と
+             *     出すとき、書いた通りの文字列の方が伝わるため。
+             * @example 豚こま
+             */
+            word: string;
+            ingredient: components["schemas"]["Ingredient"];
+        };
+        ResolveResult: {
+            /** @description 食材に対応づいた語。0件でも null にせず空配列を返す。 */
+            resolved: components["schemas"]["ResolvedWord"][];
+            /**
+             * @description マスタに無かった語（元の語）。検索には使われない。
+             * @example [
+             *       "マツタケ"
+             *     ]
+             */
+            unresolved: string[];
+            /**
+             * @description LLM への問い合わせをスキップしたか。立っていても①②で解けた分は
+             *     resolved に入っている。画面は「一部だけ読み取れました」と伝える。
+             */
+            degraded: boolean;
+            /**
+             * @description 縮退した理由。degraded が false なら出さない。
+             *     画面はこれで文言を選ぶ。llm_error と counter_unavailable は
+             *     利用者から見れば同じ「今うまく読めない」なので同じ文言を出す。
+             * @enum {string}
+             */
+            degradedReason?: "llm_error" | "counter_unavailable" | "anon_daily_limit" | "user_daily_limit" | "service_daily_limit";
         };
         ShoppingListRequest: {
             /** @description 1〜7件。重複は1件として扱う */

@@ -146,6 +146,43 @@ func run() error {
 	ingredientSvc := service.NewIngredientService(ingredientRepo, menuRepo)
 	ingredientHandler := handler.NewIngredientHandler(shoppingSvc, ingredientSvc)
 
+	// 手持ちの食材のテキスト入力。①完全一致 →②解決キャッシュ →③LLM の順に解く。
+	resolutionRepo := repository.NewResolutionRepository(pool)
+	resolveGateway, err := gateway.NewResolver(gateway.ResolverConfig{
+		Provider: os.Getenv("INGREDIENT_RESOLVER_PROVIDER"),
+		APIKey:   os.Getenv("INGREDIENT_RESOLVER_API_KEY"),
+	})
+	if err != nil {
+		slog.Error("食材解決の設定に失敗しました", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("食材解決を設定しました", "provider", os.Getenv("INGREDIENT_RESOLVER_PROVIDER"))
+
+	// 読み取り（LLM）の日次上限（設計 3章）。分単位のバースト制御は searchLimit が
+	// 担い、その上に日次の層を重ねる。0 で無制限にできるのは、Vite プロキシ配下の
+	// 開発・E2E で全リクエストが単一IPに集約されるため。
+	resolveLimits := service.ResolveQuotaLimits{
+		Anon:  envInt("RESOLVE_DAILY_LIMIT_ANON", 10),
+		User:  envInt("RESOLVE_DAILY_LIMIT_USER", 30),
+		Total: envInt("RESOLVE_DAILY_LIMIT_TOTAL", 300),
+	}
+	warnUnlimitedResolveLimits(resolveLimits)
+	resolveUsageRepo := repository.NewResolveUsageRepository(pool)
+	resolveQuota := service.NewResolveQuota(resolveUsageRepo, resolveLimits, time.Now)
+
+	// 未設定で起動させない。既定値で動かすと生IPと同じ強度の値が全環境で共有され、
+	// ハッシュ化の意味が無くなる（設計 6.2）。
+	resolveIPHashSecret := os.Getenv("RESOLVE_IP_HASH_SECRET")
+	if resolveIPHashSecret == "" {
+		slog.Error("RESOLVE_IP_HASH_SECRET が未設定です")
+		os.Exit(1)
+	}
+
+	resolveSvc := service.NewIngredientResolveService(
+		ingredientRepo, resolutionRepo, resolveGateway, resolveQuota)
+	resolveHandler := handler.NewIngredientResolveHandler(
+		resolveSvc, resolveQuota, resolveIPHashSecret, tokens)
+
 	// 保存済み週の買い物リストは、既存の導出（shoppingSvc）に差分（overrideRepo）を
 	// 重ねる。所有者検証は savedWeeklyRepo、premium 判定は entitlementSvc に委ねる。
 	overrideRepo := repository.NewShoppingListOverrideRepository(pool)
@@ -173,7 +210,17 @@ func run() error {
 	// 本番はプロキシ（Cloudflare Pages の Function）の背後に立つ。共有シークレットが
 	// 一致したリクエストの X-Forwarded-For だけを信頼して実クライアントIPを取り出す。
 	// 未設定なら接続元をそのまま使う（＝転送ヘッダを信用しない安全側）。
-	e.IPExtractor = handler.TrustedProxyIPExtractor(os.Getenv("TRUSTED_PROXY_SECRET"))
+	trustedProxySecret := os.Getenv("TRUSTED_PROXY_SECRET")
+	if trustedProxySecret == "" {
+		// fatal にはしない。ローカル開発はこの値が無いのが普通なので、
+		// 落とすと開発体験そのものを壊す。だが本番で未設定・不一致だと
+		// 全リクエストがプロキシ自身のRemoteAddrに集約され、非ログインの
+		// 読み取り日次上限（RESOLVE_DAILY_LIMIT_ANON）が全利用者で
+		// 1つのバケットに縮む（DEPLOY.md参照）。運用で気付けるよう警告だけ出す。
+		slog.Warn("TRUSTED_PROXY_SECRET が未設定です。" +
+			"全リクエストが単一IPとして扱われ、非ログインの読み取り日次上限を全利用者で共有します")
+	}
+	e.IPExtractor = handler.TrustedProxyIPExtractor(trustedProxySecret)
 
 	// 全てのエラーレスポンスを RFC 7807 形式に統一する
 	e.HTTPErrorHandler = handler.ErrorHandler()
@@ -203,6 +250,7 @@ func run() error {
 	menuHandler.RegisterRoutes(e, searchLimit)
 	// 食材・買い物リストは検索系と同じ扱い（未認証で使え、検索の上限を適用）。
 	ingredientHandler.RegisterRoutes(e, searchLimit)
+	resolveHandler.RegisterRoutes(e, searchLimit)
 	shoppingHandler.RegisterRoutes(e, searchLimit)
 	authHandler.RegisterRoutes(e, authLimit)
 	historyHandler.RegisterRoutes(e)
@@ -237,6 +285,28 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// warnUnlimitedResolveLimits は読み取りの日次上限のうち0以下（無制限）に
+// なっているものを名指しで警告する。「0以下は無制限」は仕様（設計 7章）通りで、
+// 開発・E2E がこれに依存しているため fatal にはしない。ただし
+// RESOLVE_DAILY_LIMIT_TOTAL に負値を渡すと請求額の天井が無言で消えるため、
+// 気付けるようログだけは残す。開発環境では3つとも0のため、ローカル起動の
+// たびにこの行が出るのが正しい。
+func warnUnlimitedResolveLimits(l service.ResolveQuotaLimits) {
+	var unlimited []string
+	if l.Anon <= 0 {
+		unlimited = append(unlimited, "RESOLVE_DAILY_LIMIT_ANON")
+	}
+	if l.User <= 0 {
+		unlimited = append(unlimited, "RESOLVE_DAILY_LIMIT_USER")
+	}
+	if l.Total <= 0 {
+		unlimited = append(unlimited, "RESOLVE_DAILY_LIMIT_TOTAL")
+	}
+	if len(unlimited) > 0 {
+		slog.Warn("読み取りの日次上限が無制限です（0以下）", "unlimited", unlimited)
+	}
 }
 
 // envInt は環境変数を整数として読む。未設定・空・数値でない場合は fallback。
