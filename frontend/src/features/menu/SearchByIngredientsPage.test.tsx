@@ -203,6 +203,7 @@ function respondResolve(result: {
   resolved: { word: string; ingredient: Ingredient }[]
   unresolved: string[]
   degraded: boolean
+  degradedReason?: string
 }) {
   const bodies: { text?: string }[] = []
   server.use(
@@ -322,5 +323,99 @@ describe('冷蔵庫の中身を自由記述で入力する', () => {
     await waitFor(() =>
       expect(screen.queryByRole('status', { name: '読み取りの結果' })).toBeNull(),
     )
+  })
+})
+
+describe('読み取りの上限', () => {
+  it('非ログインの上限ではログインへ誘導する', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({
+      resolved: [],
+      unresolved: ['マツタケ'],
+      degraded: true,
+      degradedReason: 'anon_daily_limit',
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'マツタケ')
+
+    expect(
+      await screen.findByText(/今日の読み取り上限に達しました/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'ログイン' })).toHaveAttribute(
+      'href',
+      '/login',
+    )
+  })
+
+  it('ログイン済みの上限ではログインへ誘導しない', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({
+      resolved: [],
+      unresolved: ['マツタケ'],
+      degraded: true,
+      degradedReason: 'user_daily_limit',
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'マツタケ')
+
+    expect(await screen.findByText(/明日また使えます/)).toBeInTheDocument()
+    // ログインしても増えないので導線を出さない。
+    expect(screen.queryByRole('link', { name: 'ログイン' })).not.toBeInTheDocument()
+  })
+
+  it('全体の上限では混み合っていると伝える', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({
+      resolved: [],
+      unresolved: ['マツタケ'],
+      degraded: true,
+      degradedReason: 'service_daily_limit',
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'マツタケ')
+
+    expect(
+      await screen.findByText(/ただいま読み取りが混み合っています/),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'ログイン' })).not.toBeInTheDocument()
+  })
+
+  it('カウンタが読めないときはLLM障害と同じ文言を出す', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({
+      resolved: [],
+      unresolved: ['マツタケ'],
+      degraded: true,
+      degradedReason: 'counter_unavailable',
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'マツタケ')
+
+    // 利用者から見れば「今うまく読めない」で同じ。区別はログの側だけに残す。
+    expect(await screen.findByText(/一部だけ読み取れました/)).toBeInTheDocument()
+  })
+
+  it('理由が無い縮退は従来の文言のまま', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondResolve({
+      resolved: [],
+      unresolved: ['マツタケ'],
+      degraded: true,
+      degradedReason: 'llm_error',
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'マツタケ')
+
+    expect(await screen.findByText(/一部だけ読み取れました/)).toBeInTheDocument()
   })
 })

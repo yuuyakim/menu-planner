@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { difficultyLabels, genreLabels } from '../../api/types'
-import type { MenuMatch } from '../../api/types'
+import type { DegradedReason, MenuMatch } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
@@ -23,6 +23,9 @@ export function SearchByIngredientsPage() {
   const [text, setText] = useState('')
   const [unresolved, setUnresolved] = useState<string[]>([])
   const [degraded, setDegraded] = useState(false)
+  const [degradedReason, setDegradedReason] = useState<DegradedReason | undefined>(
+    undefined,
+  )
 
   const {
     data: ingredients,
@@ -50,6 +53,7 @@ export function SearchByIngredientsPage() {
       })
       setUnresolved(result.unresolved)
       setDegraded(result.degraded)
+      setDegradedReason(result.degradedReason)
       // 食材が変わったので前の検索結果は消す（toggle と同じ理由）。
       search.reset()
     },
@@ -76,6 +80,7 @@ export function SearchByIngredientsPage() {
     // いつの読み取りの話なのか分からなくなる。
     setUnresolved([])
     setDegraded(false)
+    setDegradedReason(undefined)
     resolve.reset()
     search.reset()
   }
@@ -97,7 +102,11 @@ export function SearchByIngredientsPage() {
           />
 
           {resolve.error && <ErrorMessage error={resolve.error} />}
-          <ResolveResultPanel unresolved={unresolved} degraded={degraded} />
+          <ResolveResultPanel
+            unresolved={unresolved}
+            degraded={degraded}
+            reason={degradedReason}
+          />
 
           <p className="text-sm text-kon-ink/60">または下から選ぶ</p>
 
