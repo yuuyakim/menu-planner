@@ -50,6 +50,10 @@ flowchart LR
 | `SEARCH_API_KEY` | 空 | Brave のキー（`brave` の場合） |
 | `INGREDIENT_RESOLVER_PROVIDER` | `stub` | `claude`（または当面 `stub`）。**空にすると起動に失敗する** |
 | `INGREDIENT_RESOLVER_API_KEY` | 空 | Anthropic のキー（`claude` の場合は必須） |
+| `RESOLVE_DAILY_LIMIT_ANON` | `0`（無制限） | `10`（spec値）。非ログインの1日あたりの読み取り回数。IP単位 |
+| `RESOLVE_DAILY_LIMIT_USER` | `0`（無制限） | `30`（spec値）。ログインユーザーの1日あたりの読み取り回数 |
+| `RESOLVE_DAILY_LIMIT_TOTAL` | `0`（無制限） | `300`（spec値）。サービス全体の1日あたりの読み取り回数。**請求額の天井はこれで決まる**（最悪 約210円/日） |
+| `RESOLVE_IP_HASH_SECRET` | ダミー | **`openssl rand -base64 32` の実値**。IPを数えるためのHMAC鍵。**未設定だと起動に失敗する** |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | **公開URL**（`https://kondatekun.yuuyakim.com`） |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | 空可 | 本番のOAuthクライアント |
 | `GOOGLE_REDIRECT_URL` | localhost | **`https://kondatekun.yuuyakim.com/api/v1/auth/google/callback`**（同一オリジン経由） |
@@ -269,6 +273,14 @@ make purge-unresolved   # 本番は DATABASE_URL=<Neon> go run ./cmd/resolutions
 毎回LLMに聞き直してコストがかかる）。**食材を足すと、その保存が古い答えになる。**
 解決キャッシュは TTL を持たない設計なので、シード更新のたびに手で消す。
 消すのは未解決の行だけで、解決済みの行は残る（食材の別名は変わらないため）。
+
+## 運用: 読み取りの日次カウンタを月次で消す
+
+`resolve_usage`（読み取りの日次カウンタ）は古い日付の行が溜まり続ける。月1回程度、次を流す。
+
+```bash
+make purge-counters   # Task 8 で追加
+```
 
 ## ロールバック / 注意
 - backend は Cloud Run のリビジョンで即ロールバック可能。

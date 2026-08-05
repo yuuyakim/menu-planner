@@ -158,8 +158,28 @@ func run() error {
 	}
 	slog.Info("食材解決を設定しました", "provider", os.Getenv("INGREDIENT_RESOLVER_PROVIDER"))
 
-	resolveSvc := service.NewIngredientResolveService(ingredientRepo, resolutionRepo, resolveGateway)
-	resolveHandler := handler.NewIngredientResolveHandler(resolveSvc)
+	// 読み取り（LLM）の日次上限（設計 3章）。分単位のバースト制御は searchLimit が
+	// 担い、その上に日次の層を重ねる。0 で無制限にできるのは、Vite プロキシ配下の
+	// 開発・E2E で全リクエストが単一IPに集約されるため。
+	resolveUsageRepo := repository.NewResolveUsageRepository(pool)
+	resolveQuota := service.NewResolveQuota(resolveUsageRepo, service.ResolveQuotaLimits{
+		Anon:  envInt("RESOLVE_DAILY_LIMIT_ANON", 10),
+		User:  envInt("RESOLVE_DAILY_LIMIT_USER", 30),
+		Total: envInt("RESOLVE_DAILY_LIMIT_TOTAL", 300),
+	}, time.Now)
+
+	// 未設定で起動させない。既定値で動かすと生IPと同じ強度の値が全環境で共有され、
+	// ハッシュ化の意味が無くなる（設計 6.2）。
+	resolveIPHashSecret := os.Getenv("RESOLVE_IP_HASH_SECRET")
+	if resolveIPHashSecret == "" {
+		slog.Error("RESOLVE_IP_HASH_SECRET が未設定です")
+		os.Exit(1)
+	}
+
+	resolveSvc := service.NewIngredientResolveService(
+		ingredientRepo, resolutionRepo, resolveGateway, resolveQuota)
+	resolveHandler := handler.NewIngredientResolveHandler(
+		resolveSvc, resolveQuota, resolveIPHashSecret, tokens)
 
 	// 保存済み週の買い物リストは、既存の導出（shoppingSvc）に差分（overrideRepo）を
 	// 重ねる。所有者検証は savedWeeklyRepo、premium 判定は entitlementSvc に委ねる。
