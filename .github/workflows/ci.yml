@@ -216,6 +216,8 @@ jobs:
             --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')
           # SEARCH_API_PROVIDER / INGREDIENT_RESOLVER_PROVIDER はバイナリ側に既定が無く、
           # 未設定だと起動時に落ちる（既定値を与えていたのは compose だった）。
+          # RESOLVE_IP_HASH_SECRET も同様で、未設定だと cmd/server/main.go が
+          # os.Exit(1) するため /health に届く前にコンテナが落ちる。
           docker run -d --name backend-prod --network "$network" \
             -e DATABASE_URL='postgres://app:password@db:5432/menu_planner?sslmode=disable' \
             -e JWT_SECRET='ci-only-secret' \
@@ -224,6 +226,7 @@ jobs:
             -e STRIPE_SECRET_KEY='sk_test_ci_placeholder' \
             -e STRIPE_WEBHOOK_SECRET='whsec_ci_placeholder' \
             -e STRIPE_PRICE_ID='price_ci_placeholder' \
+            -e RESOLVE_IP_HASH_SECRET='ci-only-secret' \
             -p 8080:8080 \
             menu-planner-backend:ci
           # --retry だけでは接続リセット/recv失敗を再試行せず、起動直後の listen 前の
