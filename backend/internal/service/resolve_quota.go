@@ -68,7 +68,11 @@ func NewResolveQuota(
 // Check は今日の残枠を読む。allow=false のとき、2つ目の戻り値に理由が入る。
 //
 // **判定は「前回までの実績」を見る。** 同時に走るリクエストは互いを見ないため、
-// max-instances=2 のもとで数件ぶん超過しうる。金額にして数円なので受け入れる。
+// Check と Record の間に割り込んだ分だけ超過しうる。これを絞るのは
+// max-instances ではなく Cloud Run の --concurrency（既定80、未ピン留め）で、
+// 2インスタンスなら理論上 約160件が Check を通り抜けてから Record が効き始める。
+// 全体上限300に対し最悪 300+160=460回、金額にして約320円/日。受け入れる
+// （設計 5章）。
 func (q *ResolveQuota) Check(ctx context.Context, s ResolveSubject) (bool, DegradedReason) {
 	own := q.subjectLimit(s)
 	if q.limits.Total <= 0 && own <= 0 {

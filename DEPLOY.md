@@ -52,7 +52,7 @@ flowchart LR
 | `INGREDIENT_RESOLVER_API_KEY` | 空 | Anthropic のキー（`claude` の場合は必須） |
 | `RESOLVE_DAILY_LIMIT_ANON` | `0`（無制限） | `10`（spec値）。非ログインの1日あたりの読み取り回数。IP単位 |
 | `RESOLVE_DAILY_LIMIT_USER` | `0`（無制限） | `30`（spec値）。ログインユーザーの1日あたりの読み取り回数 |
-| `RESOLVE_DAILY_LIMIT_TOTAL` | `0`（無制限） | `300`（spec値）。サービス全体の1日あたりの読み取り回数。**請求額の天井はこれで決まる**（最悪 約210円/日） |
+| `RESOLVE_DAILY_LIMIT_TOTAL` | `0`（無制限） | `300`（spec値）。サービス全体の1日あたりの読み取り回数。**請求額の天井はこれで決まる**（名目 約210円/日。Check-then-Record の競合込みで最悪 約320円/日。詳細は設計doc §5・§7.1） |
 | `RESOLVE_IP_HASH_SECRET` | ダミー | **`openssl rand -base64 32` の実値**。IPを数えるためのHMAC鍵。**未設定だと起動に失敗する** |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | **公開URL**（`https://kondatekun.yuuyakim.com`） |
 | `GOOGLE_CLIENT_ID` / `_SECRET` | 空可 | 本番のOAuthクライアント |
