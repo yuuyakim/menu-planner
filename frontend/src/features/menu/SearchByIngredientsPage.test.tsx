@@ -406,11 +406,11 @@ describe('読み取りの上限', () => {
   it('理由が無い縮退は従来の文言のまま', async () => {
     const user = userEvent.setup()
     respondIngredients()
+    // degradedReason を持たせない（サーバは omitempty でキー自体を省く）。
     respondResolve({
       resolved: [],
       unresolved: ['マツタケ'],
       degraded: true,
-      degradedReason: 'llm_error',
     })
     renderWithProviders(<SearchByIngredientsPage />)
 
