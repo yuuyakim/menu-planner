@@ -279,7 +279,7 @@ make purge-unresolved   # 本番は DATABASE_URL=<Neon> go run ./cmd/resolutions
 `resolve_usage`（読み取りの日次カウンタ）は古い日付の行が溜まり続ける。月1回程度、次を流す。
 
 ```bash
-make purge-counters   # Task 8 で追加
+make prune-counters   # 本番は DATABASE_URL=<Neon> go run ./cmd/resolutions prune-counters
 ```
 
 ## ロールバック / 注意
