@@ -491,6 +491,11 @@ export interface paths {
          *
          *     対応づかなかった語は unresolved に入る。検索には使われない。
          *     未認証でも使える（検索と同じ扱い）。
+         *
+         *     「読み取る」は LLM を呼ぶため日次の上限がある（非ログインはIP単位）。
+         *     上限に達しても 502 にはせず、①②で解けた分を 200 で返して
+         *     degraded と degradedReason を立てる。チェックボックスから選ぶ経路は
+         *     上限の対象外で、いつでも使える。
          */
         post: {
             parameters: {
@@ -1781,6 +1786,13 @@ export interface components {
              *     resolved に入っている。画面は「一部だけ読み取れました」と伝える。
              */
             degraded: boolean;
+            /**
+             * @description 縮退した理由。degraded が false なら出さない。
+             *     画面はこれで文言を選ぶ。llm_error と counter_unavailable は
+             *     利用者から見れば同じ「今うまく読めない」なので同じ文言を出す。
+             * @enum {string}
+             */
+            degradedReason?: "llm_error" | "counter_unavailable" | "anon_daily_limit" | "user_daily_limit" | "service_daily_limit";
         };
         ShoppingListRequest: {
             /** @description 1〜7件。重複は1件として扱う */

@@ -32,6 +32,8 @@ export type MenuMatch = Schemas['MenuMatch']
 export type ResolvedWord = Schemas['ResolvedWord']
 /** ResolveResult は自由記述の解決結果（spec.md 2.9 / 設計 4.1）。 */
 export type ResolveResult = Schemas['ResolveResult']
+/** DegradedReason は読み取りが縮退した理由（設計 8章）。 */
+export type DegradedReason = NonNullable<ResolveResult['degradedReason']>
 
 /** SavedShoppingItem は保存済み週の買い物リスト1件（差分適用後の形）。 */
 export type SavedShoppingItem = Schemas['SavedShoppingItem']
