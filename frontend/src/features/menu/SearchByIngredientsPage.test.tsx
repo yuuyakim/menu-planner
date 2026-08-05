@@ -418,4 +418,44 @@ describe('読み取りの上限', () => {
 
     expect(await screen.findByText(/一部だけ読み取れました/)).toBeInTheDocument()
   })
+
+  it('上限で止まった語は「登録がありませんでした」と言わない', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    // 上限で拒否された語は service が unresolved に落とすが、
+    // これはマスタに無いと分かったわけではなく、そもそも照会されていない。
+    respondResolve({
+      resolved: [],
+      unresolved: ['マツタケ'],
+      degraded: true,
+      degradedReason: 'anon_daily_limit',
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'マツタケ')
+
+    expect(
+      await screen.findByText(/今日の読み取り上限に達しました/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/登録がありませんでした/)).not.toBeInTheDocument()
+  })
+
+  it('障害系で止まった語は従来どおり「登録がありませんでした」と言う', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    // llm_error / counter_unavailable は実際に LLM へ問い合わせた結果
+    // マスタに無いと分かった語なので、この記述は正しい。
+    respondResolve({
+      resolved: [],
+      unresolved: ['マツタケ'],
+      degraded: true,
+      degradedReason: 'llm_error',
+    })
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await readAloud(user, 'マツタケ')
+
+    expect(await screen.findByText(/一部だけ読み取れました/)).toBeInTheDocument()
+    expect(await screen.findByText(/登録がありませんでした/)).toBeInTheDocument()
+  })
 })

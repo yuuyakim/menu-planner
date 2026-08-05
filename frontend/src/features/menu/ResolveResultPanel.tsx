@@ -71,7 +71,12 @@ export function ResolveResultPanel({ unresolved, degraded, reason }: Props) {
           )}
         </p>
       )}
-      {unresolved.length > 0 && (
+      {/* 上限で拒否された語は service が unresolved に詰めるが、実際には
+          LLM に照会すらしていない。「登録がありませんでした」はマスタと
+          突き合わせた結果を意味するため、上限のときに出すと事実に反する。
+          障害系（llm_error / counter_unavailable）は実際に照会した結果
+          マスタに無いと分かった語なので、従来どおり出してよい。 */}
+      {unresolved.length > 0 && !isLimit && (
         <p className="rounded-2xl bg-kon-cream px-5 py-3 text-sm text-kon-ink/80">
           登録がありませんでした: {unresolved.join('・')}
           <span className="mt-1 block text-kon-ink/60">
