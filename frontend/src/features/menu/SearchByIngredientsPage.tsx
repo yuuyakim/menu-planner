@@ -3,29 +3,23 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { difficultyLabels, genreLabels } from '../../api/types'
-import type { DegradedReason, MenuMatch } from '../../api/types'
+import type { MenuMatch } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
-import {
-  fetchAllIngredients,
-  ingredientsQueryKey,
-  resolveIngredients,
-  searchByIngredients,
-} from './api'
+import { fetchAllIngredients, ingredientsQueryKey, searchByIngredients } from './api'
 import { IngredientPicker } from './IngredientPicker'
-import { IngredientTextInput } from './IngredientTextInput'
-import { ResolveResultPanel } from './ResolveResultPanel'
 
 // SearchByIngredientsPage は冷蔵庫にあるもので作れる献立を探す画面（spec.md 2.9）。
+//
+// **自由記述での読み取りを暫定的に外している（2026-08-05）。** Anthropic の
+// APIキーを取得できておらず、INGREDIENT_RESOLVER_PROVIDER=stub では何を入れても
+// 「登録がありませんでした」と返る。出したままだと、利用者に「自分の食材が
+// マスタに無い」と誤って伝えることになるため、入力欄ごと隠す。
+// IngredientTextInput / ResolveResultPanel / resolveIngredients は消していない。
+// キーを取得したらこのコミットを revert すれば、テストごと元に戻る。
 export function SearchByIngredientsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [text, setText] = useState('')
-  const [unresolved, setUnresolved] = useState<string[]>([])
-  const [degraded, setDegraded] = useState(false)
-  const [degradedReason, setDegradedReason] = useState<DegradedReason | undefined>(
-    undefined,
-  )
 
   const {
     data: ingredients,
@@ -40,23 +34,6 @@ export function SearchByIngredientsPage() {
 
   const search = useMutation({
     mutationFn: () => searchByIngredients([...selected]),
-  })
-
-  const resolve = useMutation({
-    mutationFn: () => resolveIngredients(text),
-    onSuccess: (result) => {
-      // **マージする（置き換えない）。** すでに手で入れたチェックを消さない。
-      setSelected((prev) => {
-        const next = new Set(prev)
-        for (const r of result.resolved) next.add(r.ingredient.id)
-        return next
-      })
-      setUnresolved(result.unresolved)
-      setDegraded(result.degraded)
-      setDegradedReason(result.degradedReason)
-      // 食材が変わったので前の検索結果は消す（toggle と同じ理由）。
-      search.reset()
-    },
   })
 
   function toggle(id: string) {
@@ -76,12 +53,6 @@ export function SearchByIngredientsPage() {
 
   function clear() {
     setSelected(new Set())
-    // 選択を捨てたのに読み取り結果の但し書きだけ残ると、
-    // いつの読み取りの話なのか分からなくなる。
-    setUnresolved([])
-    setDegraded(false)
-    setDegradedReason(undefined)
-    resolve.reset()
     search.reset()
   }
 
@@ -94,21 +65,7 @@ export function SearchByIngredientsPage() {
 
       {ingredients && (
         <>
-          <IngredientTextInput
-            value={text}
-            onChange={setText}
-            onSubmit={() => resolve.mutate()}
-            isPending={resolve.isPending}
-          />
-
-          {resolve.error && <ErrorMessage error={resolve.error} />}
-          <ResolveResultPanel
-            unresolved={unresolved}
-            degraded={degraded}
-            reason={degradedReason}
-          />
-
-          <p className="text-sm text-kon-ink/60">または下から選ぶ</p>
+          <p className="text-sm text-kon-ink/60">使える食材を選ぶ</p>
 
           <IngredientPicker
             ingredients={ingredients}

@@ -224,7 +224,11 @@ async function readAloud(
   await user.click(screen.getByRole('button', { name: '読み取る' }))
 }
 
-describe('冷蔵庫の中身を自由記述で入力する', () => {
+// 以下2つの describe は、画面から自由記述の入力欄を外しているあいだ止めている
+// （2026-08-05・Anthropic のAPIキー待ち。SearchByIngredientsPage.tsx の冒頭を参照）。
+// **消さずに skip にしている。** 入力欄を戻すコミットを revert すれば、
+// この skip も一緒に外れてテストがそのまま復活する。
+describe.skip('冷蔵庫の中身を自由記述で入力する', () => {
   it('読み取るとピッカーにチェックが入る', async () => {
     const user = userEvent.setup()
     respondIngredients()
@@ -326,7 +330,7 @@ describe('冷蔵庫の中身を自由記述で入力する', () => {
   })
 })
 
-describe('読み取りの上限', () => {
+describe.skip('読み取りの上限', () => {
   it('非ログインの上限ではログインへ誘導する', async () => {
     const user = userEvent.setup()
     respondIngredients()
