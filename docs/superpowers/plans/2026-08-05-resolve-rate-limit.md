@@ -1120,7 +1120,9 @@ func TestResolve_ExactMatchDoesNotRecord(t *testing.T) {
 func TestResolve_RecordFailureDoesNotBreakResult(t *testing.T) {
 	ctx := context.Background()
 	items := testCatalog(t)
-	gw := &countingResolver{mapping: map[string]string{"ぶたこま": "豚肉"}}
+	// mapping のキーは正規化後の語。NormalizeIngredientWord はカタカナを
+	// ひらがなにするだけなので、「豚こま」はそのまま「豚こま」で引ける。
+	gw := &countingResolver{mapping: map[string]string{"豚こま": "豚肉"}}
 	rec := &fakeRecorder{err: errors.New("DBが落ちました")}
 	svc := service.NewIngredientResolveService(
 		&fakeIngredientRepo{all: items}, &fakeResolutionRepo{}, gw, rec)
@@ -2003,9 +2005,11 @@ type Props = {
 //
 // **値は5つ、文言は4つ。** counter_unavailable は llm_error と同じ文言を出す。
 // 利用者から見ればどちらも「今うまく読めない」で、区別が要るのは運用の側だけ。
+const partialMessage = '一部だけ読み取れました。残りは下から選んでください。'
+
 const degradedMessages: Record<DegradedReason, string> = {
-  llm_error: '一部だけ読み取れました。残りは下から選んでください。',
-  counter_unavailable: '一部だけ読み取れました。残りは下から選んでください。',
+  llm_error: partialMessage,
+  counter_unavailable: partialMessage,
   anon_daily_limit:
     '今日の読み取り上限に達しました。ログインすると回数が増えます。',
   user_daily_limit: '今日の読み取り上限に達しました。明日また使えます。',
