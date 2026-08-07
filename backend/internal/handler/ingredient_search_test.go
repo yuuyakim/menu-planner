@@ -1,6 +1,7 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -163,6 +164,31 @@ func TestSearchByIngredients_省略時は既定値が渡る(t *testing.T) {
 	assert.Equal(t, service.SortMissingAsc, catalog.lastInput.Sort)
 }
 
+// assertInvalidMatchSortProblem は並び順の 400 が固有の種別で返ることを確かめる。
+//
+// **ステータスだけでは足りない。** echo.NewHTTPError で返すと 400 にはなるが、
+// type は http-error、title は "Bad Request" になり、画面には英語の
+// "Bad Request" が出る（フロントは problem.title を表示する）。
+// このエンドポイントの他の 400 と同じ形であることをここで固定する。
+func assertInvalidMatchSortProblem(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	var p struct {
+		Type   string `json:"type"`
+		Title  string `json:"title"`
+		Status int    `json:"status"`
+		Detail string `json:"detail"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &p))
+	assert.Equal(t, "https://menu-planner.example.com/probs/invalid-match-sort", p.Type)
+	assert.Equal(t, "不正な並び順です", p.Title)
+	assert.Equal(t, http.StatusBadRequest, p.Status)
+	// 何を指定すればよいかは detail が持つ。
+	assert.Contains(t, p.Detail, "missing_asc")
+	assert.Contains(t, p.Detail, "matched_desc")
+}
+
 func TestSearchByIngredients_未知の並び順で400(t *testing.T) {
 	t.Parallel()
 
@@ -175,7 +201,7 @@ func TestSearchByIngredients_未知の並び順で400(t *testing.T) {
 	rec := postSearchByIngredients(t, e,
 		`{"ingredientIds":["`+id+`"],"sort":"newest"}`)
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assertInvalidMatchSortProblem(t, rec)
 	assert.Zero(t, catalog.searchCalls, "検証前に service を呼んでいる")
 }
 
@@ -191,7 +217,7 @@ func TestSearchByIngredients_空文字の並び順で400(t *testing.T) {
 	rec := postSearchByIngredients(t, e,
 		`{"ingredientIds":["`+id+`"],"sort":""}`)
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assertInvalidMatchSortProblem(t, rec)
 	assert.Zero(t, catalog.searchCalls)
 }
 

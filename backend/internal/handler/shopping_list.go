@@ -186,6 +186,11 @@ type searchByIngredientsResponse struct {
 //
 // 既定に丸めない。利用者の指定を黙って読み替えると、
 // 違う条件で検索した結果を正しい答えとして返すことになる。
+//
+// **echo.NewHTTPError は使わない。** それは toProblem の総称の分岐に落ち、
+// type が http-error・title が "Bad Request" になって、書いたメッセージは
+// どこにも出ない。このエンドポイントの他の 400 と同じく、写像表を通して
+// 固有の type と日本語の title を返す。
 func parseMatchSort(raw *string) (service.MatchSort, error) {
 	if raw == nil {
 		return service.SortMissingAsc, nil
@@ -194,8 +199,8 @@ func parseMatchSort(raw *string) (service.MatchSort, error) {
 	case service.SortMissingAsc, service.SortMatchedDesc:
 		return service.MatchSort(*raw), nil
 	default:
-		return "", echo.NewHTTPError(http.StatusBadRequest,
-			"sort は missing_asc か matched_desc を指定してください")
+		return "", fmt.Errorf("%w: missing_asc か matched_desc を指定してください",
+			service.ErrInvalidMatchSort)
 	}
 }
 
