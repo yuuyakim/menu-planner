@@ -1,4 +1,4 @@
-import type { components } from './schema'
+import type { components, paths } from './schema'
 
 // schema.d.ts は自動生成物で、参照が `components['schemas']['Menu']` と冗長になる。
 // アプリ側はこの別名だけを使い、生成物への依存をこのファイルに閉じ込める。
@@ -27,6 +27,23 @@ export type Ingredient = Schemas['Ingredient']
 export type IngredientCategory = Ingredient['category']
 export type ShoppingItem = Schemas['ShoppingItem']
 export type MenuMatch = Schemas['MenuMatch']
+
+/**
+ * SearchByIngredientsResult は冷蔵庫検索の応答（spec.md 5.6）。
+ * nearMisses は onlyMakeable で0件だったときだけ埋まる。それ以外は空配列。
+ */
+export type SearchByIngredientsResult = Schemas['MenuMatchesResponse']
+
+/**
+ * MatchSort は候補の並び順（spec.md 5.6）。
+ *
+ * この enum だけはリクエストボディに直書きされていて components に出ないため、
+ * 経路の型から辿る。ここも生成物から引くのは、値が増えたときに
+ * 手書きの別名だけ古いまま通ってしまうのを防ぐため。
+ */
+export type MatchSort = NonNullable<
+  paths['/api/v1/menus/search-by-ingredients']['post']['requestBody']['content']['application/json']['sort']
+>
 
 /** ResolvedWord は自由記述から対応づいた食材1件。word は利用者が書いた元の語。 */
 export type ResolvedWord = Schemas['ResolvedWord']

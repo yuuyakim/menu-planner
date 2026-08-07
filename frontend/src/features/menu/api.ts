@@ -2,12 +2,13 @@ import { apiDelete, apiGet, apiPost, apiPut } from '../../api/client'
 import type {
   DayMenu,
   Ingredient,
+  MatchSort,
   Menu,
-  MenuMatch,
   Recipe,
   ResolveResult,
   SavedShoppingItem,
   SavedWeeklyMenu,
+  SearchByIngredientsResult,
   ShoppingItem,
   ShoppingListOverride,
 } from '../../api/types'
@@ -108,21 +109,17 @@ export async function fetchAllIngredients(): Promise<Ingredient[]> {
   return res.ingredients
 }
 
-/** MatchSort は候補の並び順（spec.md 5.6）。 */
-export type MatchSort = 'missing_asc' | 'matched_desc'
-
-/** SearchOptions は冷蔵庫検索のつまみ。 */
+/**
+ * SearchOptions は冷蔵庫検索のつまみ。
+ *
+ * 応答の型と違い、これはリクエストの組み立て方（画面が必ず両方を決めて送る）
+ * を表すので、生成物の別名ではなくここに置く。仕様側では省略可だが、
+ * 呼び出し側に「省略できる」と読ませたくない。
+ */
 export type SearchOptions = {
   /** true のとき、不足のある献立を出さない。 */
   onlyMakeable: boolean
   sort: MatchSort
-}
-
-/** SearchByIngredientsResult は候補と「あと1品」の候補。 */
-export type SearchByIngredientsResult = {
-  matches: MenuMatch[]
-  /** onlyMakeable で0件だったときだけ埋まる。それ以外は空配列。 */
-  nearMisses: MenuMatch[]
 }
 
 /**
