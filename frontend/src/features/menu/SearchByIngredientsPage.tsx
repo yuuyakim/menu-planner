@@ -3,11 +3,14 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { difficultyLabels, genreLabels } from '../../api/types'
-import type { MenuMatch } from '../../api/types'
+import type {
+  MatchSort,
+  MenuMatch,
+  SearchByIngredientsResult,
+} from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
-import type { MatchSort, SearchByIngredientsResult } from './api'
 import { fetchAllIngredients, ingredientsQueryKey, searchByIngredients } from './api'
 import { IngredientPicker } from './IngredientPicker'
 
@@ -186,6 +189,10 @@ function Results({
           <h2 className="text-lg font-bold text-kon-ink">
             あと1品買えば作れます（{result.nearMisses.length}件）
           </h2>
+          {/* **むしろこの経路でこそ要る**（設計 5章）。「あと1品: 牛肉」は
+              買い物の指示そのものなので、断らないと「牛肉だけ買えば作れる」と
+              受け取られる。 */}
+          <SeasoningNote />
           <MatchList matches={result.nearMisses} />
         </div>
       )}
@@ -201,15 +208,25 @@ function Matches({ matches }: { matches: MenuMatch[] }) {
         作れそうな献立（{matches.length}件）
       </h2>
 
-      {/* 「不足0」でも調味料などは要る。食材リストは代表例であって
-          正確な材料表ではない（spec.md 14.1）。ここで断らないと
-          「これだけ買えば作れる」と受け取られる。 */}
-      <p className="rounded-2xl bg-kon-cream px-5 py-3 text-sm text-kon-ink/75">
-        食材は代表的なものの例です。調味料は含みません。実際の材料はレシピ元で確認してください。
-      </p>
+      <SeasoningNote />
 
       <MatchList matches={matches} />
     </div>
+  )
+}
+
+// SeasoningNote は「食材リストは代表例であって正確な材料表ではない」断り
+// （spec.md 14.1 / 14.4）。ここで断らないと「これだけ買えば作れる」と
+// 受け取られる。
+//
+// **献立カードを出す経路すべてに要る。** 文言を1か所に持つのは、
+// 片方の経路にだけ書き足して他方が抜ける事故を防ぐため（実際に
+// 「あと1品」の枠で抜けていた）。
+function SeasoningNote() {
+  return (
+    <p className="rounded-2xl bg-kon-cream px-5 py-3 text-sm text-kon-ink/75">
+      食材は代表的なものの例です。調味料は含みません。実際の材料はレシピ元で確認してください。
+    </p>
   )
 }
 

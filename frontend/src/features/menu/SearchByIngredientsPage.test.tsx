@@ -264,20 +264,34 @@ describe('冷蔵庫から探す', () => {
     expect(screen.getByLabelText('肉じゃが')).toBeInTheDocument()
   })
 
-  it('作れるものだけの結果にも調味料の断りを出す', async () => {
+  it('あと1品の候補にも調味料の断りを出す', async () => {
     const user = userEvent.setup()
     respondIngredients()
-    respondSearch([
-      { menu: menu('m2', 'オニオンスープ'), matched: [onion], missing: [] },
-    ])
+    server.use(
+      http.post('/api/v1/menus/search-by-ingredients', () =>
+        HttpResponse.json({
+          matches: [],
+          nearMisses: [
+            { menu: menu('m1', '肉じゃが'), matched: [potato], missing: [beef] },
+          ],
+        }),
+      ),
+    )
     renderWithProviders(<SearchByIngredientsPage />)
 
-    await pick(user, '玉ねぎ')
+    await pick(user, 'じゃがいも')
     await user.click(screen.getByLabelText('この中だけで作れるもの'))
     await user.click(searchButton())
 
-    // 「不足0」でも調味料は要る。この経路でこそ要る断り（spec.md 14.1 / 14.4）。
-    expect(await screen.findByText(/調味料は含みません/)).toBeInTheDocument()
+    // 「あと1品: 牛肉」は買い物の指示そのもの。**この経路でこそ要る**
+    // 断り（設計 5章 / spec.md 14.1・14.4）。無いと「牛肉だけ買えば作れる」
+    // と受け取られる。
+    const near = await screen.findByRole('heading', {
+      name: /あと1品買えば作れます/,
+    })
+    expect(near).toBeInTheDocument()
+    expect(screen.getByText(/調味料は含みません/)).toBeInTheDocument()
+    expect(screen.getByText(/実際の材料はレシピ元/)).toBeInTheDocument()
   })
 
   it('つまみを変えると前の結果が消える', async () => {
