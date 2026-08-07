@@ -3,7 +3,11 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { difficultyLabels, genreLabels } from '../../api/types'
-import type { MenuMatch } from '../../api/types'
+import type {
+  MatchSort,
+  MenuMatch,
+  SearchByIngredientsResult,
+} from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
@@ -32,8 +36,11 @@ export function SearchByIngredientsPage() {
     staleTime: 60 * 60 * 1000,
   })
 
+  const [onlyMakeable, setOnlyMakeable] = useState(false)
+  const [sort, setSort] = useState<MatchSort>('missing_asc')
+
   const search = useMutation({
-    mutationFn: () => searchByIngredients([...selected]),
+    mutationFn: () => searchByIngredients([...selected], { onlyMakeable, sort }),
   })
 
   function toggle(id: string) {
@@ -56,6 +63,18 @@ export function SearchByIngredientsPage() {
     search.reset()
   }
 
+  // つまみを変えたら前の結果は消す。食材を選び直したときと同じ理由で、
+  // 残したままだと、いまの条件の結果だと誤解させる。
+  function changeOnlyMakeable(next: boolean) {
+    setOnlyMakeable(next)
+    search.reset()
+  }
+
+  function changeSort(next: MatchSort) {
+    setSort(next)
+    search.reset()
+  }
+
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-bold text-kon-ink">冷蔵庫から探す</h1>
@@ -74,6 +93,56 @@ export function SearchByIngredientsPage() {
             onClear={clear}
           />
 
+          {/* 各組を fieldset/legend で囲む。囲まないと支援技術もテストも
+              どちらの組の選択肢か区別できない（8-D と同じ）。 */}
+          <fieldset className="space-y-2">
+            <legend className="text-sm text-kon-ink/60">探し方</legend>
+            <label className="flex items-center gap-2 text-sm text-kon-ink">
+              <input
+                type="radio"
+                name="makeable"
+                checked={!onlyMakeable}
+                onChange={() => changeOnlyMakeable(false)}
+              />
+              足りないものがあってもよい
+            </label>
+            <label className="flex items-center gap-2 text-sm text-kon-ink">
+              <input
+                type="radio"
+                name="makeable"
+                checked={onlyMakeable}
+                onChange={() => changeOnlyMakeable(true)}
+              />
+              この中だけで作れるもの
+            </label>
+          </fieldset>
+
+          {/* 「作れるものだけ」は不足が全件0になるため、並び順は結果を変えない。
+              出しても選ばせる意味がないので隠す。サーバ側では特別扱いしない。 */}
+          {!onlyMakeable && (
+            <fieldset className="space-y-2">
+              <legend className="text-sm text-kon-ink/60">並び順</legend>
+              <label className="flex items-center gap-2 text-sm text-kon-ink">
+                <input
+                  type="radio"
+                  name="sort"
+                  checked={sort === 'missing_asc'}
+                  onChange={() => changeSort('missing_asc')}
+                />
+                買い足しが少ない順
+              </label>
+              <label className="flex items-center gap-2 text-sm text-kon-ink">
+                <input
+                  type="radio"
+                  name="sort"
+                  checked={sort === 'matched_desc'}
+                  onChange={() => changeSort('matched_desc')}
+                />
+                手持ちを多く使う順
+              </label>
+            </fieldset>
+          )}
+
           <button
             type="button"
             onClick={() => search.mutate()}
@@ -88,71 +157,119 @@ export function SearchByIngredientsPage() {
 
       {search.error && <ErrorMessage error={search.error} />}
 
-      {search.data && <Matches matches={search.data} />}
+      {search.data && <Results result={search.data} onlyMakeable={onlyMakeable} />}
     </section>
   )
 }
 
-// Matches は候補の一覧。
-function Matches({ matches }: { matches: MenuMatch[] }) {
-  if (matches.length === 0) {
-    return (
-      <MascotEmpty image="/mascot/face-thinking.png">
-        その食材で作れる献立が見つかりませんでした。食材を増やすと見つかりやすくなります。
-      </MascotEmpty>
-    )
+// Results は検索結果。0件のときの文言が探し方によって変わる。
+function Results({
+  result,
+  onlyMakeable,
+}: {
+  result: SearchByIngredientsResult
+  onlyMakeable: boolean
+}) {
+  if (result.matches.length > 0) {
+    return <Matches matches={result.matches} />
   }
 
+  return (
+    <div className="space-y-6">
+      <MascotEmpty image="/mascot/face-thinking.png">
+        {onlyMakeable
+          ? 'この中だけで作れる献立はありませんでした。食材をもう少し選ぶと見つかりやすくなります。'
+          : 'その食材で作れる献立が見つかりませんでした。食材を増やすと見つかりやすくなります。'}
+      </MascotEmpty>
+
+      {/* 見出しを分けて、絞り込みの結果ではないことを見た目で区別する。
+          地続きに見せると「作れるものだけ」の約束を破ったように見える。 */}
+      {result.nearMisses.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-kon-ink">
+            あと1品買えば作れます（{result.nearMisses.length}件）
+          </h2>
+          {/* **むしろこの経路でこそ要る**（設計 5章）。「あと1品: 牛肉」は
+              買い物の指示そのものなので、断らないと「牛肉だけ買えば作れる」と
+              受け取られる。 */}
+          <SeasoningNote />
+          <MatchList matches={result.nearMisses} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Matches は候補の一覧。見出し・調味料の断り・一覧の3つを並べる。
+function Matches({ matches }: { matches: MenuMatch[] }) {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-bold text-kon-ink">
         作れそうな献立（{matches.length}件）
       </h2>
 
-      {/* 「不足0」でも調味料などは要る。食材リストは代表例であって
-          正確な材料表ではない（spec.md 14.1）。ここで断らないと
-          「これだけ買えば作れる」と受け取られる。 */}
-      <p className="rounded-2xl bg-kon-cream px-5 py-3 text-sm text-kon-ink/75">
-        食材は代表的なものの例です。調味料は含みません。実際の材料はレシピ元で確認してください。
-      </p>
+      <SeasoningNote />
 
-      <ul className="space-y-3">
-        {matches.map((m) => (
-          <li
-            key={m.menu.id}
-            aria-label={m.menu.name}
-            className="rounded-2xl border border-kon-leaf-soft bg-white p-4"
-          >
-            <p className="font-medium text-kon-ink">{m.menu.name}</p>
-            <p className="mt-1 flex flex-wrap gap-2 text-sm text-kon-ink/60">
-              <span className="rounded-full bg-kon-cream px-2 py-0.5">
-                {genreLabels[m.menu.genre]}
-              </span>
-              <span className="rounded-full bg-kon-cream px-2 py-0.5">
-                {difficultyLabels[m.menu.difficulty]}
-              </span>
-            </p>
-
-            <p className="mt-3 text-sm text-kon-ink/75">
-              使える食材: {m.matched.map((i) => i.name).join('・')}
-            </p>
-            {/* 不足を出すのがこの機能の要。「あと何を買えばよいか」が
-                買い物の判断に直接効く。 */}
-            <p className="mt-1 text-sm font-medium text-kon-ink">
-              {m.missing.length === 0
-                ? '足りない食材はありません'
-                : `あと${m.missing.length}品: ${m.missing.map((i) => i.name).join('・')}`}
-            </p>
-
-            <Link
-              to={`/menus/${m.menu.id}`}
-              className="mt-3 inline-block rounded-full border border-kon-leaf-soft bg-white px-4 py-1.5 text-sm font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream"
-            >
-              レシピを見る
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <MatchList matches={matches} />
     </div>
+  )
+}
+
+// SeasoningNote は「食材リストは代表例であって正確な材料表ではない」断り
+// （spec.md 14.1 / 14.4）。ここで断らないと「これだけ買えば作れる」と
+// 受け取られる。
+//
+// **献立カードを出す経路すべてに要る。** 文言を1か所に持つのは、
+// 片方の経路にだけ書き足して他方が抜ける事故を防ぐため（実際に
+// 「あと1品」の枠で抜けていた）。
+function SeasoningNote() {
+  return (
+    <p className="rounded-2xl bg-kon-cream px-5 py-3 text-sm text-kon-ink/75">
+      食材は代表的なものの例です。調味料は含みません。実際の材料はレシピ元で確認してください。
+    </p>
+  )
+}
+
+// MatchList は献立カードの一覧。Matches（作れる献立）と
+// Results の「あと1品」の両方から使う。カード自体はここにしか無い。
+function MatchList({ matches }: { matches: MenuMatch[] }) {
+  return (
+    <ul className="space-y-3">
+      {matches.map((m) => (
+        <li
+          key={m.menu.id}
+          aria-label={m.menu.name}
+          className="rounded-2xl border border-kon-leaf-soft bg-white p-4"
+        >
+          <p className="font-medium text-kon-ink">{m.menu.name}</p>
+          <p className="mt-1 flex flex-wrap gap-2 text-sm text-kon-ink/60">
+            <span className="rounded-full bg-kon-cream px-2 py-0.5">
+              {genreLabels[m.menu.genre]}
+            </span>
+            <span className="rounded-full bg-kon-cream px-2 py-0.5">
+              {difficultyLabels[m.menu.difficulty]}
+            </span>
+          </p>
+
+          <p className="mt-3 text-sm text-kon-ink/75">
+            使える食材: {m.matched.map((i) => i.name).join('・')}
+          </p>
+          {/* 不足を出すのがこの機能の要。「あと何を買えばよいか」が
+              買い物の判断に直接効く。 */}
+          <p className="mt-1 text-sm font-medium text-kon-ink">
+            {m.missing.length === 0
+              ? '足りない食材はありません'
+              : `あと${m.missing.length}品: ${m.missing.map((i) => i.name).join('・')}`}
+          </p>
+
+          <Link
+            to={`/menus/${m.menu.id}`}
+            className="mt-3 inline-block rounded-full border border-kon-leaf-soft bg-white px-4 py-1.5 text-sm font-medium text-kon-ink transition-colors hover:border-kon-leaf hover:bg-kon-cream"
+          >
+            レシピを見る
+          </Link>
+        </li>
+      ))}
+    </ul>
   )
 }

@@ -42,7 +42,7 @@ function respondSearch(matches: MenuMatch[]) {
   server.use(
     http.post('/api/v1/menus/search-by-ingredients', async ({ request }) => {
       bodies.push((await request.json()) as { ingredientIds: string[] })
-      return HttpResponse.json({ matches })
+      return HttpResponse.json({ matches, nearMisses: [] })
     }),
   )
   return bodies
@@ -195,6 +195,122 @@ describe('冷蔵庫から探す', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       '指定された食材が見つかりません',
     )
+  })
+
+  it('作れるものだけを選ぶと並び順の選択肢が消える', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    renderWithProviders(<SearchByIngredientsPage />)
+    await screen.findByLabelText('玉ねぎ')
+
+    // 既定では並び順を選べる。
+    expect(screen.getByRole('group', { name: '並び順' })).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('この中だけで作れるもの'))
+
+    // 不足が全件0になるので、並び順は結果に影響しない。出しても選ばせる意味がない。
+    expect(screen.queryByRole('group', { name: '並び順' })).not.toBeInTheDocument()
+  })
+
+  it('つまみを送信に載せる', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    let sent: unknown = null
+    server.use(
+      http.post('/api/v1/menus/search-by-ingredients', async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json({ matches: [], nearMisses: [] })
+      }),
+    )
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await pick(user, '玉ねぎ')
+    await user.click(screen.getByLabelText('手持ちを多く使う順'))
+    await user.click(searchButton())
+
+    await waitFor(() => {
+      expect(sent).toMatchObject({ onlyMakeable: false, sort: 'matched_desc' })
+    })
+  })
+
+  it('作れるものが0件なら、その旨とあと1品の候補を別の見出しで出す', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    server.use(
+      http.post('/api/v1/menus/search-by-ingredients', () =>
+        HttpResponse.json({
+          matches: [],
+          nearMisses: [
+            { menu: menu('m1', '肉じゃが'), matched: [potato], missing: [beef] },
+          ],
+        }),
+      ),
+    )
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await pick(user, '玉ねぎ')
+    await user.click(screen.getByLabelText('この中だけで作れるもの'))
+    await user.click(searchButton())
+
+    // 0件であることを先に明言する。約束を破っていないことを示すため。
+    expect(
+      await screen.findByText(/この中だけで作れる献立はありませんでした/),
+    ).toBeInTheDocument()
+
+    // 地続きに見せると約束を破ったように見えるので、見出しを分ける。
+    expect(
+      screen.getByRole('heading', { name: /あと1品買えば作れます/ }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('肉じゃが')).toBeInTheDocument()
+  })
+
+  it('あと1品の候補にも調味料の断りを出す', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    server.use(
+      http.post('/api/v1/menus/search-by-ingredients', () =>
+        HttpResponse.json({
+          matches: [],
+          nearMisses: [
+            { menu: menu('m1', '肉じゃが'), matched: [potato], missing: [beef] },
+          ],
+        }),
+      ),
+    )
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await pick(user, 'じゃがいも')
+    await user.click(screen.getByLabelText('この中だけで作れるもの'))
+    await user.click(searchButton())
+
+    // 「あと1品: 牛肉」は買い物の指示そのもの。**この経路でこそ要る**
+    // 断り（設計 5章 / spec.md 14.1・14.4）。無いと「牛肉だけ買えば作れる」
+    // と受け取られる。
+    const near = await screen.findByRole('heading', {
+      name: /あと1品買えば作れます/,
+    })
+    expect(near).toBeInTheDocument()
+    expect(screen.getByText(/調味料は含みません/)).toBeInTheDocument()
+    expect(screen.getByText(/実際の材料はレシピ元/)).toBeInTheDocument()
+  })
+
+  it('つまみを変えると前の結果が消える', async () => {
+    const user = userEvent.setup()
+    respondIngredients()
+    respondSearch([
+      { menu: menu('m1', '肉じゃが'), matched: [onion], missing: [beef] },
+    ])
+    renderWithProviders(<SearchByIngredientsPage />)
+
+    await pick(user, '玉ねぎ')
+    await user.click(searchButton())
+
+    expect(await screen.findByText(/作れそうな献立/)).toBeInTheDocument()
+
+    // 残したままだと、いまの条件の結果だと誤解させる（食材の選び直しと同じ理屈）。
+    await user.click(screen.getByLabelText('この中だけで作れるもの'))
+
+    expect(screen.queryByText(/作れそうな献立/)).not.toBeInTheDocument()
   })
 })
 

@@ -2,12 +2,13 @@ import { apiDelete, apiGet, apiPost, apiPut } from '../../api/client'
 import type {
   DayMenu,
   Ingredient,
+  MatchSort,
   Menu,
-  MenuMatch,
   Recipe,
   ResolveResult,
   SavedShoppingItem,
   SavedWeeklyMenu,
+  SearchByIngredientsResult,
   ShoppingItem,
   ShoppingListOverride,
 } from '../../api/types'
@@ -109,19 +110,33 @@ export async function fetchAllIngredients(): Promise<Ingredient[]> {
 }
 
 /**
+ * SearchOptions は冷蔵庫検索のつまみ。
+ *
+ * 応答の型と違い、これはリクエストの組み立て方（画面が必ず両方を決めて送る）
+ * を表すので、生成物の別名ではなくここに置く。仕様側では省略可だが、
+ * 呼び出し側に「省略できる」と読ませたくない。
+ */
+export type SearchOptions = {
+  /** true のとき、不足のある献立を出さない。 */
+  onlyMakeable: boolean
+  sort: MatchSort
+}
+
+/**
  * searchByIngredients は手持ちの食材で作れる献立を探す。
  *
- * 完全一致には絞らず、各候補に不足食材が付く（spec.md 2.9）。
- * 並びは「不足の少ない順 → 一致の多い順」で、上位20件まで。
+ * 既定では完全一致に絞らず、各候補に不足食材が付く（spec.md 2.9）。
+ * onlyMakeable で不足0だけに絞れる。上位20件まで。
  */
 export async function searchByIngredients(
   ingredientIds: string[],
-): Promise<MenuMatch[]> {
-  const res = await apiPost<{ matches: MenuMatch[] }>(
+  options: SearchOptions,
+): Promise<SearchByIngredientsResult> {
+  const res = await apiPost<SearchByIngredientsResult>(
     '/menus/search-by-ingredients',
-    { ingredientIds },
+    { ingredientIds, ...options },
   )
-  return res.matches
+  return res
 }
 
 /** fetchMenu は献立を1件取得する。 */

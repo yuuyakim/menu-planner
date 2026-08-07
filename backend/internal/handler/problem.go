@@ -65,6 +65,8 @@ var problemMapping = []struct {
 	{service.ErrInvalidMenuIDs, http.StatusBadRequest, "invalid-menu-ids", "献立の指定が不正です"},
 	// 手持ちの食材の指定が0件（spec.md 5.6）。
 	{service.ErrInvalidIngredientIDs, http.StatusBadRequest, "invalid-ingredient-ids", "食材の指定が不正です"},
+	// 冷蔵庫検索の並び順が2値のどちらでもない（spec.md 5.6）。既定に丸めず断る。
+	{service.ErrInvalidMatchSort, http.StatusBadRequest, "invalid-match-sort", "不正な並び順です"},
 	// 手持ちの食材のテキストに語が1つも無い（区切り文字と空白だけなど）。
 	{service.ErrEmptyResolveText, http.StatusBadRequest, "empty-resolve-text", "食材のテキストが空です"},
 	// 指定された食材の中に存在しないものがある。黙って無視すると、
