@@ -66,12 +66,14 @@ func TestSearchByIngredients_不足の少ない順そのあと一致の多い順
 	svc := newSearchService(menus, ings)
 
 	got, err := svc.SearchByIngredients(context.Background(),
-		[]domain.IngredientID{ing["玉ねぎ"].ID, ing["じゃがいも"].ID})
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["玉ねぎ"].ID, ing["じゃがいも"].ID},
+		})
 	require.NoError(t, err)
 
 	// オニオンスープ（不足0）が先頭。次は不足1が2件で、一致の多い肉じゃが（2）が
 	// ポテトサラダ（1）より上に来る。
-	assert.Equal(t, []string{"オニオンスープ", "肉じゃが", "ポテトサラダ"}, matchNames(got))
+	assert.Equal(t, []string{"オニオンスープ", "肉じゃが", "ポテトサラダ"}, matchNames(got.Matches))
 }
 
 func TestSearchByIngredients_一致と不足の中身(t *testing.T) {
@@ -81,13 +83,15 @@ func TestSearchByIngredients_一致と不足の中身(t *testing.T) {
 	svc := newSearchService(menus, ings)
 
 	got, err := svc.SearchByIngredients(context.Background(),
-		[]domain.IngredientID{ing["玉ねぎ"].ID, ing["じゃがいも"].ID})
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["玉ねぎ"].ID, ing["じゃがいも"].ID},
+		})
 	require.NoError(t, err)
 
 	var nikujaga *service.MenuMatch
-	for i := range got {
-		if got[i].Menu.Name == "肉じゃが" {
-			nikujaga = &got[i]
+	for i := range got.Matches {
+		if got.Matches[i].Menu.Name == "肉じゃが" {
+			nikujaga = &got.Matches[i]
 		}
 	}
 	require.NotNil(t, nikujaga)
@@ -106,12 +110,14 @@ func TestSearchByIngredients_重ならない献立は返らない(t *testing.T) 
 	svc := newSearchService(menus, ings)
 
 	got, err := svc.SearchByIngredients(context.Background(),
-		[]domain.IngredientID{ing["玉ねぎ"].ID})
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["玉ねぎ"].ID},
+		})
 	require.NoError(t, err)
 
 	// 豆腐しか使わない麻婆豆腐は候補に出ない。返しても「その食材で作れるもの」ではない。
-	assert.NotContains(t, matchNames(got), "麻婆豆腐")
-	assert.Contains(t, matchNames(got), "オニオンスープ")
+	assert.NotContains(t, matchNames(got.Matches), "麻婆豆腐")
+	assert.Contains(t, matchNames(got.Matches), "オニオンスープ")
 }
 
 func TestSearchByIngredients_重複IDは1件として扱う(t *testing.T) {
@@ -121,13 +127,15 @@ func TestSearchByIngredients_重複IDは1件として扱う(t *testing.T) {
 	svc := newSearchService(menus, ings)
 
 	got, err := svc.SearchByIngredients(context.Background(),
-		[]domain.IngredientID{ing["玉ねぎ"].ID, ing["玉ねぎ"].ID})
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["玉ねぎ"].ID, ing["玉ねぎ"].ID},
+		})
 	require.NoError(t, err)
 
 	var soup *service.MenuMatch
-	for i := range got {
-		if got[i].Menu.Name == "オニオンスープ" {
-			soup = &got[i]
+	for i := range got.Matches {
+		if got.Matches[i].Menu.Name == "オニオンスープ" {
+			soup = &got.Matches[i]
 		}
 	}
 	require.NotNil(t, soup)
@@ -141,7 +149,7 @@ func TestSearchByIngredients_0件指定は拒否(t *testing.T) {
 	menus, ings, _, _ := searchFixture()
 	svc := newSearchService(menus, ings)
 
-	_, err := svc.SearchByIngredients(context.Background(), nil)
+	_, err := svc.SearchByIngredients(context.Background(), service.SearchByIngredientsInput{})
 	assert.ErrorIs(t, err, service.ErrInvalidIngredientIDs)
 }
 
@@ -153,7 +161,9 @@ func TestSearchByIngredients_存在しない食材は見つからない(t *testi
 	svc := newSearchService(menus, ings)
 
 	_, err := svc.SearchByIngredients(context.Background(),
-		[]domain.IngredientID{ing["玉ねぎ"].ID, domain.NewIngredientID()})
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["玉ねぎ"].ID, domain.NewIngredientID()},
+		})
 	assert.ErrorIs(t, err, service.ErrIngredientNotFound)
 }
 
@@ -167,10 +177,12 @@ func TestSearchByIngredients_該当なしは空スライス(t *testing.T) {
 	svc := newSearchService(menus, ings)
 
 	got, err := svc.SearchByIngredients(context.Background(),
-		[]domain.IngredientID{lonely.ID})
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{lonely.ID},
+		})
 	require.NoError(t, err)
-	assert.NotNil(t, got, "nil ではなく空スライスを返す")
-	assert.Empty(t, got)
+	assert.NotNil(t, got.Matches, "nil ではなく空スライスを返す")
+	assert.Empty(t, got.Matches)
 }
 
 func TestSearchByIngredients_上位20件で打ち切る(t *testing.T) {
@@ -191,7 +203,63 @@ func TestSearchByIngredients_上位20件で打ち切る(t *testing.T) {
 	svc := newSearchService(menus, ings)
 
 	got, err := svc.SearchByIngredients(context.Background(),
-		[]domain.IngredientID{common.ID})
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{common.ID},
+		})
 	require.NoError(t, err)
-	assert.Len(t, got, 20)
+	assert.Len(t, got.Matches, 20)
+}
+
+func TestSearchByIngredients_省略時は現行と同じ結果(t *testing.T) {
+	t.Parallel()
+
+	menus, ings, ing, _ := searchFixture()
+	svc := newSearchService(menus, ings)
+	ids := []domain.IngredientID{ing["玉ねぎ"].ID, ing["じゃがいも"].ID}
+
+	// ゼロ値の Input が、つまみを足す前の挙動と一致することを固定する。
+	got, err := svc.SearchByIngredients(context.Background(),
+		service.SearchByIngredientsInput{IngredientIDs: ids})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"オニオンスープ", "肉じゃが", "ポテトサラダ"}, matchNames(got.Matches))
+	assert.Empty(t, got.NearMisses)
+}
+
+func TestSearchByIngredients_作れるものだけに絞る(t *testing.T) {
+	t.Parallel()
+
+	menus, ings, ing, _ := searchFixture()
+	svc := newSearchService(menus, ings)
+
+	got, err := svc.SearchByIngredients(context.Background(),
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["玉ねぎ"].ID, ing["じゃがいも"].ID},
+			OnlyMakeable:  true,
+		})
+	require.NoError(t, err)
+
+	// 不足1の肉じゃが・ポテトサラダは落ちる。
+	assert.Equal(t, []string{"オニオンスープ"}, matchNames(got.Matches))
+	for _, m := range got.Matches {
+		assert.Empty(t, m.Missing, "不足のある献立が混ざっている: %s", m.Menu.Name)
+	}
+}
+
+func TestSearchByIngredients_手持ちを多く使う順(t *testing.T) {
+	t.Parallel()
+
+	menus, ings, ing, _ := searchFixture()
+	svc := newSearchService(menus, ings)
+
+	got, err := svc.SearchByIngredients(context.Background(),
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["玉ねぎ"].ID, ing["じゃがいも"].ID},
+			Sort:          service.SortMatchedDesc,
+		})
+	require.NoError(t, err)
+
+	// 一致数は 肉じゃが2 > ポテトサラダ1 = オニオンスープ1。
+	// 同数どうしは不足の少ない方（オニオンスープ 不足0）が先。
+	assert.Equal(t, []string{"肉じゃが", "オニオンスープ", "ポテトサラダ"}, matchNames(got.Matches))
 }
