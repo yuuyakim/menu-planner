@@ -105,6 +105,7 @@ test('作れるものだけに切り替えると候補が減る', async ({ page 
   await pickIngredient(page, '玉ねぎ')
   await pickIngredient(page, 'にんじん')
   await pickIngredient(page, 'じゃがいも')
+  await pickIngredient(page, '米')
 
   await page.getByRole('button', { name: 'この食材で探す' }).click()
   await expect
@@ -117,7 +118,9 @@ test('作れるものだけに切り替えると候補が減る', async ({ page 
   await choose(page, '探し方', 'この中だけで作れるもの')
   await page.getByRole('button', { name: 'この食材で探す' }).click()
 
-  // 3種では不足0の献立が存在しない（実データで確認済み）。
+  // この4種では不足0の献立は無いが、不足ちょうど1の献立は5件ある
+  // （seeds/menu_ingredients.sql で確認済み。玉ねぎ・にんじん・じゃがいもの
+  // 3種だけだと不足の最小値が2で「あと1品」が1件も出ない）。
   // 0件だと明言した上で「あと1品」が別枠で出る。
   await expect(
     page.getByText(/この中だけで作れる献立はありませんでした/),
