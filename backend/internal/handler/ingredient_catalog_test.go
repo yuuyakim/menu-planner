@@ -21,6 +21,8 @@ import (
 type fakeIngredientCatalog struct {
 	items       []domain.Ingredient
 	matches     []service.MenuMatch
+	nearMisses  []service.MenuMatch
+	lastInput   service.SearchByIngredientsInput
 	lastIDs     []domain.IngredientID
 	err         error
 	calls       int
@@ -33,11 +35,14 @@ func (s *fakeIngredientCatalog) All(_ context.Context) ([]domain.Ingredient, err
 }
 
 func (s *fakeIngredientCatalog) SearchByIngredients(
-	_ context.Context, ids []domain.IngredientID,
-) ([]service.MenuMatch, error) {
+	_ context.Context, in service.SearchByIngredientsInput,
+) (service.SearchByIngredientsResult, error) {
 	s.searchCalls++
-	s.lastIDs = ids
-	return s.matches, s.err
+	s.lastInput = in
+	s.lastIDs = in.IngredientIDs
+	return service.SearchByIngredientsResult{
+		Matches: s.matches, NearMisses: s.nearMisses,
+	}, s.err
 }
 
 func catalogApp(t *testing.T, catalog handler.IngredientCatalogUseCase) *echo.Echo {

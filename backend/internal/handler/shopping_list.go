@@ -128,7 +128,9 @@ func (h *ShoppingListHandler) Build(c echo.Context) error {
 // 実装は service.IngredientService。
 type IngredientCatalogUseCase interface {
 	All(ctx context.Context) ([]domain.Ingredient, error)
-	SearchByIngredients(ctx context.Context, ids []domain.IngredientID) ([]service.MenuMatch, error)
+	SearchByIngredients(
+		ctx context.Context, in service.SearchByIngredientsInput,
+	) (service.SearchByIngredientsResult, error)
 }
 
 // IngredientHandler は食材のHTTP境界。
@@ -155,8 +157,13 @@ func (h *IngredientHandler) RegisterRoutes(e *echo.Echo, mw ...echo.MiddlewareFu
 }
 
 // searchByIngredientsRequest は POST /menus/search-by-ingredients のリクエストボディ。
+//
+// sort をポインタで受けるのは「省略」と「空文字の指定」を区別するため。
+// 前者は既定、後者は誤りとして 400 にする。
 type searchByIngredientsRequest struct {
 	IngredientIDs []string `json:"ingredientIds"`
+	OnlyMakeable  bool     `json:"onlyMakeable"`
+	Sort          *string  `json:"sort"`
 }
 
 // menuMatchDTO は候補の献立1件。手持ちとの重なりと不足を併せて返す。
@@ -167,19 +174,46 @@ type menuMatchDTO struct {
 }
 
 // searchByIngredientsResponse は候補の一覧。
+//
+// nearMisses は「あと1品買えば作れる」候補。onlyMakeable で0件だったときだけ
+// 埋まる。常に配列で返す（null にすると画面側で length を見る前に落ちる）。
 type searchByIngredientsResponse struct {
-	Matches []menuMatchDTO `json:"matches"`
+	Matches    []menuMatchDTO `json:"matches"`
+	NearMisses []menuMatchDTO `json:"nearMisses"`
+}
+
+// parseMatchSort は並び順を解釈する。省略なら既定、未知の値は 400。
+//
+// 既定に丸めない。利用者の指定を黙って読み替えると、
+// 違う条件で検索した結果を正しい答えとして返すことになる。
+func parseMatchSort(raw *string) (service.MatchSort, error) {
+	if raw == nil {
+		return service.SortMissingAsc, nil
+	}
+	switch service.MatchSort(*raw) {
+	case service.SortMissingAsc, service.SortMatchedDesc:
+		return service.MatchSort(*raw), nil
+	default:
+		return "", echo.NewHTTPError(http.StatusBadRequest,
+			"sort は missing_asc か matched_desc を指定してください")
+	}
 }
 
 // SearchByIngredients は手持ちの食材で作れる献立を探す。
 //
-//	POST /api/v1/menus/search-by-ingredients  {"ingredientIds": ["...", "..."]}
+//	POST /api/v1/menus/search-by-ingredients
+//	{"ingredientIds": ["...", "..."], "onlyMakeable": true, "sort": "matched_desc"}
 //
 // 0件指定は 400、存在しない食材が含まれれば 404。未認証でも使える（spec.md 2.9）。
 func (h *IngredientHandler) SearchByIngredients(c echo.Context) error {
 	var req searchByIngredientsRequest
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "リクエストの形式が不正です")
+	}
+
+	sortBy, err := parseMatchSort(req.Sort)
+	if err != nil {
+		return err
 	}
 
 	ids := make([]domain.IngredientID, 0, len(req.IngredientIDs))
@@ -191,11 +225,24 @@ func (h *IngredientHandler) SearchByIngredients(c echo.Context) error {
 		ids = append(ids, id)
 	}
 
-	matches, err := h.catalog.SearchByIngredients(c.Request().Context(), ids)
+	res, err := h.catalog.SearchByIngredients(c.Request().Context(),
+		service.SearchByIngredientsInput{
+			IngredientIDs: ids,
+			OnlyMakeable:  req.OnlyMakeable,
+			Sort:          sortBy,
+		})
 	if err != nil {
 		return err
 	}
 
+	return c.JSON(http.StatusOK, searchByIngredientsResponse{
+		Matches:    toMenuMatchDTOs(res.Matches),
+		NearMisses: toMenuMatchDTOs(res.NearMisses),
+	})
+}
+
+// toMenuMatchDTOs は候補の並びをDTOに写す。0件でも null にしない。
+func toMenuMatchDTOs(matches []service.MenuMatch) []menuMatchDTO {
 	out := make([]menuMatchDTO, 0, len(matches))
 	for _, m := range matches {
 		out = append(out, menuMatchDTO{
@@ -204,7 +251,7 @@ func (h *IngredientHandler) SearchByIngredients(c echo.Context) error {
 			Missing: toIngredientDTOs(m.Missing),
 		})
 	}
-	return c.JSON(http.StatusOK, searchByIngredientsResponse{Matches: out})
+	return out
 }
 
 // toIngredientDTOs は食材の並びをDTOに写す。0件でも null にしない。
