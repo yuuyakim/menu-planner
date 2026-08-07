@@ -384,11 +384,14 @@ export interface paths {
          * 手持ちの食材で作れる献立を探す
          * @description 選んだ食材を1つでも使う献立を、当てはまり具合とともに返す（spec.md 2.9 / 5.6）。
          *
-         *     完全一致には絞らない。献立1件の食材は平均4.4種で、それを全部持っている
-         *     状況はまれなため、絞ると候補がほぼ0件になる。各候補に不足食材を示すことで
-         *     「あと2品買えば作れる」が分かるようにする。
+         *     既定では完全一致に絞らない。献立1件の食材は平均4.4種で、それを全部持っている
+         *     状況はまれなため。各候補に不足食材を示し「あと2品買えば作れる」が分かるようにする。
          *
-         *     並びは「不足の少ない順 → 一致の多い順 → カナ順」。上位20件まで。
+         *     `onlyMakeable: true` のときは不足0の献立だけを返す。手持ちを20種ほど
+         *     選べば30件前後が該当する。0件だった場合に限り、`nearMisses` に
+         *     「あと1品買えば作れる」候補を添える。
+         *
+         *     並びは `sort` で選ぶ。上位20件まで（`matches` / `nearMisses` それぞれ）。
          *     手持ちと1つも重ならない献立は返さない。未認証でも使える。
          */
         post: {
@@ -403,6 +406,20 @@ export interface paths {
                     "application/json": {
                         /** @description 手持ちの食材。1件以上。重複は1件として扱う。 */
                         ingredientIds: string[];
+                        /**
+                         * @description true のとき、不足のある献立を返さない（この中だけで作れるもの）。
+                         *     省略時は false で、従来どおり不足を許す。
+                         * @default false
+                         */
+                        onlyMakeable?: boolean;
+                        /**
+                         * @description missing_asc … 不足の少ない順 → 一致の多い順 → カナ順（既定）
+                         *     matched_desc … 一致の多い順 → 不足の少ない順 → カナ順
+                         *     未知の値は 400。既定に丸めない。
+                         * @default missing_asc
+                         * @enum {string}
+                         */
+                        sort?: "missing_asc" | "matched_desc";
                     };
                 };
             };
@@ -1919,6 +1936,11 @@ export interface components {
         };
         MenuMatchesResponse: {
             matches: components["schemas"]["MenuMatch"][];
+            /**
+             * @description あと1品買えば作れる候補。onlyMakeable が true で matches が
+             *     0件のときだけ埋まる。それ以外は常に空配列。
+             */
+            nearMisses: components["schemas"]["MenuMatch"][];
         };
         /** @description プランの公開情報（誰にでも同じ。/pricing が使う）。 */
         BillingPlanResponse: {
