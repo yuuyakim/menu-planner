@@ -173,7 +173,19 @@ func (s *IngredientService) SearchByIngredients(
 	sortMatches(matches, in.Sort)
 	matches = truncateMatches(matches)
 
-	return SearchByIngredientsResult{Matches: matches, NearMisses: []MenuMatch{}}, nil
+	// 行き止まりを防ぐ。ただし条件を勝手に外して再検索はしない
+	// （「この中以外は出さない」という指定に反する）。
+	// 0件だと明言した上で、別枠として「あと1品」を添えるだけにする。
+	nearMisses := []MenuMatch{}
+	if in.OnlyMakeable && len(matches) == 0 {
+		// 不足0は上で0件だと分かっているので、1件以下＝ちょうど1件になる。
+		nearMisses = withMissingAtMost(all, 1)
+		// 不足はどれも1件で並ばないため、一致の多い順に固定する。
+		sortMatches(nearMisses, SortMatchedDesc)
+		nearMisses = truncateMatches(nearMisses)
+	}
+
+	return SearchByIngredientsResult{Matches: matches, NearMisses: nearMisses}, nil
 }
 
 // withMissingAtMost は不足が n 件以下の候補だけを新しいスライスで返す。

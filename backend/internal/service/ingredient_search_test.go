@@ -263,3 +263,75 @@ func TestSearchByIngredients_手持ちを多く使う順(t *testing.T) {
 	// 同数どうしは不足の少ない方（オニオンスープ 不足0）が先。
 	assert.Equal(t, []string{"肉じゃが", "オニオンスープ", "ポテトサラダ"}, matchNames(got.Matches))
 }
+
+func TestSearchByIngredients_作れるものが0件ならあと1品を返す(t *testing.T) {
+	t.Parallel()
+
+	menus, ings, ing, _ := searchFixture()
+	svc := newSearchService(menus, ings)
+
+	// じゃがいもだけ。不足0の献立は存在しない。
+	got, err := svc.SearchByIngredients(context.Background(),
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["じゃがいも"].ID},
+			OnlyMakeable:  true,
+		})
+	require.NoError(t, err)
+
+	assert.Empty(t, got.Matches)
+	// ポテトサラダは不足1（きゅうり）。肉じゃがは不足2（玉ねぎ・牛肉）なので入らない。
+	assert.Equal(t, []string{"ポテトサラダ"}, matchNames(got.NearMisses))
+}
+
+func TestSearchByIngredients_あと1品は不足ちょうど1件だけ(t *testing.T) {
+	t.Parallel()
+
+	menus, ings, ing, _ := searchFixture()
+	svc := newSearchService(menus, ings)
+
+	got, err := svc.SearchByIngredients(context.Background(),
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["じゃがいも"].ID},
+			OnlyMakeable:  true,
+		})
+	require.NoError(t, err)
+
+	for _, m := range got.NearMisses {
+		assert.Len(t, m.Missing, 1, "不足が1件でない献立が混ざっている: %s", m.Menu.Name)
+	}
+}
+
+func TestSearchByIngredients_候補があるならあと1品は返さない(t *testing.T) {
+	t.Parallel()
+
+	menus, ings, ing, _ := searchFixture()
+	svc := newSearchService(menus, ings)
+
+	// 玉ねぎ＋じゃがいもならオニオンスープが不足0で見つかる。
+	got, err := svc.SearchByIngredients(context.Background(),
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["玉ねぎ"].ID, ing["じゃがいも"].ID},
+			OnlyMakeable:  true,
+		})
+	require.NoError(t, err)
+
+	require.NotEmpty(t, got.Matches)
+	assert.Empty(t, got.NearMisses, "候補があるのに あと1品 を返している")
+}
+
+func TestSearchByIngredients_絞っていなければあと1品は常に空(t *testing.T) {
+	t.Parallel()
+
+	menus, ings, ing, _ := searchFixture()
+	svc := newSearchService(menus, ings)
+
+	// OnlyMakeable でなければ、たとえ結果が0件でも nearMisses は埋めない。
+	got, err := svc.SearchByIngredients(context.Background(),
+		service.SearchByIngredientsInput{
+			IngredientIDs: []domain.IngredientID{ing["じゃがいも"].ID},
+		})
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, got.Matches)
+	assert.Empty(t, got.NearMisses)
+}
