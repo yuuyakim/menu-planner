@@ -55,9 +55,13 @@ func NewIngredientResolveHandler(
 
 // RegisterRoutes は解決APIのルーティングを登録する。
 //
-// **既存の /menus/search-by-ingredients には手を入れない**（設計 3.8）。
-// 新機能を独立したエンドポイントに閉じ込めることで、最悪これを無効化する
-// だけで元の状態に戻せる。
+// **自由記述の読み取りは独立したエンドポイントに閉じ込める**（設計 3.8）。
+// 検索そのものと混ぜないので、最悪これを無効化するだけで元の状態に戻せる。
+//
+// 当時は「/menus/search-by-ingredients には一切手を入れない」と書いていたが、
+// その後 2026-08-07 の冷蔵庫検索の拡張（onlyMakeable / sort / nearMisses）で
+// あちらは別途変わっている。**独立という判断は読み取り機能についての話**で、
+// 検索側を永久に凍結する約束ではない。
 func (h *IngredientResolveHandler) RegisterRoutes(e *echo.Echo, mw ...echo.MiddlewareFunc) {
 	g := e.Group(APIBasePath, mw...)
 	// OptionalAuth を付けるのは、ログイン中の利用者を IP ではなくユーザーIDで
