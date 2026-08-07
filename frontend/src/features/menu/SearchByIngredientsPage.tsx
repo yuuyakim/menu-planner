@@ -7,6 +7,7 @@ import type { MenuMatch } from '../../api/types'
 import { ErrorMessage } from '../../components/ErrorMessage'
 import { MascotEmpty } from '../../components/MascotEmpty'
 import { MascotStatus } from '../../components/MascotStatus'
+import type { MatchSort } from './api'
 import { fetchAllIngredients, ingredientsQueryKey, searchByIngredients } from './api'
 import { IngredientPicker } from './IngredientPicker'
 
@@ -32,8 +33,11 @@ export function SearchByIngredientsPage() {
     staleTime: 60 * 60 * 1000,
   })
 
+  const [onlyMakeable, setOnlyMakeable] = useState(false)
+  const [sort, setSort] = useState<MatchSort>('missing_asc')
+
   const search = useMutation({
-    mutationFn: () => searchByIngredients([...selected]),
+    mutationFn: () => searchByIngredients([...selected], { onlyMakeable, sort }),
   })
 
   function toggle(id: string) {
@@ -56,6 +60,18 @@ export function SearchByIngredientsPage() {
     search.reset()
   }
 
+  // つまみを変えたら前の結果は消す。食材を選び直したときと同じ理由で、
+  // 残したままだと、いまの条件の結果だと誤解させる。
+  function changeOnlyMakeable(next: boolean) {
+    setOnlyMakeable(next)
+    search.reset()
+  }
+
+  function changeSort(next: MatchSort) {
+    setSort(next)
+    search.reset()
+  }
+
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-bold text-kon-ink">冷蔵庫から探す</h1>
@@ -74,6 +90,56 @@ export function SearchByIngredientsPage() {
             onClear={clear}
           />
 
+          {/* 各組を fieldset/legend で囲む。囲まないと支援技術もテストも
+              どちらの組の選択肢か区別できない（8-D と同じ）。 */}
+          <fieldset className="space-y-2">
+            <legend className="text-sm text-kon-ink/60">探し方</legend>
+            <label className="flex items-center gap-2 text-sm text-kon-ink">
+              <input
+                type="radio"
+                name="makeable"
+                checked={!onlyMakeable}
+                onChange={() => changeOnlyMakeable(false)}
+              />
+              足りないものがあってもよい
+            </label>
+            <label className="flex items-center gap-2 text-sm text-kon-ink">
+              <input
+                type="radio"
+                name="makeable"
+                checked={onlyMakeable}
+                onChange={() => changeOnlyMakeable(true)}
+              />
+              この中だけで作れるもの
+            </label>
+          </fieldset>
+
+          {/* 「作れるものだけ」は不足が全件0になるため、並び順は結果を変えない。
+              出しても選ばせる意味がないので隠す。サーバ側では特別扱いしない。 */}
+          {!onlyMakeable && (
+            <fieldset className="space-y-2">
+              <legend className="text-sm text-kon-ink/60">並び順</legend>
+              <label className="flex items-center gap-2 text-sm text-kon-ink">
+                <input
+                  type="radio"
+                  name="sort"
+                  checked={sort === 'missing_asc'}
+                  onChange={() => changeSort('missing_asc')}
+                />
+                買い足しが少ない順
+              </label>
+              <label className="flex items-center gap-2 text-sm text-kon-ink">
+                <input
+                  type="radio"
+                  name="sort"
+                  checked={sort === 'matched_desc'}
+                  onChange={() => changeSort('matched_desc')}
+                />
+                手持ちを多く使う順
+              </label>
+            </fieldset>
+          )}
+
           <button
             type="button"
             onClick={() => search.mutate()}
@@ -88,7 +154,7 @@ export function SearchByIngredientsPage() {
 
       {search.error && <ErrorMessage error={search.error} />}
 
-      {search.data && <Matches matches={search.data} />}
+      {search.data && <Matches matches={search.data.matches} />}
     </section>
   )
 }

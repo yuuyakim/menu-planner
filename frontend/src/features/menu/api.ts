@@ -108,20 +108,38 @@ export async function fetchAllIngredients(): Promise<Ingredient[]> {
   return res.ingredients
 }
 
+/** MatchSort は候補の並び順（spec.md 5.6）。 */
+export type MatchSort = 'missing_asc' | 'matched_desc'
+
+/** SearchOptions は冷蔵庫検索のつまみ。 */
+export type SearchOptions = {
+  /** true のとき、不足のある献立を出さない。 */
+  onlyMakeable: boolean
+  sort: MatchSort
+}
+
+/** SearchByIngredientsResult は候補と「あと1品」の候補。 */
+export type SearchByIngredientsResult = {
+  matches: MenuMatch[]
+  /** onlyMakeable で0件だったときだけ埋まる。それ以外は空配列。 */
+  nearMisses: MenuMatch[]
+}
+
 /**
  * searchByIngredients は手持ちの食材で作れる献立を探す。
  *
- * 完全一致には絞らず、各候補に不足食材が付く（spec.md 2.9）。
- * 並びは「不足の少ない順 → 一致の多い順」で、上位20件まで。
+ * 既定では完全一致に絞らず、各候補に不足食材が付く（spec.md 2.9）。
+ * onlyMakeable で不足0だけに絞れる。上位20件まで。
  */
 export async function searchByIngredients(
   ingredientIds: string[],
-): Promise<MenuMatch[]> {
-  const res = await apiPost<{ matches: MenuMatch[] }>(
+  options: SearchOptions,
+): Promise<SearchByIngredientsResult> {
+  const res = await apiPost<SearchByIngredientsResult>(
     '/menus/search-by-ingredients',
-    { ingredientIds },
+    { ingredientIds, ...options },
   )
-  return res.matches
+  return res
 }
 
 /** fetchMenu は献立を1件取得する。 */
