@@ -390,6 +390,78 @@ func TestContract_ShoppingList_Problem(t *testing.T) {
 	assertMatchesSpec(t, v, req, body, rec)
 }
 
+// 冷蔵庫検索の契約検証。
+//
+// このブランチで唯一スキーマを変えたエンドポイントなのに、17経路の中に
+// 入っていなかった。onlyMakeable / sort / nearMisses を足しても、
+// yaml を直し忘れたまま実装だけ動かせてしまう状態だった。
+
+// searchMatch は候補1件を組み立てる。missing を渡さなければ不足0。
+func searchMatch(name string, missing ...domain.Ingredient) service.MenuMatch {
+	return service.MenuMatch{
+		Menu: shoppingTestMenu(name),
+		Matched: []domain.Ingredient{
+			shoppingTestIngredient("玉ねぎ", "たまねぎ", domain.CategoryVegetable),
+		},
+		Missing: missing,
+	}
+}
+
+func TestContract_SearchByIngredients(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	e := catalogApp(t, &fakeIngredientCatalog{
+		matches: []service.MenuMatch{searchMatch("肉じゃが",
+			shoppingTestIngredient("牛肉", "ぎゅうにく", domain.CategoryMeat))},
+	})
+
+	body := `{"ingredientIds":["` + domain.NewIngredientID().String() + `"],` +
+		`"onlyMakeable":false,"sort":"missing_asc"}`
+	req := contractRequest(http.MethodPost, "/api/v1/menus/search-by-ingredients", body)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assertMatchesSpec(t, v, req, body, rec)
+}
+
+func TestContract_SearchByIngredients_NearMisses(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	// onlyMakeable で0件だったときだけ埋まる枠。matches が空でも
+	// nearMisses は必須項目なので、両方が仕様どおりであることを見る。
+	e := catalogApp(t, &fakeIngredientCatalog{
+		nearMisses: []service.MenuMatch{searchMatch("ポテトサラダ",
+			shoppingTestIngredient("きゅうり", "きゅうり", domain.CategoryVegetable))},
+	})
+
+	body := `{"ingredientIds":["` + domain.NewIngredientID().String() + `"],"onlyMakeable":true}`
+	req := contractRequest(http.MethodPost, "/api/v1/menus/search-by-ingredients", body)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assertMatchesSpec(t, v, req, body, rec)
+}
+
+func TestContract_SearchByIngredients_Problem(t *testing.T) {
+	t.Parallel()
+	v := newContractValidator(t)
+
+	// 未知の並び順の 400 も仕様の一部。リクエスト自体が意図的に仕様違反
+	// （enum に無い値）なので、応答だけを突き合わせる。
+	e := catalogApp(t, &fakeIngredientCatalog{})
+	body := `{"ingredientIds":["` + domain.NewIngredientID().String() + `"],"sort":"newest"}`
+	req := contractRequest(http.MethodPost, "/api/v1/menus/search-by-ingredients", body)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assertResponseMatchesSpec(t, v, req, rec)
+}
+
 // newContractSavedShoppingListApp は保存済み週の買い物リストの契約検証用アプリを組み立てる。
 // ハンドラ生成に entitlements が要るため ent を渡す。RequirePremium は今は常に通る。
 func newContractSavedShoppingListApp(
